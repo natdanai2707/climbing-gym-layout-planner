@@ -7,6 +7,10 @@ export type Category =
   | 'zone'
   | 'wall_low'
   | 'wall_high'
+  | 'mat'
+  | 'mezzanine'
+  | 'stairs'
+  | 'furniture'
 
 export type Rule = 'floor' | 'edge' | 'outdoor'
 

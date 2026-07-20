@@ -15,6 +15,7 @@ export function StatsPanel() {
     const apronArea = outerArea - buildingArea
 
     let usedArea = 0
+    let mezzanineArea = 0
     const byCategory = new Map<Category, { area: number; count: number }>()
     let parkingCount = 0
     let parkingArea = 0
@@ -25,7 +26,9 @@ export function StatsPanel() {
         parkingCount++
         parkingArea += area
       }
-      if (o.rule === 'floor') usedArea += area
+      // mezzanines add extra floor above rather than consuming ground area
+      if (o.category === 'mezzanine') mezzanineArea += area
+      else if (o.rule === 'floor') usedArea += area
       const e = byCategory.get(o.category) ?? { area: 0, count: 0 }
       e.area += area
       e.count++
@@ -36,6 +39,7 @@ export function StatsPanel() {
       buildingArea,
       apronArea,
       usedArea,
+      mezzanineArea,
       usedPct: buildingArea > 0 ? (usedArea / buildingArea) * 100 : 0,
       freeArea: Math.max(0, buildingArea - usedArea),
       byCategory,
@@ -65,6 +69,12 @@ export function StatsPanel() {
         <span>Free floor area</span>
         <b>{fmt(stats.freeArea)} m²</b>
       </div>
+      {stats.mezzanineArea > 0 && (
+        <div className="stat-row">
+          <span>Mezzanine (extra floor)</span>
+          <b>{fmt(stats.mezzanineArea)} m²</b>
+        </div>
+      )}
       {stats.byCategory.size > 0 && (
         <>
           <h3>By category</h3>
