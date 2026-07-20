@@ -11,6 +11,7 @@ export type Category =
   | 'mezzanine'
   | 'stairs'
   | 'furniture'
+  | 'wall_island'
 
 export type Rule = 'floor' | 'edge' | 'outdoor'
 
@@ -35,9 +36,10 @@ export interface Placed {
   h: number
   x: number // world center x (m), building centered at origin
   z: number // world center z (m)
-  rot: number // 0..3, times 90 degrees
+  rot: number // 0..7, times 45 degrees
   color: string
   rule: Rule
+  level?: 'ground' | 'upper' // 'upper' = sits on a mezzanine floor
 }
 
 export interface Building {

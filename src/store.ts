@@ -4,6 +4,7 @@ import type { Building, LayoutFile, ObjectDef, Placed } from './types'
 import { computeDrop, resolveAfterResize } from './placement'
 
 const STORAGE_KEY = 'gym-layout-planner-v1'
+const FILE_VERSION = 2 // v2: rot is in 45° steps (v1 was 90° steps)
 
 let seq = 1
 const uid = () => `obj-${Date.now().toString(36)}-${seq++}`
@@ -17,15 +18,23 @@ interface Ghost {
   valid: boolean
 }
 
+export type ResizeAxis = 'x' | 'y' | 'z'
+
 export interface GymState {
   building: Building
   objects: Placed[]
   selectedId: string | null
 
-  // palette placement in progress
+  // palette placement in progress (ghost follows the pointer)
   placingDef: ObjectDef | null
   placingRot: number
   ghost: Ghost | null
+
+  // freshly dropped object awaiting the user's ✓ confirm (resize arrows shown)
+  pendingId: string | null
+
+  // dimension-arrow drag in progress
+  resizing: { id: string; axis: ResizeAxis } | null
 
   // moving an existing object
   draggingId: string | null
@@ -37,7 +46,6 @@ export interface GymState {
   showLabels: boolean
   viewKey: number
 
-  // mobile drawer visibility (ignored by the desktop layout)
   panelLeft: boolean
   panelRight: boolean
   setPanelLeft: (v: boolean) => void
@@ -48,6 +56,9 @@ export interface GymState {
   cancelPlacing: () => void
   updateGhost: (x: number, z: number) => void
   commitPlacing: () => void
+  confirmPending: () => void
+  cancelPending: () => void
+  setResizing: (r: { id: string; axis: ResizeAxis } | null) => void
   select: (id: string | null) => void
   beginMove: (id: string, px: number, pz: number) => void
   moveTo: (px: number, pz: number) => void
@@ -62,14 +73,22 @@ export interface GymState {
   resetView: () => void
 }
 
+// v1 files stored rot in 90° steps; v2 uses 45° steps
+function normalizeFile(file: LayoutFile): { building: Building; objects: Placed[] } {
+  const version = file.version ?? 1
+  const objects = (file.objects ?? []).map((o) => ({
+    ...o,
+    rot: version < 2 ? (o.rot * 2) % 8 : o.rot % 8,
+  }))
+  return { building: { ...DEFAULT_BUILDING, ...file.building }, objects }
+}
+
 function loadSaved(): { building: Building; objects: Placed[] } {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const data = JSON.parse(raw) as LayoutFile
-      if (data && data.building && Array.isArray(data.objects)) {
-        return { building: { ...DEFAULT_BUILDING, ...data.building }, objects: data.objects }
-      }
+      if (data && data.building && Array.isArray(data.objects)) return normalizeFile(data)
     }
   } catch {
     // ignore corrupt saves
@@ -84,12 +103,14 @@ export const useStore = create<GymState>()(
     placingDef: null,
     placingRot: 0,
     ghost: null,
+    pendingId: null,
+    resizing: null,
     draggingId: null,
     dragOffset: { dx: 0, dz: 0 },
     dragOrigin: null,
     dragValid: true,
     showGrid: true,
-    showLabels: true,
+    showLabels: false,
     viewKey: 0,
     panelLeft: false,
     panelRight: false,
@@ -106,8 +127,9 @@ export const useStore = create<GymState>()(
       set({ building, objects })
     },
 
-    // close the palette drawer so the canvas is visible for the drop (mobile)
-    startPlacing: (def) => set({ placingDef: def, placingRot: 0, ghost: null, selectedId: null, panelLeft: false }),
+    // picking a new item implicitly confirms any pending one
+    startPlacing: (def) =>
+      set({ placingDef: def, placingRot: 0, ghost: null, selectedId: null, panelLeft: false, pendingId: null }),
     cancelPlacing: () => set({ placingDef: null, ghost: null }),
 
     updateGhost: (x, z) => {
@@ -117,6 +139,8 @@ export const useStore = create<GymState>()(
       set({ ghost: { x: r.x, z: r.z, rot: r.rot, valid: r.valid } })
     },
 
+    // Drop the ghost as a PENDING object: it stays selected with resize arrows
+    // and a ✓ confirm / ✕ cancel bar until the user finalizes it.
     commitPlacing: () => {
       const { placingDef, ghost } = get()
       if (!placingDef || !ghost || !ghost.valid) return
@@ -134,16 +158,42 @@ export const useStore = create<GymState>()(
         color: placingDef.color,
         rule: placingDef.rule,
       }
-      set({ objects: [...get().objects, obj], placingDef: null, ghost: null, selectedId: obj.id })
+      set({
+        objects: [...get().objects, obj],
+        placingDef: null,
+        ghost: null,
+        selectedId: obj.id,
+        pendingId: obj.id,
+      })
     },
 
-    select: (id) => set({ selectedId: id }),
+    confirmPending: () => set({ pendingId: null }),
+
+    cancelPending: () => {
+      const { pendingId } = get()
+      if (!pendingId) return
+      set({
+        objects: get().objects.filter((o) => o.id !== pendingId),
+        pendingId: null,
+        selectedId: null,
+      })
+    },
+
+    setResizing: (r) => set({ resizing: r }),
+
+    select: (id) => {
+      const { pendingId } = get()
+      // selecting elsewhere confirms the pending object
+      set({ selectedId: id, pendingId: id === pendingId ? pendingId : null })
+    },
 
     beginMove: (id, px, pz) => {
       const o = get().objects.find((v) => v.id === id)
       if (!o) return
+      const { pendingId } = get()
       set({
         selectedId: id,
+        pendingId: id === pendingId ? pendingId : null,
         draggingId: id,
         dragOffset: { dx: o.x - px, dz: o.z - pz },
         dragOrigin: { x: o.x, z: o.z, rot: o.rot },
@@ -175,10 +225,11 @@ export const useStore = create<GymState>()(
       set({ draggingId: null, dragOrigin: null, dragValid: true })
     },
 
+    // rotates in 45° steps; edge objects (doors) stay flush with their wall
     rotate: () => {
       const { placingDef, selectedId, building } = get()
       if (placingDef) {
-        const placingRot = (get().placingRot + 1) % 4
+        const placingRot = (get().placingRot + 1) % 8
         const g = get().ghost
         set({ placingRot })
         if (g) {
@@ -191,7 +242,7 @@ export const useStore = create<GymState>()(
       set({
         objects: get().objects.map((o) => {
           if (o.id !== selectedId || o.rule === 'edge') return o
-          const rot = (o.rot + 1) % 4
+          const rot = (o.rot + 1) % 8
           const r = computeDrop({ ...o, rot }, o.x, o.z, building)
           return { ...o, rot, x: r.x, z: r.z }
         }),
@@ -199,9 +250,13 @@ export const useStore = create<GymState>()(
     },
 
     removeSelected: () => {
-      const { selectedId } = get()
+      const { selectedId, pendingId } = get()
       if (!selectedId) return
-      set({ objects: get().objects.filter((o) => o.id !== selectedId), selectedId: null })
+      set({
+        objects: get().objects.filter((o) => o.id !== selectedId),
+        selectedId: null,
+        pendingId: pendingId === selectedId ? null : pendingId,
+      })
     },
 
     updateObject: (id, patch) => {
@@ -219,16 +274,16 @@ export const useStore = create<GymState>()(
       })
     },
 
-    clearAll: () => set({ objects: [], selectedId: null, placingDef: null, ghost: null }),
+    clearAll: () => set({ objects: [], selectedId: null, placingDef: null, ghost: null, pendingId: null }),
 
     importLayout: (file) => {
       if (!file || !file.building || !Array.isArray(file.objects)) throw new Error('Invalid layout file')
       set({
-        building: { ...DEFAULT_BUILDING, ...file.building },
-        objects: file.objects,
+        ...normalizeFile(file),
         selectedId: null,
         placingDef: null,
         ghost: null,
+        pendingId: null,
       })
     },
 
@@ -246,7 +301,7 @@ useStore.subscribe(
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
       try {
-        const file: LayoutFile = { version: 1, building, objects }
+        const file: LayoutFile = { version: FILE_VERSION, building, objects }
         localStorage.setItem(STORAGE_KEY, JSON.stringify(file))
       } catch {
         // storage full / unavailable — ignore
@@ -257,5 +312,14 @@ useStore.subscribe(
 
 export function exportLayout(): LayoutFile {
   const { building, objects } = useStore.getState()
-  return { version: 1, building, objects }
+  return { version: FILE_VERSION, building, objects }
 }
+
+// handy for debugging / automated UI tests
+declare global {
+  interface Window {
+    __gymStore?: typeof useStore
+  }
+}
+if (typeof window !== 'undefined') window.__gymStore = useStore
+

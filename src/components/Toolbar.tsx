@@ -98,7 +98,7 @@ export function Toolbar() {
         <button className={showLabels ? 'on' : ''} onClick={toggleLabels} title="L">Labels</button>
       </div>
       <div className="tb-group">
-        <button onClick={exportJson}>Export JSON</button>
+        <button className="save" onClick={exportJson}>💾 Save JSON</button>
         <button onClick={() => fileRef.current?.click()}>Import JSON</button>
         <button onClick={exportPng}>Export PNG</button>
         <button

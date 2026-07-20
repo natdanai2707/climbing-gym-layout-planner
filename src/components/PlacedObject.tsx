@@ -21,14 +21,14 @@ function labelY(o: Placed): number {
   }
 }
 
-export function PlacedObject({ o, warning }: { o: Placed; warning: boolean }) {
+export function PlacedObject({ o, warning, elev }: { o: Placed; warning: boolean; elev: number }) {
   const selected = useStore((s) => s.selectedId === o.id)
   const showLabels = useStore((s) => s.showLabels)
   const beginMove = useStore((s) => s.beginMove)
   const controls = useThree((s) => s.controls) as { enabled?: boolean } | null
 
   const tint = warning ? '#e05252' : null
-  const baseY = o.rule === 'outdoor' ? -0.04 : 0
+  const baseY = o.rule === 'outdoor' ? -0.04 : elev
   const { fw, fd } = fp(o)
 
   const onPointerDown = (e: ThreeEvent<PointerEvent>) => {
@@ -40,7 +40,7 @@ export function PlacedObject({ o, warning }: { o: Placed; warning: boolean }) {
 
   return (
     <group position={[o.x, baseY, o.z]}>
-      <group rotation-y={(o.rot * Math.PI) / 2} onPointerDown={onPointerDown}>
+      <group rotation-y={(o.rot * Math.PI) / 4} onPointerDown={onPointerDown}>
         <ObjectMesh o={o} tint={tint} />
       </group>
       {selected && (

@@ -89,42 +89,155 @@ function Holds({ w, len, count }: { w: number; len: number; count: number }) {
   )
 }
 
-// Wall slab anchored at the BACK edge of the footprint: a vertical kicker at the
-// bottom, then a main panel overhanging toward the front, both covered in holds.
+interface ProfilePoint {
+  y: number
+  off: number // forward offset from the back plane at this height
+}
+
+// One face strip built from an arbitrary height/offset polyline — each segment is
+// an angled panel, so a face can go slab → vertical → overhang → roof like a real wall.
+function ProfiledFace({
+  w,
+  profile,
+  color,
+  backZ,
+  holdDensity = 1.6,
+}: {
+  w: number
+  profile: ProfilePoint[]
+  color: string
+  backZ: number
+  holdDensity?: number
+}) {
+  const t = 0.22
+  return (
+    <group>
+      {profile.slice(0, -1).map((p0, i) => {
+        const p1 = profile[i + 1]
+        const dy = p1.y - p0.y
+        const doff = p1.off - p0.off
+        const len = Math.hypot(dy, doff) + 0.18 // slight overlap hides seams at joints
+        const ang = Math.atan2(doff, dy)
+        const holds = Math.round(clampN(w * len * holdDensity, 4, 60))
+        return (
+          <group
+            key={i}
+            position={[0, (p0.y + p1.y) / 2, backZ + t / 2 + (p0.off + p1.off) / 2]}
+            rotation-x={ang}
+          >
+            <mesh castShadow receiveShadow>
+              <boxGeometry args={[w, len, t]} />
+              <meshStandardMaterial color={color} {...MAT} />
+            </mesh>
+            {len > 0.7 && (
+              <group position={[0, 0, t / 2 + 0.03]}>
+                <Holds w={w} len={len} count={holds} />
+              </group>
+            )}
+          </group>
+        )
+      })}
+    </group>
+  )
+}
+
+// Wall anchored at the BACK edge of the footprint, split into sections across its
+// width — each section gets a different polygonal profile (overhang, roof cave,
+// vertical, slab) so the wall reads like a real climbing wall, not one flat angle.
 function ClimbingWall({ o, tint }: { o: Placed; tint: string | null }) {
   const color = tint ?? o.color
-  const t = 0.22
-  const depth = Math.min(o.d, 2.4)
   const backZ = -o.d / 2
-  const kickH = Math.min(1.1, o.h * 0.3)
-  const off = clampN(depth - t - 0.2, 0.15, o.h * 0.35) // horizontal overhang reach
-  const upperH = Math.max(0.3, o.h - kickH)
-  const panelLen = Math.hypot(upperH, off)
-  const ang = Math.atan2(off, upperH)
-  const holdCount = Math.round(clampN(o.w * o.h * 1.4, 24, 140))
+  const h = o.h
+  const maxOff = Math.max(0.25, Math.min(o.d - 0.4, h * 0.45))
+
+  const profiles: ProfilePoint[][] = useMemo(() => {
+    const overhang: ProfilePoint[] = [
+      { y: 0, off: 0.15 },
+      { y: h * 0.3, off: 0.25 },
+      { y: h, off: maxOff },
+    ]
+    const roof: ProfilePoint[] = [
+      { y: 0, off: 0.12 },
+      { y: h * 0.45, off: 0.18 },
+      { y: h * 0.68, off: maxOff * 0.9 },
+      { y: h, off: maxOff },
+    ]
+    const vertical: ProfilePoint[] = [
+      { y: 0, off: 0.12 },
+      { y: h * 0.78, off: 0.18 },
+      { y: h, off: Math.min(0.55, maxOff) },
+    ]
+    const slab: ProfilePoint[] = [
+      { y: 0, off: Math.min(0.85, maxOff) },
+      { y: h * 0.55, off: 0.3 },
+      { y: h, off: 0.38 },
+    ]
+    return [overhang, roof, vertical, slab]
+  }, [h, maxOff])
+
+  const nSec = Math.round(clampN(Math.floor(o.w / 3.5), 1, 4))
+  const secW = o.w / nSec
 
   return (
     <group>
-      {/* kicker (vertical bottom section) */}
-      <mesh position={[0, kickH / 2, backZ + t / 2]} castShadow receiveShadow>
-        <boxGeometry args={[o.w, kickH, t]} />
-        <meshStandardMaterial color={color} {...MAT} />
-      </mesh>
-      <group position={[0, kickH / 2, backZ + t + 0.03]}>
-        <Holds w={o.w} len={kickH} count={Math.round(holdCount / 5)} />
-      </group>
-      {/* main overhanging panel */}
-      <group position={[0, kickH + upperH / 2, backZ + t / 2 + off / 2]} rotation-x={ang}>
-        <mesh castShadow receiveShadow>
-          <boxGeometry args={[o.w, panelLen, t]} />
-          <meshStandardMaterial color={color} {...MAT} />
-        </mesh>
-        <group position={[0, 0, t / 2 + 0.03]}>
-          <Holds w={o.w} len={panelLen} count={holdCount} />
+      {Array.from({ length: nSec }, (_, i) => (
+        <group key={i} position={[-o.w / 2 + secW * (i + 0.5), 0, 0]}>
+          <ProfiledFace w={secW - 0.04} profile={profiles[i % profiles.length]} color={color} backZ={backZ} />
+          {/* top cap board per section */}
+          <Box
+            args={[secW - 0.04, 0.12, 0.5]}
+            pos={[0, h + 0.06, backZ + 0.11 + profiles[i % profiles.length][profiles[i % profiles.length].length - 1].off]}
+            color={tint ?? '#e6e1d6'}
+          />
         </group>
+      ))}
+    </group>
+  )
+}
+
+// Freestanding island boulder, climbable from all four sides: every face leans
+// outward (bottom tucked in, top flared) around a core, with holds all around.
+function IslandBoulder({ o, tint }: { o: Placed; tint: string | null }) {
+  const color = tint ?? o.color
+  const flare = clampN(Math.min(o.w, o.d) * 0.16, 0.3, 0.9)
+  const face = (width: number, half: number) => {
+    const p0 = { y: 0, off: -flare } // bottom tucked toward center
+    const p1 = { y: o.h * 0.55, off: -flare * 0.55 }
+    const p2 = { y: o.h, off: 0 } // top at the footprint edge
+    return (
+      <group>
+        {[p0, p1, p2].slice(0, -1).map((a, i) => {
+          const b = [p0, p1, p2][i + 1]
+          const dy = b.y - a.y
+          const doff = b.off - a.off
+          const len = Math.hypot(dy, doff) + 0.16
+          const ang = Math.atan2(doff, dy)
+          return (
+            <group key={i} position={[0, (a.y + b.y) / 2, half - 0.11 + (a.off + b.off) / 2]} rotation-x={ang}>
+              <mesh castShadow receiveShadow>
+                <boxGeometry args={[width, len, 0.22]} />
+                <meshStandardMaterial color={color} {...MAT} />
+              </mesh>
+              <group position={[0, 0, 0.14]}>
+                <Holds w={width} len={len} count={Math.round(clampN(width * len * 1.6, 6, 50))} />
+              </group>
+            </group>
+          )
+        })}
       </group>
-      {/* top cap board */}
-      <Box args={[o.w, 0.12, 0.5]} pos={[0, o.h + 0.06, backZ + t / 2 + off]} color={tint ?? '#e6e1d6'} />
+    )
+  }
+  return (
+    <group>
+      {/* core mass */}
+      <Box args={[Math.max(0.4, o.w - flare * 2), o.h * 0.9, Math.max(0.4, o.d - flare * 2)]} pos={[0, o.h * 0.45, 0]} color={color} />
+      {/* four outward-leaning faces */}
+      <group>{face(o.w, o.d / 2)}</group>
+      <group rotation-y={Math.PI}>{face(o.w, o.d / 2)}</group>
+      <group rotation-y={Math.PI / 2}>{face(o.d, o.w / 2)}</group>
+      <group rotation-y={-Math.PI / 2}>{face(o.d, o.w / 2)}</group>
+      {/* top cap */}
+      <Box args={[Math.max(0.4, o.w - flare), 0.14, Math.max(0.4, o.d - flare)]} pos={[0, o.h + 0.07, 0]} color={tint ?? '#e6e1d6'} />
     </group>
   )
 }
@@ -590,6 +703,8 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
     case 'wall_low':
     case 'wall_high':
       return <ClimbingWall o={o} tint={tint} />
+    case 'wall_island':
+      return <IslandBoulder o={o} tint={tint} />
     case 'mat':
       return <Mats o={o} tint={tint} />
     case 'mezzanine':

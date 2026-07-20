@@ -237,6 +237,64 @@ button:disabled {
   font-weight: 600;
 }
 
+button.save {
+  background: #2b2926;
+  color: #fff;
+  border-color: #2b2926;
+}
+
+button.save:hover {
+  background: #494540;
+}
+
+.pending-bar {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  background: #ffffff;
+  border: 1px solid #ddd8cd;
+  border-radius: 12px;
+  padding: 8px 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  max-width: 94%;
+}
+
+.pb-hint {
+  font-size: 11px;
+  color: #8b867c;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.pb-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.pb-buttons button {
+  font-weight: 600;
+}
+
+button.ok {
+  background: #16a34a;
+  color: #fff;
+  border-color: #16a34a;
+}
+
+button.ok:hover {
+  background: #15803d;
+}
+
 .placing-hint {
   position: absolute;
   top: 10px;
@@ -321,7 +379,8 @@ button:disabled {
   color: #6b675f;
 }
 
-.insp-field input {
+.insp-field input,
+.insp-field select {
   padding: 4px 6px;
   border: 1px solid #d4cfc3;
   border-radius: 6px;

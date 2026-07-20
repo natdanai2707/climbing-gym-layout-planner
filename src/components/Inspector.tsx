@@ -62,9 +62,9 @@ export function Inspector() {
         <label className="insp-field">
           <span>Rotation</span>
           <div className="rot-row">
-            <span className="rot-val">{selected.rot * 90}°</span>
+            <span className="rot-val">{selected.rot * 45}°</span>
             <button onClick={rotate} disabled={selected.rule === 'edge'} title="R">
-              ↻ 90°
+              ↻ 45°
             </button>
           </div>
         </label>
@@ -75,6 +75,18 @@ export function Inspector() {
         <span>Color</span>
         <input type="color" value={selected.color} onChange={(e) => set({ color: e.target.value })} />
       </label>
+      {selected.category !== 'mezzanine' && selected.rule === 'floor' && (
+        <label className="insp-field wide">
+          <span>Level</span>
+          <select
+            value={selected.level ?? 'ground'}
+            onChange={(e) => set({ level: e.target.value as 'ground' | 'upper' })}
+          >
+            <option value="ground">Ground floor</option>
+            <option value="upper">On mezzanine</option>
+          </select>
+        </label>
+      )}
       <div className="insp-meta muted">
         Type: {selected.category} · Rule: {selected.rule}
       </div>

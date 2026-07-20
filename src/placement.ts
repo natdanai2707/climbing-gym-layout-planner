@@ -2,9 +2,12 @@ import type { Building, Placed } from './types'
 
 const EPS = 1e-4
 
-// Effective footprint after rotation (odd rotations swap width/depth)
+// Effective axis-aligned footprint after rotation (rot is in 45° steps, 0..7)
 export function fp(o: { w: number; d: number; rot: number }): { fw: number; fd: number } {
-  return o.rot % 2 === 1 ? { fw: o.d, fd: o.w } : { fw: o.w, fd: o.d }
+  const th = (o.rot * Math.PI) / 4
+  const c = Math.abs(Math.cos(th))
+  const s = Math.abs(Math.sin(th))
+  return { fw: o.w * c + o.d * s, fd: o.w * s + o.d * c }
 }
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v))
@@ -57,12 +60,12 @@ export function computeDrop(
       const z = m === dN ? -hl : hl
       let x = snapCenter(rawX, o.w, -hw, cell)
       x = clampInside(x, o.w, -hw, hw)
-      return { x, z, rot: m === dN ? 0 : 2, valid: true }
+      return { x, z, rot: m === dN ? 0 : 4, valid: true }
     } else {
       const x = m === dW ? -hw : hw
       let z = snapCenter(rawZ, o.w, -hl, cell)
       z = clampInside(z, o.w, -hl, hl)
-      return { x, z, rot: m === dW ? 1 : 3, valid: true }
+      return { x, z, rot: m === dW ? 2 : 6, valid: true }
     }
   }
 
@@ -120,27 +123,24 @@ export function resolveAfterResize(o: Placed, b: Building): { x: number; z: numb
   return best ? { x: best.x, z: best.z, rot: best.rot } : { x: r.x, z: r.z, rot: r.rot }
 }
 
-// Objects that should be tinted red: overlapping floor-placed footprints, and
-// outdoor objects currently violating the apron rule.
+// Objects tinted red: only outdoor objects violating the apron rule.
+// (Overlapping items are allowed by design — layouts layer zones, mats and gear.)
 export function getWarningIds(objects: Placed[], b: Building): Set<string> {
   const warn = new Set<string>()
-  const floors = objects.filter((o) => o.rule === 'floor')
-  for (let i = 0; i < floors.length; i++) {
-    const a = floors[i]
-    const fa = fp(a)
-    for (let j = i + 1; j < floors.length; j++) {
-      const c = floors[j]
-      const fc = fp(c)
-      const ox = Math.min(a.x + fa.fw / 2, c.x + fc.fw / 2) - Math.max(a.x - fa.fw / 2, c.x - fc.fw / 2)
-      const oz = Math.min(a.z + fa.fd / 2, c.z + fc.fd / 2) - Math.max(a.z - fa.fd / 2, c.z - fc.fd / 2)
-      if (ox > EPS && oz > EPS) {
-        warn.add(a.id)
-        warn.add(c.id)
-      }
-    }
-  }
   for (const o of objects) {
     if (o.rule === 'outdoor' && !computeDrop(o, o.x, o.z, b).valid) warn.add(o.id)
   }
   return warn
+}
+
+// Height an object sits at: objects marked 'upper' rest on the first mezzanine
+// whose footprint contains their center.
+export function elevationFor(o: Pick<Placed, 'x' | 'z' | 'level'>, objects: Placed[]): number {
+  if (o.level !== 'upper') return 0
+  for (const m of objects) {
+    if (m.category !== 'mezzanine') continue
+    const { fw, fd } = fp(m)
+    if (Math.abs(o.x - m.x) <= fw / 2 + EPS && Math.abs(o.z - m.z) <= fd / 2 + EPS) return m.h
+  }
+  return 0
 }
