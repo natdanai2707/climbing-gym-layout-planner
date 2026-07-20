@@ -8,18 +8,21 @@ function PaletteCard({ def }: { def: ObjectDef }) {
   return (
     <div
       className={`palette-card${active ? ' active' : ''}`}
+      // Mouse: press starts a drag-to-place gesture. Touch: a plain tap (onClick)
+      // starts sticky placing, so swipe-scrolling the list never picks up an item.
       onPointerDown={(e) => {
-        if (e.button !== 0) return
+        if (e.pointerType !== 'mouse' || e.button !== 0) return
         e.preventDefault()
         startPlacing(def)
       }}
-      title="ลากไปวางบนผัง หรือคลิกแล้วไปคลิกวางในฉาก (Esc ยกเลิก)"
+      onClick={() => startPlacing(def)}
+      title="Drag onto the floor, or tap then tap the scene to place (Esc cancels)"
     >
       <span className="swatch" style={{ background: def.color }} />
       <div className="pc-text">
         <div className="pc-label">{def.label}</div>
         <div className="pc-dims">
-          {def.w} × {def.d} m · สูง {def.h} m
+          {def.w} × {def.d} m · H {def.h} m
         </div>
       </div>
     </div>
@@ -27,9 +30,14 @@ function PaletteCard({ def }: { def: ObjectDef }) {
 }
 
 export function Palette() {
+  const open = useStore((s) => s.panelLeft)
+  const setPanelLeft = useStore((s) => s.setPanelLeft)
   return (
-    <aside className="palette">
-      <h2>วัตถุ (ลากไปวาง)</h2>
+    <aside className={`palette${open ? ' open' : ''}`}>
+      <button className="drawer-close" onClick={() => setPanelLeft(false)}>
+        ✕ Close
+      </button>
+      <h2>Objects (tap to place)</h2>
       {CATEGORY_ORDER.map((cat) => {
         const defs = CATALOG.filter((d) => d.category === cat)
         if (defs.length === 0) return null
@@ -43,7 +51,7 @@ export function Palette() {
         )
       })}
       <div className="palette-hint">
-        <b>คีย์ลัด:</b> R หมุน · Delete ลบ · Esc ยกเลิก/เลิกเลือก · G ตาราง · L ป้ายชื่อ
+        <b>Shortcuts:</b> R rotate · Delete remove · Esc cancel/deselect · G grid · L labels
       </div>
     </aside>
   )

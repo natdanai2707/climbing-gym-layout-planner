@@ -37,6 +37,12 @@ export interface GymState {
   showLabels: boolean
   viewKey: number
 
+  // mobile drawer visibility (ignored by the desktop layout)
+  panelLeft: boolean
+  panelRight: boolean
+  setPanelLeft: (v: boolean) => void
+  setPanelRight: (v: boolean) => void
+
   setBuilding: (patch: Partial<Building>) => void
   startPlacing: (def: ObjectDef) => void
   cancelPlacing: () => void
@@ -85,6 +91,10 @@ export const useStore = create<GymState>()(
     showGrid: true,
     showLabels: true,
     viewKey: 0,
+    panelLeft: false,
+    panelRight: false,
+    setPanelLeft: (v) => set({ panelLeft: v }),
+    setPanelRight: (v) => set({ panelRight: v }),
 
     setBuilding: (patch) => {
       const building = { ...get().building, ...patch }
@@ -96,7 +106,8 @@ export const useStore = create<GymState>()(
       set({ building, objects })
     },
 
-    startPlacing: (def) => set({ placingDef: def, placingRot: 0, ghost: null, selectedId: null }),
+    // close the palette drawer so the canvas is visible for the drop (mobile)
+    startPlacing: (def) => set({ placingDef: def, placingRot: 0, ghost: null, selectedId: null, panelLeft: false }),
     cancelPlacing: () => set({ placingDef: null, ghost: null }),
 
     updateGhost: (x, z) => {

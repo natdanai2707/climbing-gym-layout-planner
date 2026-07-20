@@ -46,28 +46,28 @@ export function StatsPanel() {
 
   return (
     <section className="stats">
-      <h2>สถิติพื้นที่</h2>
+      <h2>Area Stats</h2>
       <div className="stat-row">
-        <span>พื้นที่อาคาร</span>
+        <span>Building area</span>
         <b>{fmt(stats.buildingArea)} m²</b>
       </div>
       <div className="stat-row">
-        <span>พื้นที่ apron (นอกอาคาร)</span>
+        <span>Apron (outdoor) area</span>
         <b>{fmt(stats.apronArea)} m²</b>
       </div>
       <div className="stat-row">
-        <span>ใช้พื้นที่ในอาคาร</span>
+        <span>Used floor area</span>
         <b>
           {fmt(stats.usedArea)} m² ({stats.usedPct.toFixed(1)}%)
         </b>
       </div>
       <div className="stat-row">
-        <span>พื้นที่ว่างคงเหลือ</span>
+        <span>Free floor area</span>
         <b>{fmt(stats.freeArea)} m²</b>
       </div>
       {stats.byCategory.size > 0 && (
         <>
-          <h3>แยกตามประเภท</h3>
+          <h3>By category</h3>
           {[...stats.byCategory.entries()].map(([cat, e]) => (
             <div className="stat-row small" key={cat}>
               <span>
@@ -79,9 +79,9 @@ export function StatsPanel() {
         </>
       )}
       <div className="stat-row">
-        <span>ที่จอดรถ</span>
+        <span>Parking</span>
         <b>
-          {stats.parkingCount} คัน · {fmt(stats.parkingArea)} m²
+          {stats.parkingCount} cars · {fmt(stats.parkingArea)} m²
         </b>
       </div>
     </section>

@@ -23,10 +23,13 @@ function CaptureBinder() {
 }
 
 // Default isometric camera + orbit controls. Remounted (via key) to reset the view.
+// Initial zoom scales with the viewport so the building fits on phone screens too.
 function CameraRig() {
+  const size = useThree((s) => s.size)
+  const zoom = useMemo(() => Math.max(4, Math.min(13, Math.min(size.width, size.height) / 65)), [])
   return (
     <>
-      <OrthographicCamera makeDefault position={[70, 70, 70]} zoom={11} near={-500} far={1000} />
+      <OrthographicCamera makeDefault position={[70, 70, 70]} zoom={zoom} near={-500} far={1000} />
       <OrbitControls makeDefault target={[0, 0, 0]} maxPolarAngle={Math.PI / 2.05} />
     </>
   )
@@ -80,15 +83,19 @@ function DragController() {
       if (s.draggingId) s.endMove()
       else if (s.placingDef && overCanvas(e) && s.ghost) s.commitPlacing()
     }
-    // In "sticky" placing mode (item picked with a click), a press on the canvas drops it
+    // In "sticky" placing mode (item picked with a tap/click), a press on the canvas
+    // drops it. On touch there is no hover, so project the tap point first — the
+    // ghost may not exist yet. The commit itself is deferred until after the
+    // pointerdown event fully dispatches: the deselect-catcher mesh also handles
+    // this same event, and if placingDef were already cleared it would deselect
+    // the object we just placed.
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return
       const s = useStore.getState()
-      if (s.placingDef && s.ghost) {
-        const p = project(e)
-        if (p) s.updateGhost(p.x, p.z)
-        s.commitPlacing()
-      }
+      if (!s.placingDef) return
+      const p = project(e)
+      if (p) s.updateGhost(p.x, p.z)
+      setTimeout(() => useStore.getState().commitPlacing(), 0)
     }
 
     window.addEventListener('pointermove', onMove)

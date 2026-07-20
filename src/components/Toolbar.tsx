@@ -71,7 +71,7 @@ export function Toolbar() {
       const data = JSON.parse(await f.text()) as LayoutFile
       importLayout(data)
     } catch {
-      alert('ไฟล์ JSON ไม่ถูกต้อง (invalid layout file)')
+      alert('Invalid layout JSON file')
     }
   }
 
@@ -81,8 +81,8 @@ export function Toolbar() {
         🧗 Gym Layout Planner
       </div>
       <div className="tb-group">
-        <NumberField label="กว้าง (m)" value={building.width} min={2} max={200} onChange={(v) => setBuilding({ width: v })} />
-        <NumberField label="ยาว (m)" value={building.length} min={2} max={300} onChange={(v) => setBuilding({ length: v })} />
+        <NumberField label="Width (m)" value={building.width} min={2} max={200} onChange={(v) => setBuilding({ width: v })} />
+        <NumberField label="Length (m)" value={building.length} min={2} max={300} onChange={(v) => setBuilding({ length: v })} />
         <label className="tb-field">
           <span>Grid (m)</span>
           <select value={building.cell} onChange={(e) => setBuilding({ cell: parseFloat(e.target.value) })}>
@@ -93,7 +93,7 @@ export function Toolbar() {
         <NumberField label="Apron (m)" value={building.apron} min={0} max={50} onChange={(v) => setBuilding({ apron: v })} />
       </div>
       <div className="tb-group">
-        <button onClick={resetView} title="กลับมุมมอง isometric เริ่มต้น">Reset view</button>
+        <button onClick={resetView} title="Return to the default isometric view">Reset view</button>
         <button className={showGrid ? 'on' : ''} onClick={toggleGrid} title="G">Grid</button>
         <button className={showLabels ? 'on' : ''} onClick={toggleLabels} title="L">Labels</button>
       </div>
@@ -104,7 +104,7 @@ export function Toolbar() {
         <button
           className="danger"
           onClick={() => {
-            if (confirm('ล้างเลย์เอาต์ทั้งหมด?')) clearAll()
+            if (confirm('Clear the entire layout?')) clearAll()
           }}
         >
           New / Clear
