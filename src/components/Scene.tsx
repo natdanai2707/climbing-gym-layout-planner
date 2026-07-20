@@ -9,6 +9,7 @@ import type { Placed } from '../types'
 import { BuildingFloor } from './BuildingFloor'
 import { GridOverlay } from './GridOverlay'
 import { PlacedObject } from './PlacedObject'
+import { People } from './People'
 import { elevationFor, fp, getWarningIds } from '../placement'
 
 // Exposed so the toolbar can grab a PNG of the canvas
@@ -278,6 +279,7 @@ function SceneContent() {
       ))}
       {selected && <ResizeGizmo o={selected} elev={elevationFor(selected, objects)} />}
       <Ghost />
+      <People />
 
       {/* invisible catcher: click empty ground to deselect */}
       <mesh

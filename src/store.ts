@@ -54,6 +54,15 @@ export interface GymState {
   showLabels: boolean
   viewKey: number
 
+  // objects only drag when move mode is armed (prevents accidental touch-moves);
+  // freshly dropped (pending) objects are always draggable
+  moveArmed: boolean
+  setMoveArmed: (v: boolean) => void
+
+  // people animation on/off
+  animate: boolean
+  toggleAnimate: () => void
+
   panelLeft: boolean
   panelRight: boolean
   setPanelLeft: (v: boolean) => void
@@ -122,6 +131,10 @@ export const useStore = create<GymState>()(
     showGrid: true,
     showLabels: false,
     viewKey: 0,
+    moveArmed: false,
+    setMoveArmed: (v) => set({ moveArmed: v }),
+    animate: false,
+    toggleAnimate: () => set({ animate: !get().animate }),
     panelLeft: false,
     panelRight: false,
     setPanelLeft: (v) => set({ panelLeft: v }),
@@ -225,9 +238,13 @@ export const useStore = create<GymState>()(
     },
 
     select: (id) => {
-      const { pendingId } = get()
-      // selecting elsewhere confirms the pending object
-      set({ selectedId: id, pendingId: id === pendingId ? pendingId : null })
+      const { pendingId, selectedId } = get()
+      // selecting elsewhere confirms the pending object; changing selection disarms move mode
+      set({
+        selectedId: id,
+        pendingId: id === pendingId ? pendingId : null,
+        moveArmed: id === selectedId ? get().moveArmed : false,
+      })
     },
 
     beginMove: (id, px, pz) => {

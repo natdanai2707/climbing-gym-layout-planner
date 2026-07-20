@@ -51,6 +51,8 @@ export function Toolbar() {
   const toggleGrid = useStore((s) => s.toggleGrid)
   const toggleLabels = useStore((s) => s.toggleLabels)
   const resetView = useStore((s) => s.resetView)
+  const animate = useStore((s) => s.animate)
+  const toggleAnimate = useStore((s) => s.toggleAnimate)
   const clearAll = useStore((s) => s.clearAll)
   const importLayout = useStore((s) => s.importLayout)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -96,6 +98,9 @@ export function Toolbar() {
         <button onClick={resetView} title="Return to the default isometric view">Reset view</button>
         <button className={showGrid ? 'on' : ''} onClick={toggleGrid} title="G">Grid</button>
         <button className={showLabels ? 'on' : ''} onClick={toggleLabels} title="L">Labels</button>
+        <button className={animate ? 'on' : ''} onClick={toggleAnimate} title="Bring the finished gym to life">
+          ▶ Animate
+        </button>
       </div>
       <div className="tb-group">
         <button className="save" onClick={exportJson}>💾 Save JSON</button>

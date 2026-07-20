@@ -16,6 +16,7 @@ export const CATALOG: ObjectDef[] = [
   { id: 'mats', label: 'Landing Mats', category: 'mat', w: 15.0, d: 4.0, h: 0.3, color: '#5b8ee6', rule: 'floor' },
   { id: 'mezzanine', label: 'Mezzanine Floor', category: 'mezzanine', w: 10.0, d: 6.0, h: 4.5, color: '#dcbd90', rule: 'floor' },
   { id: 'stairs', label: 'Staircase', category: 'stairs', w: 2.0, d: 5.0, h: 4.5, color: '#b0a695', rule: 'floor' },
+  { id: 'column', label: 'Column', category: 'column', w: 0.4, d: 0.4, h: 4.5, color: '#9aa2ad', rule: 'floor' },
   { id: 'training', label: 'Training Area', category: 'zone', w: 8.0, d: 6.0, h: 0.1, color: '#fca5a5', rule: 'floor' },
   { id: 'hyrox', label: 'Hyrox Zone', category: 'zone', w: 20.0, d: 15.0, h: 0.1, color: '#fdba74', rule: 'floor' },
   { id: 'icebath', label: 'Ice Bath', category: 'fixture', w: 3.0, d: 2.0, h: 1.0, color: '#38bdf8', rule: 'floor' },
@@ -37,6 +38,7 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   mat: 'Landing Mats',
   mezzanine: 'Mezzanine',
   stairs: 'Stairs',
+  column: 'Columns',
   furniture: 'Furniture',
 }
 
@@ -48,6 +50,7 @@ export const CATEGORY_ORDER: Category[] = [
   'mat',
   'mezzanine',
   'stairs',
+  'column',
   'zone',
   'room',
   'reception',

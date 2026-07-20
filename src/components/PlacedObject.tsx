@@ -35,6 +35,14 @@ export function PlacedObject({ o, warning, elev }: { o: Placed; warning: boolean
   const onPointerDown = (e: ThreeEvent<PointerEvent>) => {
     if (e.button !== 0) return
     e.stopPropagation()
+    const s = useStore.getState()
+    // Objects only drag when move mode is armed (or right after being dropped) —
+    // a plain tap just selects, so brushing the screen can't shift the layout.
+    const canDrag = s.pendingId === o.id || (s.moveArmed && s.selectedId === o.id)
+    if (!canDrag) {
+      s.select(o.id)
+      return
+    }
     if (controls) controls.enabled = false
     // Project the grab point onto the same horizontal plane the drag raycasts
     // against (the object's floor level). Using the raw surface hit point would

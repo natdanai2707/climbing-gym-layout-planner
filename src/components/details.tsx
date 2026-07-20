@@ -267,15 +267,12 @@ function Mats({ o, tint }: { o: Placed; tint: string | null }) {
 
 /* ------------------------------- mezzanine ------------------------------- */
 
-// Elevated platform: slab on columns with a railing around the top edge
+// Elevated platform: floating slab with a railing around the top edge.
+// Support columns are intentionally NOT included — place Column items freely
+// underneath to plan the real structural grid.
 function Mezzanine({ o, tint }: { o: Placed; tint: string | null }) {
   const slabT = 0.25
   const railH = 1.0
-  const cols = useMemo(() => {
-    const xs = spread(Math.max(2, Math.ceil(o.w / 4)), o.w - 0.6)
-    const zs = spread(Math.max(2, Math.ceil(o.d / 4)), o.d - 0.6)
-    return xs.flatMap((x) => zs.map((z) => [x, z] as const))
-  }, [o.w, o.d])
   const posts = useMemo(() => {
     const res: Array<[number, number]> = []
     const nx = Math.max(2, Math.round(o.w / 1.5))
@@ -287,9 +284,6 @@ function Mezzanine({ o, tint }: { o: Placed; tint: string | null }) {
   const floorColor = tint ?? o.color
   return (
     <group>
-      {cols.map(([x, z], i) => (
-        <Box key={i} args={[0.18, o.h - slabT, 0.18]} pos={[x, (o.h - slabT) / 2, z]} color={tint ?? '#9aa2ad'} />
-      ))}
       <mesh position={[0, o.h - slabT / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[o.w, slabT, o.d]} />
         <meshStandardMaterial color={floorColor} {...MAT} />
@@ -336,6 +330,17 @@ function Stairs({ o, tint }: { o: Placed; tint: string | null }) {
       {/* handrails */}
       <Box args={[0.05, 0.05, run]} pos={[-o.w / 2 + 0.05, o.h / 2 + 0.95, 0]} rot={[slope, 0, 0]} color={STEEL} />
       <Box args={[0.05, 0.05, run]} pos={[o.w / 2 - 0.05, o.h / 2 + 0.95, 0]} rot={[slope, 0, 0]} color={STEEL} />
+    </group>
+  )
+}
+
+// Structural column: shaft with a base plate and a cap plate
+function Column({ o, tint }: { o: Placed; tint: string | null }) {
+  return (
+    <group>
+      <Box args={[o.w + 0.12, 0.06, o.d + 0.12]} pos={[0, 0.03, 0]} color={tint ?? '#7d8590'} />
+      <Box args={[o.w, o.h, o.d]} pos={[0, o.h / 2, 0]} color={tint ?? o.color} />
+      <Box args={[o.w + 0.16, 0.1, o.d + 0.16]} pos={[0, o.h - 0.05, 0]} color={tint ?? '#7d8590'} />
     </group>
   )
 }
@@ -709,6 +714,8 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
       return <Mezzanine o={o} tint={tint} />
     case 'stairs':
       return <Stairs o={o} tint={tint} />
+    case 'column':
+      return <Column o={o} tint={tint} />
     case 'zone':
       if (o.defId === 'cowork') return <CoworkZone o={o} tint={tint} />
       if (o.defId === 'training') return <TrainingZone o={o} tint={tint} />

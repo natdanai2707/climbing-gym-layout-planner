@@ -12,6 +12,7 @@ export type Category =
   | 'stairs'
   | 'furniture'
   | 'wall_island'
+  | 'column'
 
 export type Rule = 'floor' | 'edge' | 'outdoor'
 

@@ -22,6 +22,8 @@ export default function App() {
   const confirmPending = useStore((s) => s.confirmPending)
   const cancelPending = useStore((s) => s.cancelPending)
   const updateObject = useStore((s) => s.updateObject)
+  const moveArmed = useStore((s) => s.moveArmed)
+  const setMoveArmed = useStore((s) => s.setMoveArmed)
 
   const pending = objects.find((o) => o.id === pendingId)
   // is the pending object over a mezzanine (so it could be lifted onto it)?
@@ -84,9 +86,13 @@ export default function App() {
             <button onClick={() => setPanelLeft(!panelLeft)}>☰ Objects</button>
             <button onClick={() => setPanelRight(!panelRight)}>📋 Edit / Stats</button>
           </div>
-          {/* mobile-only: quick actions for a selected (already confirmed) object */}
+          {/* quick actions for a selected (already confirmed) object — all devices.
+              Move must be armed explicitly so accidental touches can't shift items. */}
           {selectedId && !placing && !pending && (
             <div className="quick-actions">
+              <button className={moveArmed ? 'on' : ''} onClick={() => setMoveArmed(!moveArmed)}>
+                ✥ Move{moveArmed ? ': ON' : ''}
+              </button>
               <button onClick={rotate}>↻ 45°</button>
               <button onClick={() => setPanelRight(true)}>✎ Edit</button>
               <button className="danger" onClick={removeSelected}>
@@ -94,6 +100,7 @@ export default function App() {
               </button>
             </div>
           )}
+          {moveArmed && selectedId && !pending && <div className="move-hint">Drag the highlighted item to move it</div>}
           {/* pending placement: adjust with the arrows, then confirm (all devices) */}
           {pending && (
             <div className="pending-bar">
