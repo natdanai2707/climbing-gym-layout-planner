@@ -1,3 +1,4 @@
+import * as THREE from 'three'
 import { Html } from '@react-three/drei'
 import type { ThreeEvent } from '@react-three/fiber'
 import { useThree } from '@react-three/fiber'
@@ -35,7 +36,14 @@ export function PlacedObject({ o, warning, elev }: { o: Placed; warning: boolean
     if (e.button !== 0) return
     e.stopPropagation()
     if (controls) controls.enabled = false
-    beginMove(o.id, e.point.x, e.point.z)
+    // Project the grab point onto the same horizontal plane the drag raycasts
+    // against (the object's floor level). Using the raw surface hit point would
+    // add a parallax offset — grabbing high on a tall object, or anything on a
+    // mezzanine, would make it jump on the first move.
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -elev)
+    const p = new THREE.Vector3()
+    if (e.ray.intersectPlane(plane, p)) beginMove(o.id, p.x, p.z)
+    else beginMove(o.id, e.point.x, e.point.z)
   }
 
   return (

@@ -309,35 +309,33 @@ function Mezzanine({ o, tint }: { o: Placed; tint: string | null }) {
 
 /* -------------------------------- stairs -------------------------------- */
 
-// Solid staircase rising from the front edge (+z) up to h at the back edge (-z)
+// Open staircase rising from the front edge (+z) to h at the back edge (-z):
+// floating treads carried by two sloped stringer boards — nothing solid below,
+// so the space underneath stays usable.
 function Stairs({ o, tint }: { o: Placed; tint: string | null }) {
-  const n = Math.round(clampN(o.h / 0.19, 4, 22))
+  const n = Math.round(clampN(o.h / 0.19, 4, 24))
   const sh = o.h / n
   const sd = o.d / n
   const color = tint ?? o.color
+  const slope = Math.atan2(o.h, o.d)
+  const run = Math.hypot(o.d, o.h)
   return (
     <group>
+      {/* treads */}
       {Array.from({ length: n }, (_, i) => (
         <Box
           key={i}
-          args={[o.w, sh * (i + 1), sd]}
-          pos={[0, (sh * (i + 1)) / 2, o.d / 2 - sd * (i + 0.5)]}
+          args={[o.w - 0.14, 0.07, sd * 1.15]}
+          pos={[0, sh * (i + 1) - 0.035, o.d / 2 - sd * (i + 0.5)]}
           color={color}
         />
       ))}
+      {/* sloped side stringers */}
+      <Box args={[0.07, 0.32, run]} pos={[-o.w / 2 + 0.04, o.h / 2 - 0.12, 0]} rot={[slope, 0, 0]} color={tint ?? '#8f867a'} />
+      <Box args={[0.07, 0.32, run]} pos={[o.w / 2 - 0.04, o.h / 2 - 0.12, 0]} rot={[slope, 0, 0]} color={tint ?? '#8f867a'} />
       {/* handrails */}
-      <Box
-        args={[0.05, 0.05, Math.hypot(o.d, o.h)]}
-        pos={[-o.w / 2 + 0.05, o.h / 2 + 0.95, 0]}
-        rot={[Math.atan2(o.h, o.d), 0, 0]}
-        color={STEEL}
-      />
-      <Box
-        args={[0.05, 0.05, Math.hypot(o.d, o.h)]}
-        pos={[o.w / 2 - 0.05, o.h / 2 + 0.95, 0]}
-        rot={[Math.atan2(o.h, o.d), 0, 0]}
-        color={STEEL}
-      />
+      <Box args={[0.05, 0.05, run]} pos={[-o.w / 2 + 0.05, o.h / 2 + 0.95, 0]} rot={[slope, 0, 0]} color={STEEL} />
+      <Box args={[0.05, 0.05, run]} pos={[o.w / 2 - 0.05, o.h / 2 + 0.95, 0]} rot={[slope, 0, 0]} color={STEEL} />
     </group>
   )
 }

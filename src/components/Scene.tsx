@@ -4,7 +4,7 @@ import { Canvas, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { OrbitControls, OrthographicCamera } from '@react-three/drei'
 import { useStore } from '../store'
-import type { ResizeAxis } from '../store'
+import type { ResizeAxis, ResizeState } from '../store'
 import type { Placed } from '../types'
 import { BuildingFloor } from './BuildingFloor'
 import { GridOverlay } from './GridOverlay'
@@ -60,7 +60,6 @@ function DragController() {
     const el = gl.domElement
     if (controls) controls.enabled = false
     const raycaster = new THREE.Raycaster()
-    const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
     const pt = new THREE.Vector3()
 
     const setRay = (e: PointerEvent) => {
@@ -71,9 +70,11 @@ function DragController() {
       )
       raycaster.setFromCamera(ndc, camera)
     }
-    const projectGround = (e: PointerEvent): THREE.Vector3 | null => {
+    // intersect a horizontal plane at the given height (ground = 0, mezzanine top = its h)
+    const projectAt = (e: PointerEvent, y: number): THREE.Vector3 | null => {
       setRay(e)
-      return raycaster.ray.intersectPlane(ground, pt) ? pt : null
+      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -y)
+      return raycaster.ray.intersectPlane(plane, pt) ? pt : null
     }
     const overCanvas = (e: PointerEvent) => {
       const r = el.getBoundingClientRect()
@@ -86,6 +87,7 @@ function DragController() {
       if (!r) return
       const o = s.objects.find((v) => v.id === r.id)
       if (!o) return
+      const base = elevationFor(o, s.objects)
       if (r.axis === 'y') {
         // intersect a vertical, camera-facing plane through the object's center
         setRay(e)
@@ -96,22 +98,26 @@ function DragController() {
         dir.normalize()
         const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(dir, new THREE.Vector3(o.x, 0, o.z))
         if (!raycaster.ray.intersectPlane(plane, pt)) return
-        const base = elevationFor(o, s.objects)
         const h = Math.max(0.1, Math.round((pt.y - base) / 0.25) * 0.25)
         if (h !== o.h) s.updateObject(o.id, { h })
         return
       }
-      const p = projectGround(e)
+      // Edge-anchored horizontal resize: the dragged side follows the pointer,
+      // the opposite side stays fixed (center shifts by half the size change).
+      const p = projectAt(e, base)
       if (!p) return
       const th = (o.rot * Math.PI) / 4
-      // world directions of the object's local x / z axes
       const dir =
         r.axis === 'x'
           ? { x: Math.cos(th), z: -Math.sin(th) }
           : { x: Math.sin(th), z: Math.cos(th) }
-      const v = snapDim(2 * Math.abs((p.x - o.x) * dir.x + (p.z - o.z) * dir.z))
-      if (r.axis === 'x' && v !== o.w) s.updateObject(o.id, { w: v })
-      if (r.axis === 'z' && v !== o.d) s.updateObject(o.id, { d: v })
+      const u = (p.x - r.start.x) * dir.x + (p.z - r.start.z) * dir.z
+      const startDim = r.axis === 'x' ? r.start.w : r.start.d
+      const newDim = snapDim(r.sign * u + startDim / 2)
+      const shift = (r.sign * (newDim - startDim)) / 2
+      const nx = r.start.x + dir.x * shift
+      const nz = r.start.z + dir.z * shift
+      s.resizeObject(o.id, r.axis === 'x' ? { w: newDim, x: nx, z: nz } : { d: newDim, x: nx, z: nz })
     }
 
     const onMove = (e: PointerEvent) => {
@@ -120,10 +126,13 @@ function DragController() {
         handleResize(e)
         return
       }
-      const p = projectGround(e)
-      if (!p) return
-      if (s.placingDef) s.updateGhost(p.x, p.z)
-      else if (s.draggingId) s.moveTo(p.x, p.z)
+      if (s.placingDef) {
+        const p = projectAt(e, 0)
+        if (p) s.updateGhost(p.x, p.z)
+      } else if (s.draggingId) {
+        const p = projectAt(e, s.dragPlaneY)
+        if (p) s.moveTo(p.x, p.z)
+      }
     }
     const onUp = (e: PointerEvent) => {
       const s = useStore.getState()
@@ -139,7 +148,7 @@ function DragController() {
       if (e.button !== 0) return
       const s = useStore.getState()
       if (!s.placingDef) return
-      const p = projectGround(e)
+      const p = projectAt(e, 0)
       if (p) s.updateGhost(p.x, p.z)
       setTimeout(() => useStore.getState().commitPlacing(), 0)
     }
@@ -211,22 +220,27 @@ function ArrowHandle({
   )
 }
 
-// Red/blue/green arrows to drag-resize width, depth and height of the selected object
+// Five arrows to drag-resize the selected object: one per SIDE for width and
+// depth (the dragged side moves, the opposite side stays fixed) plus one for
+// height. Red = width sides, blue = depth sides, green = height.
 function ResizeGizmo({ o, elev }: { o: Placed; elev: number }) {
   const setResizing = useStore((s) => s.setResizing)
   const controls = useThree((s) => s.controls) as { enabled?: boolean } | null
-  const start = (axis: ResizeAxis) => (e: ThreeEvent<PointerEvent>) => {
+  const start = (axis: ResizeAxis, sign: 1 | -1) => (e: ThreeEvent<PointerEvent>) => {
     if (e.button !== 0) return
     e.stopPropagation()
     if (controls) controls.enabled = false
-    setResizing({ id: o.id, axis })
+    const r: ResizeState = { id: o.id, axis, sign, start: { w: o.w, d: o.d, x: o.x, z: o.z } }
+    setResizing(r)
   }
   const yMid = Math.min(Math.max(o.h * 0.5, 0.25), 1.2)
   return (
     <group position={[o.x, elev, o.z]} rotation-y={(o.rot * Math.PI) / 4}>
-      <ArrowHandle color="#dc2626" pos={[o.w / 2 + 0.35, yMid, 0]} rot={[0, 0, -Math.PI / 2]} onDown={start('x')} />
-      <ArrowHandle color="#2563eb" pos={[0, yMid, o.d / 2 + 0.35]} rot={[Math.PI / 2, 0, 0]} onDown={start('z')} />
-      <ArrowHandle color="#16a34a" pos={[0, o.h + 0.25, 0]} rot={[0, 0, 0]} onDown={start('y')} />
+      <ArrowHandle color="#dc2626" pos={[o.w / 2 + 0.35, yMid, 0]} rot={[0, 0, -Math.PI / 2]} onDown={start('x', 1)} />
+      <ArrowHandle color="#dc2626" pos={[-o.w / 2 - 0.35, yMid, 0]} rot={[0, 0, Math.PI / 2]} onDown={start('x', -1)} />
+      <ArrowHandle color="#2563eb" pos={[0, yMid, o.d / 2 + 0.35]} rot={[Math.PI / 2, 0, 0]} onDown={start('z', 1)} />
+      <ArrowHandle color="#2563eb" pos={[0, yMid, -o.d / 2 - 0.35]} rot={[-Math.PI / 2, 0, 0]} onDown={start('z', -1)} />
+      <ArrowHandle color="#16a34a" pos={[0, o.h + 0.25, 0]} rot={[0, 0, 0]} onDown={start('y', 1)} />
     </group>
   )
 }

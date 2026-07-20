@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
 import type { Building, LayoutFile, ObjectDef, Placed } from './types'
-import { computeDrop, resolveAfterResize } from './placement'
+import { clampInside, computeDrop, elevationFor, fp, resolveAfterResize } from './placement'
 
 const STORAGE_KEY = 'gym-layout-planner-v1'
 const FILE_VERSION = 2 // v2: rot is in 45° steps (v1 was 90° steps)
@@ -20,6 +20,13 @@ interface Ghost {
 
 export type ResizeAxis = 'x' | 'y' | 'z'
 
+export interface ResizeState {
+  id: string
+  axis: ResizeAxis
+  sign: 1 | -1 // which side is being dragged; the opposite edge stays fixed
+  start: { w: number; d: number; x: number; z: number }
+}
+
 export interface GymState {
   building: Building
   objects: Placed[]
@@ -34,13 +41,14 @@ export interface GymState {
   pendingId: string | null
 
   // dimension-arrow drag in progress
-  resizing: { id: string; axis: ResizeAxis } | null
+  resizing: ResizeState | null
 
   // moving an existing object
   draggingId: string | null
   dragOffset: { dx: number; dz: number }
   dragOrigin: { x: number; z: number; rot: number } | null
   dragValid: boolean
+  dragPlaneY: number // raycast plane height while moving (mezzanine top for elevated objects)
 
   showGrid: boolean
   showLabels: boolean
@@ -58,7 +66,8 @@ export interface GymState {
   commitPlacing: () => void
   confirmPending: () => void
   cancelPending: () => void
-  setResizing: (r: { id: string; axis: ResizeAxis } | null) => void
+  setResizing: (r: ResizeState | null) => void
+  resizeObject: (id: string, patch: Partial<Placed>) => void
   select: (id: string | null) => void
   beginMove: (id: string, px: number, pz: number) => void
   moveTo: (px: number, pz: number) => void
@@ -109,6 +118,7 @@ export const useStore = create<GymState>()(
     dragOffset: { dx: 0, dz: 0 },
     dragOrigin: null,
     dragValid: true,
+    dragPlaneY: 0,
     showGrid: true,
     showLabels: false,
     viewKey: 0,
@@ -181,6 +191,39 @@ export const useStore = create<GymState>()(
 
     setResizing: (r) => set({ resizing: r }),
 
+    // Apply a resize WITHOUT re-snapping the center to the grid — the dragged
+    // edge follows the pointer while the opposite edge stays exactly in place.
+    // Only clamps the footprint back inside its legal area.
+    resizeObject: (id, patch) => {
+      const { building } = get()
+      set({
+        objects: get().objects.map((o) => {
+          if (o.id !== id) return o
+          const next = { ...o, ...patch }
+          next.w = Math.max(0.1, next.w)
+          next.d = Math.max(0.1, next.d)
+          next.h = Math.max(0.05, next.h)
+          if (next.rule === 'edge') {
+            const r = computeDrop(next, next.x, next.z, building)
+            return { ...next, x: r.x, z: r.z, rot: r.rot }
+          }
+          const { fw, fd } = fp(next)
+          const hw = building.width / 2
+          const hl = building.length / 2
+          if (next.rule === 'outdoor') {
+            const ow = hw + building.apron
+            const ol = hl + building.apron
+            next.x = clampInside(next.x, fw, -ow, ow)
+            next.z = clampInside(next.z, fd, -ol, ol)
+          } else {
+            next.x = clampInside(next.x, fw, -hw, hw)
+            next.z = clampInside(next.z, fd, -hl, hl)
+          }
+          return next
+        }),
+      })
+    },
+
     select: (id) => {
       const { pendingId } = get()
       // selecting elsewhere confirms the pending object
@@ -198,6 +241,10 @@ export const useStore = create<GymState>()(
         dragOffset: { dx: o.x - px, dz: o.z - pz },
         dragOrigin: { x: o.x, z: o.z, rot: o.rot },
         dragValid: true,
+        // keep raycasting at the object's current height: an object on a mezzanine
+        // must be dragged in the mezzanine plane, not the ground plane, or the
+        // camera parallax makes it jump off the platform
+        dragPlaneY: elevationFor(o, get().objects),
       })
     },
 

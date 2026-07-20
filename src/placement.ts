@@ -19,7 +19,7 @@ function snapCenter(center: number, size: number, minEdge: number, cell: number)
 }
 
 // Clamp the footprint fully inside [min, max] (centered if it doesn't fit)
-function clampInside(center: number, size: number, min: number, max: number) {
+export function clampInside(center: number, size: number, min: number, max: number) {
   if (size >= max - min) return (min + max) / 2
   const corner = clamp(center - size / 2, min, max - size)
   return corner + size / 2
