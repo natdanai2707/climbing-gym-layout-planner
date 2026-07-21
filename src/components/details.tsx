@@ -531,6 +531,23 @@ function ChairMesh({ pos, facing = 0, color = '#5f6b7a' }: { pos: [number, numbe
   )
 }
 
+// Locker-room style long bench: seat slab on leg panels with a low shoe shelf
+function BenchMesh({ o, tint }: { o: Placed; tint: string | null }) {
+  const color = tint ?? o.color
+  return (
+    <group>
+      <Box args={[o.w, 0.07, o.d]} pos={[0, o.h - 0.035, 0]} color={color} />
+      <Box args={[0.09, o.h - 0.07, Math.max(0.1, o.d - 0.06)]} pos={[-o.w / 2 + 0.22, (o.h - 0.07) / 2, 0]} color={DARKWOOD} />
+      <Box args={[0.09, o.h - 0.07, Math.max(0.1, o.d - 0.06)]} pos={[o.w / 2 - 0.22, (o.h - 0.07) / 2, 0]} color={DARKWOOD} />
+      {o.w > 1.8 && (
+        <Box args={[0.09, o.h - 0.07, Math.max(0.1, o.d - 0.06)]} pos={[0, (o.h - 0.07) / 2, 0]} color={DARKWOOD} />
+      )}
+      {/* low shoe shelf */}
+      <Box args={[Math.max(0.3, o.w - 0.5), 0.05, Math.max(0.1, o.d - 0.12)]} pos={[0, o.h * 0.35, 0]} color={color} />
+    </group>
+  )
+}
+
 function StoolMesh({ o, tint }: { o: Placed; tint: string | null }) {
   const r = Math.min(o.w, o.d) / 2
   return (
@@ -1023,6 +1040,7 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
       )
     case 'furniture':
       if (o.defId === 'stool') return <StoolMesh o={o} tint={tint} />
+      if (o.defId === 'bench') return <BenchMesh o={o} tint={tint} />
       return (
         <group>
           <TableMesh w={o.w} d={o.d} h={o.h} color={tint ?? o.color} />

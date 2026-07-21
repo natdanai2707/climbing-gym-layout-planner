@@ -26,6 +26,7 @@ export const CATALOG: ObjectDef[] = [
   { id: 'sauna', label: 'Sauna', category: 'room', w: 3.0, d: 3.0, h: 2.4, color: '#d4a373', rule: 'floor' },
   { id: 'table', label: 'Table', category: 'furniture', w: 1.6, d: 0.8, h: 0.75, color: '#b98a5a', rule: 'floor' },
   { id: 'stool', label: 'Stool', category: 'furniture', w: 0.5, d: 0.5, h: 0.45, color: '#8a6f52', rule: 'floor' },
+  { id: 'bench', label: 'Long Bench', category: 'furniture', w: 2.5, d: 0.4, h: 0.45, color: '#a1785c', rule: 'floor' },
 ]
 
 export const CATEGORY_LABELS: Record<Category, string> = {
