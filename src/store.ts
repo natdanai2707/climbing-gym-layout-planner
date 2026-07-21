@@ -9,7 +9,7 @@ const FILE_VERSION = 2 // v2: rot is in 45° steps (v1 was 90° steps)
 let seq = 1
 const uid = () => `obj-${Date.now().toString(36)}-${seq++}`
 
-const DEFAULT_BUILDING: Building = { width: 20, length: 60, cell: 1, apron: 6 }
+const DEFAULT_BUILDING: Building = { width: 20, length: 60, cell: 1, apron: 6, centerZ: 0 }
 
 interface Ghost {
   x: number
@@ -59,10 +59,10 @@ export interface GymState {
   moveArmed: boolean
   setMoveArmed: (v: boolean) => void
 
-  // warehouse shell: 0 off, 1 transparent, 2 complete solid shell
+  // warehouse shell: 0 off, 1 transparent, 2 complete solid shell.
+  // The shell footprint IS the building (width/length/centerZ).
   shell: ShellConfig
   cycleShell: () => void
-  setShellDims: (patch: Partial<ShellConfig>) => void
   setShellEave: (v: number) => void
   shellResizing: 'length+' | 'length-' | 'height' | null
   setShellResizing: (v: 'length+' | 'length-' | 'height' | null) => void
@@ -95,17 +95,24 @@ export interface GymState {
   resetView: () => void
 }
 
-// v1 files stored rot in 90° steps; v2 uses 45° steps
+// v1 files stored rot in 90° steps; v2 uses 45° steps. Older files kept an
+// independent shell length/offset — those now fold into the building itself.
 function normalizeFile(file: LayoutFile): { building: Building; objects: Placed[] } {
   const version = file.version ?? 1
   const objects = (file.objects ?? []).map((o) => ({
     ...o,
     rot: version < 2 ? (o.rot * 2) % 8 : o.rot % 8,
   }))
-  return { building: { ...DEFAULT_BUILDING, ...file.building }, objects }
+  const building = { ...DEFAULT_BUILDING, ...file.building }
+  const legacyShell = file.shell as (ShellConfig & { length?: number | null; offset?: number }) | undefined
+  if (legacyShell) {
+    if (typeof legacyShell.length === 'number') building.length = legacyShell.length
+    if (typeof legacyShell.offset === 'number' && building.centerZ === 0) building.centerZ = legacyShell.offset
+  }
+  return { building, objects }
 }
 
-const DEFAULT_SHELL: ShellConfig = { mode: 0, length: null, offset: 0, eave: 6 }
+const DEFAULT_SHELL: ShellConfig = { mode: 0, eave: 6 }
 
 function loadSaved(): { building: Building; objects: Placed[]; shell: ShellConfig } {
   try {
@@ -142,11 +149,6 @@ export const useStore = create<GymState>()(
     moveArmed: false,
     setMoveArmed: (v) => set({ moveArmed: v }),
     cycleShell: () => set({ shell: { ...get().shell, mode: (get().shell.mode + 1) % 3 } }),
-    setShellDims: (patch) => {
-      const next = { ...get().shell, ...patch }
-      if (next.length !== null) next.length = Math.max(4, Math.min(300, next.length))
-      set({ shell: next })
-    },
     setShellEave: (v) => set({ shell: { ...get().shell, eave: Math.max(3, Math.min(20, v)) } }),
     shellResizing: null,
     setShellResizing: (v) => set({ shellResizing: v }),
@@ -158,7 +160,7 @@ export const useStore = create<GymState>()(
     setBuilding: (patch) => {
       const building = { ...get().building, ...patch }
       building.width = Math.max(2, building.width)
-      building.length = Math.max(2, building.length)
+      building.length = Math.max(4, Math.min(300, building.length))
       building.apron = Math.max(0, building.apron)
       // Re-place every object so it stays legal in the new footprint
       const objects = get().objects.map((o) => ({ ...o, ...resolveAfterResize(o, building) }))
@@ -237,15 +239,15 @@ export const useStore = create<GymState>()(
           }
           const { fw, fd } = fp(next)
           const hw = building.width / 2
-          const hl = building.length / 2
+          const minZ = building.centerZ - building.length / 2
+          const maxZ = building.centerZ + building.length / 2
           if (next.rule === 'outdoor') {
             const ow = hw + building.apron
-            const ol = hl + building.apron
             next.x = clampInside(next.x, fw, -ow, ow)
-            next.z = clampInside(next.z, fd, -ol, ol)
+            next.z = clampInside(next.z, fd, minZ - building.apron, maxZ + building.apron)
           } else {
             next.x = clampInside(next.x, fw, -hw, hw)
-            next.z = clampInside(next.z, fd, -hl, hl)
+            next.z = clampInside(next.z, fd, minZ, maxZ)
           }
           return next
         }),

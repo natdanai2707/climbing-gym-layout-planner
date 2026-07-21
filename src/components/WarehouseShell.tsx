@@ -29,7 +29,7 @@ export function WarehouseShell() {
   const controls = useThree((s) => s.controls) as { enabled?: boolean } | null
 
   const W = building.width
-  const L = shell.length ?? building.length
+  const L = building.length
   const eave = shell.eave
   const rise = (W / 2) * ROOF_PITCH
   const ridge = eave + rise
@@ -79,7 +79,7 @@ export function WarehouseShell() {
     setShellResizing(which)
   }
 
-  const off = shell.offset
+  const off = building.centerZ
   // Door panels drawn on the OUTSIDE of the shell, at each placed door's spot
   // (local coords — the whole shell group is shifted by the z offset).
   // rot encodes the wall the door snapped to: 0 = north (-z), 4 = south (+z),

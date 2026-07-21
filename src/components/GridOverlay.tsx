@@ -13,24 +13,19 @@ function makeGridGeometry(w: number, l: number, cell: number) {
   return geo
 }
 
-// Grid lines over the building floor (stronger) and the apron (fainter)
+// One uniform snapping grid across the whole working area — it does not mark
+// out the building; the warehouse shell/floor shows the actual footprint.
 export function GridOverlay() {
   const building = useStore((s) => s.building)
   const showGrid = useStore((s) => s.showGrid)
-  const { width: W, length: L, cell, apron } = building
+  const { width: W, length: L, cell, apron, centerZ } = building
 
-  const inner = useMemo(() => makeGridGeometry(W, L, cell), [W, L, cell])
-  const outer = useMemo(() => makeGridGeometry(W + apron * 2, L + apron * 2, cell), [W, L, cell, apron])
+  const grid = useMemo(() => makeGridGeometry(W + apron * 2, L + apron * 2, cell), [W, L, cell, apron])
 
   if (!showGrid) return null
   return (
-    <group>
-      <lineSegments geometry={outer} position={[0, -0.035, 0]}>
-        <lineBasicMaterial color="#b9b5aa" transparent opacity={0.35} />
-      </lineSegments>
-      <lineSegments geometry={inner} position={[0, 0.012, 0]}>
-        <lineBasicMaterial color="#a2865f" transparent opacity={0.45} />
-      </lineSegments>
-    </group>
+    <lineSegments geometry={grid} position={[0, 0.012, centerZ]}>
+      <lineBasicMaterial color="#aaa294" transparent opacity={0.4} />
+    </lineSegments>
   )
 }

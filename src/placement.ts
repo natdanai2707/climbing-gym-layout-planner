@@ -47,24 +47,26 @@ export function computeDrop(
 ): DropResult {
   const { width: W, length: L, cell, apron } = b
   const hw = W / 2
-  const hl = L / 2
+  const cz = b.centerZ ?? 0
+  const minZ = cz - L / 2
+  const maxZ = cz + L / 2
 
   if (o.rule === 'edge') {
     // Distance to each perimeter wall; attach to the nearest one
-    const dN = Math.abs(rawZ + hl)
-    const dS = Math.abs(rawZ - hl)
+    const dN = Math.abs(rawZ - minZ)
+    const dS = Math.abs(rawZ - maxZ)
     const dW = Math.abs(rawX + hw)
     const dE = Math.abs(rawX - hw)
     const m = Math.min(dN, dS, dW, dE)
     if (m === dN || m === dS) {
-      const z = m === dN ? -hl : hl
+      const z = m === dN ? minZ : maxZ
       let x = snapCenter(rawX, o.w, -hw, cell)
       x = clampInside(x, o.w, -hw, hw)
       return { x, z, rot: m === dN ? 0 : 4, valid: true }
     } else {
       const x = m === dW ? -hw : hw
-      let z = snapCenter(rawZ, o.w, -hl, cell)
-      z = clampInside(z, o.w, -hl, hl)
+      let z = snapCenter(rawZ, o.w, minZ, cell)
+      z = clampInside(z, o.w, minZ, maxZ)
       return { x, z, rot: m === dW ? 2 : 6, valid: true }
     }
   }
@@ -73,25 +75,26 @@ export function computeDrop(
 
   if (o.rule === 'outdoor') {
     const ow = hw + apron
-    const ol = hl + apron
+    const oMinZ = minZ - apron
+    const oMaxZ = maxZ + apron
     let x = snapCenter(rawX, fw, -ow, cell)
-    let z = snapCenter(rawZ, fd, -ol, cell)
+    let z = snapCenter(rawZ, fd, oMinZ, cell)
     x = clampInside(x, fw, -ow, ow)
-    z = clampInside(z, fd, -ol, ol)
+    z = clampInside(z, fd, oMinZ, oMaxZ)
     const inside =
-      x - fw / 2 >= -ow - EPS && x + fw / 2 <= ow + EPS && z - fd / 2 >= -ol - EPS && z + fd / 2 <= ol + EPS
+      x - fw / 2 >= -ow - EPS && x + fw / 2 <= ow + EPS && z - fd / 2 >= oMinZ - EPS && z + fd / 2 <= oMaxZ + EPS
     // Overlap with the building interior makes the drop invalid
     const ox = Math.min(x + fw / 2, hw) - Math.max(x - fw / 2, -hw)
-    const oz = Math.min(z + fd / 2, hl) - Math.max(z - fd / 2, -hl)
+    const oz = Math.min(z + fd / 2, maxZ) - Math.max(z - fd / 2, minZ)
     const hitsBuilding = ox > EPS && oz > EPS
     return { x, z, rot: o.rot, valid: inside && !hitsBuilding }
   }
 
   // floor
   let x = snapCenter(rawX, fw, -hw, cell)
-  let z = snapCenter(rawZ, fd, -hl, cell)
+  let z = snapCenter(rawZ, fd, minZ, cell)
   x = clampInside(x, fw, -hw, hw)
-  z = clampInside(z, fd, -hl, hl)
+  z = clampInside(z, fd, minZ, maxZ)
   return { x, z, rot: o.rot, valid: true }
 }
 
@@ -102,10 +105,10 @@ export function resolveAfterResize(o: Placed, b: Building): { x: number; z: numb
   if (r.valid || o.rule !== 'outdoor') return { x: r.x, z: r.z, rot: r.rot }
   const { fw, fd } = fp(o)
   const hw = b.width / 2
-  const hl = b.length / 2
+  const cz = b.centerZ ?? 0
   const candidates: Array<[number, number]> = [
-    [o.x, -hl - fd / 2], // north
-    [o.x, hl + fd / 2], // south
+    [o.x, cz - b.length / 2 - fd / 2], // north
+    [o.x, cz + b.length / 2 + fd / 2], // south
     [-hw - fw / 2, o.z], // west
     [hw + fw / 2, o.z], // east
   ]
@@ -140,14 +143,16 @@ export function getWarningIds(objects: Placed[], b: Building): Set<string> {
  * items, mezzanines included) and area = building width × that length.
  */
 export function usedStrip(objects: Placed[], b: Building): { length: number; area: number } {
-  const hl = b.length / 2
+  const cz = b.centerZ ?? 0
+  const bMin = cz - b.length / 2
+  const bMax = cz + b.length / 2
   let minZ = Infinity
   let maxZ = -Infinity
   for (const o of objects) {
     if (o.rule !== 'floor') continue
     const { fd } = fp(o)
-    minZ = Math.min(minZ, Math.max(-hl, o.z - fd / 2))
-    maxZ = Math.max(maxZ, Math.min(hl, o.z + fd / 2))
+    minZ = Math.min(minZ, Math.max(bMin, o.z - fd / 2))
+    maxZ = Math.max(maxZ, Math.min(bMax, o.z + fd / 2))
   }
   if (minZ >= maxZ) return { length: 0, area: 0 }
   const length = maxZ - minZ

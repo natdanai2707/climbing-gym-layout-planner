@@ -124,18 +124,19 @@ function DragController() {
     }
 
     // shell arrows: each length arrow drags ONLY its own gable end (the other
-    // end stays anchored); eave height uses a vertical camera-facing plane
+    // end stays anchored) and writes straight into the BUILDING length, so the
+    // toolbar number updates live; eave height uses a camera-facing plane
     const handleShellResize = (e: PointerEvent) => {
       const s = useStore.getState()
       if (s.shellResizing === 'length+' || s.shellResizing === 'length-') {
         const p = projectAt(e, 0)
         if (!p) return
         const sign = s.shellResizing === 'length+' ? 1 : -1
-        const curL = s.shell.length ?? s.building.length
-        const fixedEnd = s.shell.offset - (sign * curL) / 2
+        const curL = s.building.length
+        const fixedEnd = s.building.centerZ - (sign * curL) / 2
         const draggedEnd = Math.round(p.z / 0.5) * 0.5
         const newL = Math.max(4, sign * (draggedEnd - fixedEnd))
-        s.setShellDims({ length: newL, offset: fixedEnd + (sign * newL) / 2 })
+        s.setBuilding({ length: newL, centerZ: fixedEnd + (sign * newL) / 2 })
       } else if (s.shellResizing === 'height') {
         setRay(e)
         const dir = new THREE.Vector3()
@@ -280,8 +281,8 @@ function ArrowPriorityPicker() {
         add(loc(0, o.h + 0.95, 0), start('y', 1))
       }
       if (s.shell.mode > 0) {
-        const L = s.shell.length ?? s.building.length
-        const off = s.shell.offset
+        const L = s.building.length
+        const off = s.building.centerZ
         const ridge = s.shell.eave + (s.building.width / 2) * ROOF_PITCH
         add(new THREE.Vector3(0, 1.2, off + L / 2 + 1.6), () => s.setShellResizing('length+'))
         add(new THREE.Vector3(0, 1.2, off - L / 2 - 1.6), () => s.setShellResizing('length-'))
