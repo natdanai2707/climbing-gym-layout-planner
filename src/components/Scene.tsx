@@ -224,6 +224,86 @@ function Ghost() {
   )
 }
 
+/**
+ * Screen-space priority picking for the resize arrows. Taps within a radius of
+ * an arrow ALWAYS grab that arrow — before the 3D raycast can hit whatever
+ * object happens to be behind it — so adjusting size next to other items never
+ * accidentally selects them. Runs as a capture-phase listener so it beats the
+ * r3f event system on the same canvas element.
+ */
+function ArrowPriorityPicker() {
+  const gl = useThree((s) => s.gl)
+  const camera = useThree((s) => s.camera)
+  const controls = useThree((s) => s.controls) as { enabled?: boolean } | null
+  const selectedId = useStore((s) => s.selectedId)
+  const shellMode = useStore((s) => s.shell.mode)
+
+  useEffect(() => {
+    if (!selectedId && shellMode === 0) return
+    const el = gl.domElement
+
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0) return
+      const s = useStore.getState()
+      if (s.placingDef) return
+      const rect = el.getBoundingClientRect()
+      const px = e.clientX - rect.left
+      const py = e.clientY - rect.top
+      const thresh = e.pointerType === 'touch' ? 46 : 30
+      const toScreen = (v: THREE.Vector3): [number, number] => {
+        const p = v.clone().project(camera)
+        return [((p.x + 1) / 2) * rect.width, ((1 - p.y) / 2) * rect.height]
+      }
+      const cands: Array<{ d: number; act: () => void }> = []
+      const add = (v: THREE.Vector3, act: () => void) => {
+        const [sx, sy] = toScreen(v)
+        cands.push({ d: Math.hypot(sx - px, sy - py), act })
+      }
+
+      const o = s.objects.find((v) => v.id === s.selectedId)
+      if (o) {
+        const elev = elevationFor(o, s.objects)
+        const th = (o.rot * Math.PI) / 4
+        const loc = (lx: number, ly: number, lz: number) =>
+          new THREE.Vector3(
+            o.x + lx * Math.cos(th) + lz * Math.sin(th),
+            elev + ly,
+            o.z - lx * Math.sin(th) + lz * Math.cos(th),
+          )
+        const yMid = Math.min(Math.max(o.h * 0.5, 0.25), 1.2)
+        const start = (axis: ResizeAxis, sign: 1 | -1) => () =>
+          s.setResizing({ id: o.id, axis, sign, start: { w: o.w, d: o.d, x: o.x, z: o.z } })
+        add(loc(o.w / 2 + 0.95, yMid, 0), start('x', 1))
+        add(loc(-o.w / 2 - 0.95, yMid, 0), start('x', -1))
+        add(loc(0, yMid, o.d / 2 + 0.95), start('z', 1))
+        add(loc(0, yMid, -o.d / 2 - 0.95), start('z', -1))
+        add(loc(0, o.h + 0.95, 0), start('y', 1))
+      }
+      if (s.shell.mode > 0) {
+        const L = s.shell.length ?? s.building.length
+        const off = s.shell.offset
+        const ridge = s.shell.eave + (s.building.width / 2) * ROOF_PITCH
+        add(new THREE.Vector3(0, 1.2, off + L / 2 + 1.6), () => s.setShellResizing('length+'))
+        add(new THREE.Vector3(0, 1.2, off - L / 2 - 1.6), () => s.setShellResizing('length-'))
+        add(new THREE.Vector3(0, ridge + 1.4, off), () => s.setShellResizing('height'))
+      }
+      if (cands.length === 0) return
+      cands.sort((a, b) => a.d - b.d)
+      if (cands[0].d <= thresh) {
+        e.preventDefault()
+        e.stopImmediatePropagation() // keep r3f from selecting whatever is behind the arrow
+        if (controls) controls.enabled = false
+        cands[0].act()
+      }
+    }
+
+    el.addEventListener('pointerdown', onDown, { capture: true })
+    return () => el.removeEventListener('pointerdown', onDown, { capture: true })
+  }, [selectedId, shellMode, gl, camera, controls])
+
+  return null
+}
+
 // Five arrows to drag-resize the selected object: one per SIDE for width and
 // depth (the dragged side moves, the opposite side stays fixed) plus one for
 // height. Red = width sides, blue = depth sides, green = height.
@@ -308,6 +388,7 @@ export function Scene() {
         <CameraRig />
       </group>
       <DragController />
+      <ArrowPriorityPicker />
       <SceneContent />
     </Canvas>
   )
