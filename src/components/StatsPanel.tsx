@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useStore } from '../store'
 import { CATEGORY_LABELS } from '../catalog'
+import { groundCoverage } from '../placement'
 import type { Category } from '../types'
 
 const fmt = (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 1 })
@@ -14,7 +15,6 @@ export function StatsPanel() {
     const outerArea = (building.width + building.apron * 2) * (building.length + building.apron * 2)
     const apronArea = outerArea - buildingArea
 
-    let usedArea = 0
     let mezzanineArea = 0
     const byCategory = new Map<Category, { area: number; count: number }>()
     let parkingCount = 0
@@ -28,12 +28,15 @@ export function StatsPanel() {
       }
       // mezzanines add extra floor above rather than consuming ground area
       if (o.category === 'mezzanine') mezzanineArea += area
-      else if (o.rule === 'floor') usedArea += area
       const e = byCategory.get(o.category) ?? { area: 0, count: 0 }
       e.area += area
       e.count++
       byCategory.set(o.category, e)
     }
+
+    // actual ground covered (union of footprints — overlaps count once,
+    // items sitting on a mezzanine don't consume ground floor)
+    const usedArea = groundCoverage(objects, building)
 
     return {
       buildingArea,
@@ -60,7 +63,7 @@ export function StatsPanel() {
         <b>{fmt(stats.apronArea)} m²</b>
       </div>
       <div className="stat-row">
-        <span>Used floor area</span>
+        <span>Ground covered (no double count)</span>
         <b>
           {fmt(stats.usedArea)} m² ({stats.usedPct.toFixed(1)}%)
         </b>
@@ -77,7 +80,7 @@ export function StatsPanel() {
       )}
       {stats.byCategory.size > 0 && (
         <>
-          <h3>By category</h3>
+          <h3>By category (footprint sums)</h3>
           {[...stats.byCategory.entries()].map(([cat, e]) => (
             <div className="stat-row small" key={cat}>
               <span>
