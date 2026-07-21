@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { Edges } from '@react-three/drei'
+import { useFrame } from '@react-three/fiber'
 import type { Placed } from '../types'
 
 /**
@@ -49,9 +50,96 @@ function Box({
   )
 }
 
-/* ------------------------------ climbing walls ------------------------------ */
+/* ------------------------------ people ------------------------------ */
 
 const HOLD_COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#a855f7', '#eab308', '#ec4899', '#14b8a6']
+const SKIN_COLORS = ['#f2c9a0', '#e0ac7e', '#b98058', '#8d5f3d']
+
+// Simple capsule person, ~1.3 units tall at scale 1. Standing or seated pose.
+export function Figure({
+  pos = [0, 0, 0] as [number, number, number],
+  ry = 0,
+  seated = false,
+  shirt = '#3b82f6',
+  idx = 0,
+  scale = 1,
+}: {
+  pos?: [number, number, number]
+  ry?: number
+  seated?: boolean
+  shirt?: string
+  idx?: number
+  scale?: number
+}) {
+  const skin = SKIN_COLORS[idx % SKIN_COLORS.length]
+  return (
+    <group position={pos} rotation-y={ry} scale={scale}>
+      {seated ? (
+        <>
+          {/* thighs forward, torso upright, head */}
+          <Box args={[0.26, 0.12, 0.4]} pos={[0, 0.5, 0.14]} color="#374151" />
+          <mesh position={[0, 0.78, 0]} castShadow>
+            <capsuleGeometry args={[0.15, 0.4, 3, 8]} />
+            <meshStandardMaterial color={shirt} roughness={0.8} />
+          </mesh>
+          <mesh position={[0, 1.16, 0]} castShadow>
+            <sphereGeometry args={[0.12, 10, 8]} />
+            <meshStandardMaterial color={skin} roughness={0.7} />
+          </mesh>
+        </>
+      ) : (
+        <>
+          <mesh position={[0, 0.22, 0]}>
+            <capsuleGeometry args={[0.11, 0.3, 3, 8]} />
+            <meshStandardMaterial color="#374151" roughness={0.8} />
+          </mesh>
+          <mesh position={[0, 0.66, 0]} castShadow>
+            <capsuleGeometry args={[0.16, 0.5, 3, 8]} />
+            <meshStandardMaterial color={shirt} roughness={0.8} />
+          </mesh>
+          <mesh position={[0, 1.16, 0]} castShadow>
+            <sphereGeometry args={[0.13, 10, 8]} />
+            <meshStandardMaterial color={skin} roughness={0.7} />
+          </mesh>
+        </>
+      )}
+    </group>
+  )
+}
+
+// Animated climber that moves up and down a wall face (local coordinates of the
+// wall's group; the parent applies the object rotation).
+function Climber({
+  lx,
+  face,
+  wallH,
+  lean = 0,
+  idx,
+}: {
+  lx: number
+  face: (y: number) => number // local z of the wall surface at a given height
+  wallH: number
+  lean?: number
+  idx: number
+}) {
+  const ref = useRef<THREE.Group>(null)
+  useFrame(({ clock }) => {
+    const g = ref.current
+    if (!g) return
+    const t = clock.elapsedTime * 0.4 + idx * 2.3
+    const cyc = 0.5 - 0.5 * Math.cos(t)
+    const y = 0.35 + Math.max(0.4, wallH - 1.6) * cyc
+    const sway = Math.sin(clock.elapsedTime * 1.6 + idx) * 0.18
+    g.position.set(lx + sway, y, face(y))
+  })
+  return (
+    <group ref={ref} rotation-x={lean}>
+      <Figure ry={Math.PI} shirt={HOLD_COLORS[idx % HOLD_COLORS.length]} idx={idx} />
+    </group>
+  )
+}
+
+/* ------------------------------ climbing walls ------------------------------ */
 
 // A cloud of climbing holds scattered over a w × len plane (local xy), sticking out in +z
 function Holds({ w, len, count }: { w: number; len: number; count: number }) {
@@ -177,6 +265,7 @@ function ClimbingWall({ o, tint }: { o: Placed; tint: string | null }) {
 
   const nSec = Math.round(clampN(Math.floor(o.w / 3.5), 1, 4))
   const secW = o.w / nSec
+  const nClimbers = Math.round(clampN(o.w / 6, 1, 3))
 
   return (
     <group>
@@ -190,6 +279,16 @@ function ClimbingWall({ o, tint }: { o: Placed; tint: string | null }) {
             color={tint ?? '#e6e1d6'}
           />
         </group>
+      ))}
+      {/* resident climbers working the wall */}
+      {Array.from({ length: nClimbers }, (_, i) => (
+        <Climber
+          key={`c${i}`}
+          idx={i}
+          lx={-o.w / 2 + ((i + 0.7) / (nClimbers + 0.4)) * o.w}
+          wallH={h}
+          face={(y) => backZ + 0.5 + maxOff * (y / h) * 0.8}
+        />
       ))}
     </group>
   )
@@ -238,6 +337,11 @@ function IslandBoulder({ o, tint }: { o: Placed; tint: string | null }) {
       <group rotation-y={-Math.PI / 2}>{face(o.d, o.w / 2)}</group>
       {/* top cap */}
       <Box args={[Math.max(0.4, o.w - flare), 0.14, Math.max(0.4, o.d - flare)]} pos={[0, o.h + 0.07, 0]} color={tint ?? '#e6e1d6'} />
+      {/* climbers on opposite faces */}
+      <Climber idx={0} lx={-o.w / 6} wallH={o.h} face={(y) => o.d / 2 - flare * (1 - y / o.h) + 0.28} />
+      <group rotation-y={Math.PI}>
+        <Climber idx={1} lx={o.w / 5} wallH={o.h} face={(y) => o.d / 2 - flare * (1 - y / o.h) + 0.28} />
+      </group>
     </group>
   )
 }
@@ -429,6 +533,11 @@ function CoworkZone({ o, tint }: { o: Placed; tint: string | null }) {
             <TableMesh />
             <ChairMesh pos={[0, 0, 0.75]} facing={Math.PI} />
             <ChairMesh pos={[0, 0, -0.75]} />
+            {/* people working at the desks */}
+            <Figure seated pos={[0, 0, 0.72]} ry={Math.PI} shirt={HOLD_COLORS[(i * 3 + j) % HOLD_COLORS.length]} idx={i + j} />
+            {(i + j) % 2 === 0 && (
+              <Figure seated pos={[0, 0, -0.72]} shirt={HOLD_COLORS[(i * 3 + j + 4) % HOLD_COLORS.length]} idx={i + j + 1} />
+            )}
           </group>
         )),
       )}
@@ -466,6 +575,8 @@ function TrainingZone({ o, tint }: { o: Placed; tint: string | null }) {
           <Box key={i} args={[0.28, 0.14, 0.14]} pos={[x, 0.58, 0]} color={HOLD_COLORS[i % HOLD_COLORS.length]} />
         ))}
       </group>
+      {/* athlete by the rig */}
+      <Figure pos={[Math.min(o.w / 5, 1.5), 0.08, -o.d / 2 + 1.6]} ry={Math.PI} shirt="#22c55e" idx={2} />
     </group>
   )
 }
@@ -499,6 +610,13 @@ function HyroxZone({ o, tint }: { o: Placed; tint: string | null }) {
           <meshStandardMaterial color={HOLD_COLORS[(i + 2) % HOLD_COLORS.length]} {...MAT} />
         </mesh>
       ))}
+      {/* athletes: one pushing the sled, one by the rower */}
+      <group position={[-Math.min(o.w * 0.28, 4.5) + 0.9, 0.1, -o.d / 4]} rotation-y={-Math.PI / 2}>
+        <group rotation-x={0.35}>
+          <Figure shirt="#f97316" idx={1} />
+        </group>
+      </group>
+      <Figure pos={[Math.min(o.w / 4, 4) + 1.2, 0.08, o.d / 4]} ry={-Math.PI / 2} shirt="#3b82f6" idx={3} />
     </group>
   )
 }
@@ -629,6 +747,8 @@ function IceBath({ o, tint }: { o: Placed; tint: string | null }) {
       </mesh>
       {/* step */}
       <Box args={[0.6, o.h * 0.45, 0.35]} pos={[0, o.h * 0.22, o.d / 2 + 0.18]} color="#cbd5e1" />
+      {/* someone soaking, chest-deep */}
+      <Figure seated pos={[0, o.h - 0.75, 0]} shirt="#0ea5e9" idx={2} />
     </group>
   )
 }
@@ -716,6 +836,22 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
       return <Stairs o={o} tint={tint} />
     case 'column':
       return <Column o={o} tint={tint} />
+    case 'partition':
+      // interior partition wall: a plain slab, resizable/rotatable like the rest
+      return (
+        <mesh position={[0, o.h / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[o.w, o.h, Math.max(0.08, o.d)]} />
+          <meshStandardMaterial color={tint ?? o.color} {...MAT} />
+          <Edges color="#c9c2b4" />
+        </mesh>
+      )
+    case 'person':
+      // placeable person; height H scales the figure, color = shirt
+      return (
+        <group scale={o.h / 1.3}>
+          <Figure shirt={tint ?? o.color} idx={o.id.length} />
+        </group>
+      )
     case 'zone':
       if (o.defId === 'cowork') return <CoworkZone o={o} tint={tint} />
       if (o.defId === 'training') return <TrainingZone o={o} tint={tint} />

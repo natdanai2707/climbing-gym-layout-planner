@@ -17,6 +17,8 @@ export const CATALOG: ObjectDef[] = [
   { id: 'mezzanine', label: 'Mezzanine Floor', category: 'mezzanine', w: 10.0, d: 6.0, h: 4.5, color: '#dcbd90', rule: 'floor' },
   { id: 'stairs', label: 'Staircase', category: 'stairs', w: 2.0, d: 5.0, h: 4.5, color: '#b0a695', rule: 'floor' },
   { id: 'column', label: 'Column', category: 'column', w: 0.4, d: 0.4, h: 4.5, color: '#9aa2ad', rule: 'floor' },
+  { id: 'partition', label: 'Wall Partition', category: 'partition', w: 3.0, d: 0.15, h: 2.6, color: '#eae6dd', rule: 'floor' },
+  { id: 'person', label: 'Person', category: 'person', w: 0.5, d: 0.4, h: 1.7, color: '#3b82f6', rule: 'floor' },
   { id: 'training', label: 'Training Area', category: 'zone', w: 8.0, d: 6.0, h: 0.1, color: '#fca5a5', rule: 'floor' },
   { id: 'hyrox', label: 'Hyrox Zone', category: 'zone', w: 20.0, d: 15.0, h: 0.1, color: '#fdba74', rule: 'floor' },
   { id: 'icebath', label: 'Ice Bath', category: 'fixture', w: 3.0, d: 2.0, h: 1.0, color: '#38bdf8', rule: 'floor' },
@@ -39,7 +41,9 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   mezzanine: 'Mezzanine',
   stairs: 'Stairs',
   column: 'Columns',
+  partition: 'Partitions',
   furniture: 'Furniture',
+  person: 'People',
 }
 
 // Order in which categories appear in the palette
@@ -51,11 +55,13 @@ export const CATEGORY_ORDER: Category[] = [
   'mezzanine',
   'stairs',
   'column',
+  'partition',
   'zone',
   'room',
   'reception',
   'fixture',
   'furniture',
+  'person',
   'door',
   'parking',
 ]

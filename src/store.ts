@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
-import type { Building, LayoutFile, ObjectDef, Placed } from './types'
+import type { Building, LayoutFile, ObjectDef, Placed, ShellConfig } from './types'
 import { clampInside, computeDrop, elevationFor, fp, resolveAfterResize } from './placement'
 
 const STORAGE_KEY = 'gym-layout-planner-v1'
@@ -59,9 +59,13 @@ export interface GymState {
   moveArmed: boolean
   setMoveArmed: (v: boolean) => void
 
-  // people animation on/off
-  animate: boolean
-  toggleAnimate: () => void
+  // warehouse shell: 0 off, 1 transparent, 2 solid with solar roof
+  shell: ShellConfig
+  cycleShell: () => void
+  setShellLength: (v: number) => void
+  setShellEave: (v: number) => void
+  shellResizing: 'length' | 'height' | null
+  setShellResizing: (v: 'length' | 'height' | null) => void
 
   panelLeft: boolean
   panelRight: boolean
@@ -101,17 +105,21 @@ function normalizeFile(file: LayoutFile): { building: Building; objects: Placed[
   return { building: { ...DEFAULT_BUILDING, ...file.building }, objects }
 }
 
-function loadSaved(): { building: Building; objects: Placed[] } {
+const DEFAULT_SHELL: ShellConfig = { mode: 0, length: null, eave: 6 }
+
+function loadSaved(): { building: Building; objects: Placed[]; shell: ShellConfig } {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const data = JSON.parse(raw) as LayoutFile
-      if (data && data.building && Array.isArray(data.objects)) return normalizeFile(data)
+      if (data && data.building && Array.isArray(data.objects)) {
+        return { ...normalizeFile(data), shell: { ...DEFAULT_SHELL, ...data.shell } }
+      }
     }
   } catch {
     // ignore corrupt saves
   }
-  return { building: DEFAULT_BUILDING, objects: [] }
+  return { building: DEFAULT_BUILDING, objects: [], shell: DEFAULT_SHELL }
 }
 
 export const useStore = create<GymState>()(
@@ -133,8 +141,11 @@ export const useStore = create<GymState>()(
     viewKey: 0,
     moveArmed: false,
     setMoveArmed: (v) => set({ moveArmed: v }),
-    animate: false,
-    toggleAnimate: () => set({ animate: !get().animate }),
+    cycleShell: () => set({ shell: { ...get().shell, mode: (get().shell.mode + 1) % 3 } }),
+    setShellLength: (v) => set({ shell: { ...get().shell, length: Math.max(4, Math.min(300, v)) } }),
+    setShellEave: (v) => set({ shell: { ...get().shell, eave: Math.max(3, Math.min(20, v)) } }),
+    shellResizing: null,
+    setShellResizing: (v) => set({ shellResizing: v }),
     panelLeft: false,
     panelRight: false,
     setPanelLeft: (v) => set({ panelLeft: v }),
@@ -344,6 +355,7 @@ export const useStore = create<GymState>()(
       if (!file || !file.building || !Array.isArray(file.objects)) throw new Error('Invalid layout file')
       set({
         ...normalizeFile(file),
+        shell: { ...DEFAULT_SHELL, ...file.shell },
         selectedId: null,
         placingDef: null,
         ghost: null,
@@ -360,12 +372,12 @@ export const useStore = create<GymState>()(
 // ---- auto-save to localStorage (debounced) ----
 let saveTimer: ReturnType<typeof setTimeout> | undefined
 useStore.subscribe(
-  (s) => [s.building, s.objects] as const,
-  ([building, objects]) => {
+  (s) => [s.building, s.objects, s.shell] as const,
+  ([building, objects, shell]) => {
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
       try {
-        const file: LayoutFile = { version: FILE_VERSION, building, objects }
+        const file: LayoutFile = { version: FILE_VERSION, building, objects, shell }
         localStorage.setItem(STORAGE_KEY, JSON.stringify(file))
       } catch {
         // storage full / unavailable — ignore
@@ -375,8 +387,8 @@ useStore.subscribe(
 )
 
 export function exportLayout(): LayoutFile {
-  const { building, objects } = useStore.getState()
-  return { version: FILE_VERSION, building, objects }
+  const { building, objects, shell } = useStore.getState()
+  return { version: FILE_VERSION, building, objects, shell }
 }
 
 // handy for debugging / automated UI tests

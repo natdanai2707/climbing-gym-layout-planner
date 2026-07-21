@@ -9,7 +9,8 @@ import type { Placed } from '../types'
 import { BuildingFloor } from './BuildingFloor'
 import { GridOverlay } from './GridOverlay'
 import { PlacedObject } from './PlacedObject'
-import { People } from './People'
+import { WarehouseShell, ROOF_PITCH } from './WarehouseShell'
+import { ArrowHandle } from './gizmo'
 import { elevationFor, fp, getWarningIds } from '../placement'
 
 // Exposed so the toolbar can grab a PNG of the canvas
@@ -55,9 +56,10 @@ function DragController() {
   const placing = useStore((s) => s.placingDef !== null)
   const dragging = useStore((s) => s.draggingId !== null)
   const resizing = useStore((s) => s.resizing !== null)
+  const shellResizing = useStore((s) => s.shellResizing !== null)
 
   useEffect(() => {
-    if (!placing && !dragging && !resizing) return
+    if (!placing && !dragging && !resizing && !shellResizing) return
     const el = gl.domElement
     if (controls) controls.enabled = false
     const raycaster = new THREE.Raycaster()
@@ -121,8 +123,34 @@ function DragController() {
       s.resizeObject(o.id, r.axis === 'x' ? { w: newDim, x: nx, z: nz } : { d: newDim, x: nx, z: nz })
     }
 
+    // shell arrows: length (ground plane, symmetric about the center) and
+    // eave height (vertical camera-facing plane through the ridge)
+    const handleShellResize = (e: PointerEvent) => {
+      const s = useStore.getState()
+      if (s.shellResizing === 'length') {
+        const p = projectAt(e, 0)
+        if (!p) return
+        s.setShellLength(Math.round((Math.abs(p.z) * 2) / 0.5) * 0.5)
+      } else if (s.shellResizing === 'height') {
+        setRay(e)
+        const dir = new THREE.Vector3()
+        camera.getWorldDirection(dir)
+        dir.y = 0
+        if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1)
+        dir.normalize()
+        const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(dir, new THREE.Vector3(0, 0, 0))
+        if (!raycaster.ray.intersectPlane(plane, pt)) return
+        const rise = (s.building.width / 2) * ROOF_PITCH
+        s.setShellEave(Math.round((pt.y - rise) / 0.25) * 0.25)
+      }
+    }
+
     const onMove = (e: PointerEvent) => {
       const s = useStore.getState()
+      if (s.shellResizing) {
+        handleShellResize(e)
+        return
+      }
       if (s.resizing) {
         handleResize(e)
         return
@@ -137,7 +165,8 @@ function DragController() {
     }
     const onUp = (e: PointerEvent) => {
       const s = useStore.getState()
-      if (s.resizing) s.setResizing(null)
+      if (s.shellResizing) s.setShellResizing(null)
+      else if (s.resizing) s.setResizing(null)
       else if (s.draggingId) s.endMove()
       else if (s.placingDef && overCanvas(e) && s.ghost) setTimeout(() => useStore.getState().commitPlacing(), 0)
     }
@@ -163,7 +192,7 @@ function DragController() {
       el.removeEventListener('pointerdown', onDown)
       if (controls) controls.enabled = true
     }
-  }, [placing, dragging, resizing, gl, camera, controls])
+  }, [placing, dragging, resizing, shellResizing, gl, camera, controls])
 
   return null
 }
@@ -185,37 +214,6 @@ function Ghost() {
       <mesh position={[0, 0.02, 0]} rotation-x={-Math.PI / 2}>
         <planeGeometry args={[fw, fd]} />
         <meshBasicMaterial color={color} transparent opacity={0.4} depthWrite={false} />
-      </mesh>
-    </group>
-  )
-}
-
-// One draggable dimension arrow (shaft + head + a fat invisible touch target)
-function ArrowHandle({
-  color,
-  pos,
-  rot,
-  onDown,
-}: {
-  color: string
-  pos: [number, number, number]
-  rot: [number, number, number]
-  onDown: (e: ThreeEvent<PointerEvent>) => void
-}) {
-  return (
-    <group position={pos} rotation={rot} onPointerDown={onDown}>
-      <mesh position={[0, 0.45, 0]}>
-        <cylinderGeometry args={[0.055, 0.055, 0.9, 8]} />
-        <meshBasicMaterial color={color} depthTest={false} transparent opacity={0.95} />
-      </mesh>
-      <mesh position={[0, 1.05, 0]}>
-        <coneGeometry args={[0.18, 0.45, 10]} />
-        <meshBasicMaterial color={color} depthTest={false} transparent opacity={0.95} />
-      </mesh>
-      {/* generous invisible hit area for touch */}
-      <mesh position={[0, 0.7, 0]}>
-        <sphereGeometry args={[0.55, 8, 6]} />
-        <meshBasicMaterial visible={false} />
       </mesh>
     </group>
   )
@@ -279,7 +277,7 @@ function SceneContent() {
       ))}
       {selected && <ResizeGizmo o={selected} elev={elevationFor(selected, objects)} />}
       <Ghost />
-      <People />
+      <WarehouseShell />
 
       {/* invisible catcher: click empty ground to deselect */}
       <mesh

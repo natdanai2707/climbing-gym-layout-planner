@@ -13,6 +13,8 @@ export type Category =
   | 'furniture'
   | 'wall_island'
   | 'column'
+  | 'partition'
+  | 'person'
 
 export type Rule = 'floor' | 'edge' | 'outdoor'
 
@@ -50,8 +52,15 @@ export interface Building {
   apron: number // outdoor margin around building (m)
 }
 
+export interface ShellConfig {
+  mode: number // 0 = off, 1 = transparent, 2 = solid with solar roof
+  length: number | null // null = follow building length
+  eave: number // side-wall height (m); ridge = eave + gable rise
+}
+
 export interface LayoutFile {
   version: number
   building: Building
   objects: Placed[]
+  shell?: ShellConfig
 }
