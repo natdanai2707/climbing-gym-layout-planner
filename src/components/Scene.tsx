@@ -261,7 +261,8 @@ function ArrowPriorityPicker() {
         cands.push({ d: Math.hypot(sx - px, sy - py), act })
       }
 
-      const o = s.objects.find((v) => v.id === s.selectedId)
+      // while Move is armed the arrows are hidden, so they must not steal taps
+      const o = s.moveArmed ? undefined : s.objects.find((v) => v.id === s.selectedId)
       if (o) {
         const elev = elevationFor(o, s.objects)
         const th = (o.rot * Math.PI) / 4
@@ -335,8 +336,11 @@ function SceneContent() {
   const building = useStore((s) => s.building)
   const select = useStore((s) => s.select)
   const selectedId = useStore((s) => s.selectedId)
+  const moveArmed = useStore((s) => s.moveArmed)
   const warnings = useMemo(() => getWarningIds(objects, building), [objects, building])
-  const selected = objects.find((o) => o.id === selectedId)
+  // hide the resize arrows while Move mode is armed — moving and resizing are
+  // separate gestures, and the arrows would only get in the way of the drag
+  const selected = moveArmed ? undefined : objects.find((o) => o.id === selectedId)
 
   return (
     <>
