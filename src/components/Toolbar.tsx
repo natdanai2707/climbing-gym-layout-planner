@@ -101,9 +101,9 @@ export function Toolbar() {
         <button
           className={shellMode > 0 ? 'on' : ''}
           onClick={cycleShell}
-          title="Cycle the warehouse shell: off → transparent → solid with solar roof"
+          title="Cycle the warehouse shell: off → transparent → complete building with doors and windows"
         >
-          {shellMode === 0 ? '🏭 Shell: Off' : shellMode === 1 ? '🏭 Shell: Clear' : '🏭 Shell: Solar'}
+          {shellMode === 0 ? '🏭 Shell: Off' : shellMode === 1 ? '🏭 Shell: Clear' : '🏭 Shell: Solid'}
         </button>
       </div>
       <div className="tb-group">
