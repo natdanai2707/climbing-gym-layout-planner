@@ -134,47 +134,24 @@ export function getWarningIds(objects: Placed[], b: Building): Set<string> {
 }
 
 /**
- * True ground coverage in m²: the UNION of all ground-floor footprints inside
- * the building, computed by rasterizing onto a 0.25 m grid. Overlapping items
- * (mats under walls, zones under equipment) count once, and items placed on a
- * mezzanine don't consume ground area. Mezzanines themselves are excluded —
- * they add floor above rather than using it.
+ * Ground use measured the way a warehouse build-out is planned: the building is
+ * always used across its FULL width, so what matters is how much of its LENGTH
+ * the layout occupies. Returns the occupied length (z-extent of all indoor
+ * items, mezzanines included) and area = building width × that length.
  */
-export function groundCoverage(objects: Placed[], b: Building): number {
-  const cell = 0.25
-  const hw = b.width / 2
+export function usedStrip(objects: Placed[], b: Building): { length: number; area: number } {
   const hl = b.length / 2
-  const nx = Math.ceil(b.width / cell)
-  const nz = Math.ceil(b.length / cell)
-  const covered = new Set<number>()
+  let minZ = Infinity
+  let maxZ = -Infinity
   for (const o of objects) {
-    if (o.rule !== 'floor' || o.category === 'mezzanine' || o.level === 'upper') continue
-    const th = (o.rot * Math.PI) / 4
-    const c = Math.cos(th)
-    const s = Math.sin(th)
-    const { fw, fd } = fp(o)
-    const minX = Math.max(-hw, o.x - fw / 2)
-    const maxX = Math.min(hw, o.x + fw / 2)
-    const minZ = Math.max(-hl, o.z - fd / 2)
-    const maxZ = Math.min(hl, o.z + fd / 2)
-    const ix0 = Math.max(0, Math.floor((minX + hw) / cell))
-    const ix1 = Math.min(nx - 1, Math.floor((maxX + hw - 1e-9) / cell))
-    const iz0 = Math.max(0, Math.floor((minZ + hl) / cell))
-    const iz1 = Math.min(nz - 1, Math.floor((maxZ + hl - 1e-9) / cell))
-    for (let ix = ix0; ix <= ix1; ix++) {
-      const px = -hw + (ix + 0.5) * cell
-      for (let iz = iz0; iz <= iz1; iz++) {
-        const pz = -hl + (iz + 0.5) * cell
-        // sample point in the object's local (rotated) frame
-        const dx = px - o.x
-        const dz = pz - o.z
-        const lx = dx * c - dz * s
-        const lz = dx * s + dz * c
-        if (Math.abs(lx) <= o.w / 2 + 1e-9 && Math.abs(lz) <= o.d / 2 + 1e-9) covered.add(ix * nz + iz)
-      }
-    }
+    if (o.rule !== 'floor') continue
+    const { fd } = fp(o)
+    minZ = Math.min(minZ, Math.max(-hl, o.z - fd / 2))
+    maxZ = Math.max(maxZ, Math.min(hl, o.z + fd / 2))
   }
-  return covered.size * cell * cell
+  if (minZ >= maxZ) return { length: 0, area: 0 }
+  const length = maxZ - minZ
+  return { length, area: b.width * length }
 }
 
 // Height an object sits at: objects marked 'upper' rest on the first mezzanine

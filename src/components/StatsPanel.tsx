@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useStore } from '../store'
 import { CATEGORY_LABELS } from '../catalog'
-import { groundCoverage } from '../placement'
+import { usedStrip } from '../placement'
 import type { Category } from '../types'
 
 const fmt = (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 1 })
@@ -34,14 +34,15 @@ export function StatsPanel() {
       byCategory.set(o.category, e)
     }
 
-    // actual ground covered (union of footprints — overlaps count once,
-    // items sitting on a mezzanine don't consume ground floor)
-    const usedArea = groundCoverage(objects, building)
+    // ground use = full building width × the length the layout occupies
+    const strip = usedStrip(objects, building)
+    const usedArea = strip.area
 
     return {
       buildingArea,
       apronArea,
       usedArea,
+      usedLength: strip.length,
       mezzanineArea,
       usedPct: buildingArea > 0 ? (usedArea / buildingArea) * 100 : 0,
       freeArea: Math.max(0, buildingArea - usedArea),
@@ -63,7 +64,13 @@ export function StatsPanel() {
         <b>{fmt(stats.apronArea)} m²</b>
       </div>
       <div className="stat-row">
-        <span>Ground covered (no double count)</span>
+        <span>Used length</span>
+        <b>
+          {fmt(stats.usedLength)} m of {fmt(building.length)} m
+        </b>
+      </div>
+      <div className="stat-row">
+        <span>Ground covered ({fmt(building.width)} m × {fmt(stats.usedLength)} m)</span>
         <b>
           {fmt(stats.usedArea)} m² ({stats.usedPct.toFixed(1)}%)
         </b>
