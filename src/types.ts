@@ -53,8 +53,9 @@ export interface Building {
 }
 
 export interface ShellConfig {
-  mode: number // 0 = off, 1 = transparent, 2 = solid with solar roof
+  mode: number // 0 = off, 1 = transparent, 2 = complete solid shell
   length: number | null // null = follow building length
+  offset: number // z position of the shell center (lets one end be adjusted alone)
   eave: number // side-wall height (m); ridge = eave + gable rise
 }
 

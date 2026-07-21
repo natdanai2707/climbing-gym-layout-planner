@@ -72,21 +72,23 @@ export function WarehouseShell() {
   const slope = Math.atan2(rise, W / 2)
   const roofLen = Math.hypot(W / 2, rise) + 0.3
 
-  const startResize = (which: 'length' | 'height') => (e: ThreeEvent<PointerEvent>) => {
+  const startResize = (which: 'length+' | 'length-' | 'height') => (e: ThreeEvent<PointerEvent>) => {
     if (e.button !== 0) return
     e.stopPropagation()
     if (controls) controls.enabled = false
     setShellResizing(which)
   }
 
-  // Door panels drawn on the OUTSIDE of the shell, at each placed door's spot.
+  const off = shell.offset
+  // Door panels drawn on the OUTSIDE of the shell, at each placed door's spot
+  // (local coords — the whole shell group is shifted by the z offset).
   // rot encodes the wall the door snapped to: 0 = north (-z), 4 = south (+z),
   // 2 = west (-x), 6 = east (+x).
   const doorPanels = (): ReactNode[] =>
     doors.map((d) => {
       const frame = '#6b7280'
       if (d.rot === 0 || d.rot === 4) {
-        const z = d.rot === 0 ? -L / 2 - t - 0.05 : L / 2 + t + 0.05
+        const z = (d.rot === 0 ? -L / 2 - t - 0.05 : L / 2 + t + 0.05)
         return (
           <group key={d.id} position={[d.x, 0, z]}>
             <mesh position={[0, d.h / 2 + 0.08, 0]}>
@@ -102,7 +104,7 @@ export function WarehouseShell() {
       }
       const x = d.rot === 2 ? -W / 2 - t - 0.05 : W / 2 + t + 0.05
       return (
-        <group key={d.id} position={[x, 0, d.z]}>
+        <group key={d.id} position={[x, 0, d.z - off]}>
           <mesh position={[0, d.h / 2 + 0.08, 0]}>
             <boxGeometry args={[0.08, d.h + 0.16, d.w + 0.3]} />
             <meshStandardMaterial color={frame} />
@@ -117,8 +119,9 @@ export function WarehouseShell() {
 
   return (
     // key remounts the shell when the mode changes — otherwise r3f keeps the
-    // transparent-mode material props (opacity/depthWrite) on the solid shell
-    <group key={shell.mode}>
+    // transparent-mode material props (opacity/depthWrite) on the solid shell.
+    // The z offset lets one gable end be moved while the other stays put.
+    <group key={shell.mode} position={[0, 0, off]}>
       {/* long side walls */}
       <mesh position={[-W / 2 - t / 2, eave / 2, 0]}>
         <boxGeometry args={[t, eave, L]} />
@@ -193,9 +196,9 @@ export function WarehouseShell() {
         </group>
       )}
 
-      {/* adjustment arrows: shell length at BOTH gable ends + eave height at the ridge */}
-      <ArrowHandle color="#f97316" pos={[0, 1.2, L / 2 + 0.6]} rot={[Math.PI / 2, 0, 0]} onDown={startResize('length')} size={1.4} />
-      <ArrowHandle color="#f97316" pos={[0, 1.2, -L / 2 - 0.6]} rot={[-Math.PI / 2, 0, 0]} onDown={startResize('length')} size={1.4} />
+      {/* adjustment arrows: each gable end moves ONLY its own end; height at the ridge */}
+      <ArrowHandle color="#f97316" pos={[0, 1.2, L / 2 + 0.6]} rot={[Math.PI / 2, 0, 0]} onDown={startResize('length+')} size={1.4} />
+      <ArrowHandle color="#f97316" pos={[0, 1.2, -L / 2 - 0.6]} rot={[-Math.PI / 2, 0, 0]} onDown={startResize('length-')} size={1.4} />
       <ArrowHandle color="#f97316" pos={[0, ridge + 0.4, 0]} rot={[0, 0, 0]} onDown={startResize('height')} size={1.4} />
     </group>
   )

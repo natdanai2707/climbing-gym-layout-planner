@@ -59,13 +59,13 @@ export interface GymState {
   moveArmed: boolean
   setMoveArmed: (v: boolean) => void
 
-  // warehouse shell: 0 off, 1 transparent, 2 solid with solar roof
+  // warehouse shell: 0 off, 1 transparent, 2 complete solid shell
   shell: ShellConfig
   cycleShell: () => void
-  setShellLength: (v: number) => void
+  setShellDims: (patch: Partial<ShellConfig>) => void
   setShellEave: (v: number) => void
-  shellResizing: 'length' | 'height' | null
-  setShellResizing: (v: 'length' | 'height' | null) => void
+  shellResizing: 'length+' | 'length-' | 'height' | null
+  setShellResizing: (v: 'length+' | 'length-' | 'height' | null) => void
 
   panelLeft: boolean
   panelRight: boolean
@@ -105,7 +105,7 @@ function normalizeFile(file: LayoutFile): { building: Building; objects: Placed[
   return { building: { ...DEFAULT_BUILDING, ...file.building }, objects }
 }
 
-const DEFAULT_SHELL: ShellConfig = { mode: 0, length: null, eave: 6 }
+const DEFAULT_SHELL: ShellConfig = { mode: 0, length: null, offset: 0, eave: 6 }
 
 function loadSaved(): { building: Building; objects: Placed[]; shell: ShellConfig } {
   try {
@@ -142,7 +142,11 @@ export const useStore = create<GymState>()(
     moveArmed: false,
     setMoveArmed: (v) => set({ moveArmed: v }),
     cycleShell: () => set({ shell: { ...get().shell, mode: (get().shell.mode + 1) % 3 } }),
-    setShellLength: (v) => set({ shell: { ...get().shell, length: Math.max(4, Math.min(300, v)) } }),
+    setShellDims: (patch) => {
+      const next = { ...get().shell, ...patch }
+      if (next.length !== null) next.length = Math.max(4, Math.min(300, next.length))
+      set({ shell: next })
+    },
     setShellEave: (v) => set({ shell: { ...get().shell, eave: Math.max(3, Math.min(20, v)) } }),
     shellResizing: null,
     setShellResizing: (v) => set({ shellResizing: v }),

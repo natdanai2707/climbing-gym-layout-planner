@@ -123,14 +123,19 @@ function DragController() {
       s.resizeObject(o.id, r.axis === 'x' ? { w: newDim, x: nx, z: nz } : { d: newDim, x: nx, z: nz })
     }
 
-    // shell arrows: length (ground plane, symmetric about the center) and
-    // eave height (vertical camera-facing plane through the ridge)
+    // shell arrows: each length arrow drags ONLY its own gable end (the other
+    // end stays anchored); eave height uses a vertical camera-facing plane
     const handleShellResize = (e: PointerEvent) => {
       const s = useStore.getState()
-      if (s.shellResizing === 'length') {
+      if (s.shellResizing === 'length+' || s.shellResizing === 'length-') {
         const p = projectAt(e, 0)
         if (!p) return
-        s.setShellLength(Math.round((Math.abs(p.z) * 2) / 0.5) * 0.5)
+        const sign = s.shellResizing === 'length+' ? 1 : -1
+        const curL = s.shell.length ?? s.building.length
+        const fixedEnd = s.shell.offset - (sign * curL) / 2
+        const draggedEnd = Math.round(p.z / 0.5) * 0.5
+        const newL = Math.max(4, sign * (draggedEnd - fixedEnd))
+        s.setShellDims({ length: newL, offset: fixedEnd + (sign * newL) / 2 })
       } else if (s.shellResizing === 'height') {
         setRay(e)
         const dir = new THREE.Vector3()
