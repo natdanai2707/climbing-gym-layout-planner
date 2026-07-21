@@ -43,6 +43,17 @@ export default function App() {
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return
       const s = useStore.getState()
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault()
+        if (e.shiftKey) s.redo()
+        else s.undo()
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault()
+        s.redo()
+        return
+      }
       switch (e.key) {
         case 'r':
         case 'R':

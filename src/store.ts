@@ -3,6 +3,14 @@ import { subscribeWithSelector } from 'zustand/middleware'
 import type { Building, LayoutFile, ObjectDef, Placed, ShellConfig } from './types'
 import { clampInside, computeDrop, elevationFor, fp, resolveAfterResize } from './placement'
 
+interface Snapshot {
+  building: Building
+  objects: Placed[]
+  shell: ShellConfig
+}
+
+let lastSnapAt = 0
+
 const STORAGE_KEY = 'gym-layout-planner-v1'
 const FILE_VERSION = 2 // v2: rot is in 45° steps (v1 was 90° steps)
 
@@ -72,7 +80,15 @@ export interface GymState {
   setPanelLeft: (v: boolean) => void
   setPanelRight: (v: boolean) => void
 
+  // undo / redo history (snapshots of building + objects + shell)
+  past: Snapshot[]
+  future: Snapshot[]
+  snapshot: (coalesce?: boolean) => void
+  undo: () => void
+  redo: () => void
+
   setBuilding: (patch: Partial<Building>) => void
+  setBuildingUndoable: (patch: Partial<Building>) => void
   startPlacing: (def: ObjectDef) => void
   cancelPlacing: () => void
   updateGhost: (x: number, z: number) => void
@@ -151,20 +167,109 @@ export const useStore = create<GymState>()(
     cycleShell: () => set({ shell: { ...get().shell, mode: (get().shell.mode + 1) % 3 } }),
     setShellEave: (v) => set({ shell: { ...get().shell, eave: Math.max(3, Math.min(20, v)) } }),
     shellResizing: null,
-    setShellResizing: (v) => set({ shellResizing: v }),
+    setShellResizing: (v) => {
+      if (v !== null) get().snapshot() // one undo step per shell-arrow gesture
+      set({ shellResizing: v })
+    },
+
+    past: [],
+    future: [],
+    // Push the current state onto the undo stack. State updates are immutable,
+    // so storing references is safe and cheap. `coalesce` merges rapid changes
+    // (typing in the inspector) into a single undo step.
+    snapshot: (coalesce = false) => {
+      const now = Date.now()
+      if (coalesce && now - lastSnapAt < 800) return
+      lastSnapAt = now
+      const { building, objects, shell, past } = get()
+      set({ past: [...past.slice(-99), { building, objects, shell }], future: [] })
+    },
+    undo: () => {
+      const { past, future, building, objects, shell } = get()
+      if (past.length === 0) return
+      const prev = past[past.length - 1]
+      set({
+        past: past.slice(0, -1),
+        future: [...future.slice(-99), { building, objects, shell }],
+        building: prev.building,
+        objects: prev.objects,
+        shell: prev.shell,
+        selectedId: null,
+        pendingId: null,
+        resizing: null,
+        draggingId: null,
+        placingDef: null,
+        ghost: null,
+        shellResizing: null,
+      })
+    },
+    redo: () => {
+      const { past, future, building, objects, shell } = get()
+      if (future.length === 0) return
+      const next = future[future.length - 1]
+      set({
+        future: future.slice(0, -1),
+        past: [...past.slice(-99), { building, objects, shell }],
+        building: next.building,
+        objects: next.objects,
+        shell: next.shell,
+        selectedId: null,
+        pendingId: null,
+        resizing: null,
+        draggingId: null,
+        placingDef: null,
+        ghost: null,
+        shellResizing: null,
+      })
+    },
     panelLeft: false,
     panelRight: false,
     setPanelLeft: (v) => set({ panelLeft: v }),
     setPanelRight: (v) => set({ panelRight: v }),
 
+    // Resizing never squeezes the layout: floor items stay exactly where they
+    // are, and the building simply refuses to shrink past their outer edges.
     setBuilding: (patch) => {
       const building = { ...get().building, ...patch }
       building.width = Math.max(2, building.width)
       building.length = Math.max(4, Math.min(300, building.length))
       building.apron = Math.max(0, building.apron)
-      // Re-place every object so it stays legal in the new footprint
-      const objects = get().objects.map((o) => ({ ...o, ...resolveAfterResize(o, building) }))
+
+      const floors = get().objects.filter((o) => o.rule === 'floor')
+      if (floors.length > 0) {
+        let minX = Infinity
+        let maxX = -Infinity
+        let minZ = Infinity
+        let maxZ = -Infinity
+        for (const o of floors) {
+          const { fw, fd } = fp(o)
+          minX = Math.min(minX, o.x - fw / 2)
+          maxX = Math.max(maxX, o.x + fw / 2)
+          minZ = Math.min(minZ, o.z - fd / 2)
+          maxZ = Math.max(maxZ, o.z + fd / 2)
+        }
+        // width is centered on x = 0
+        const needW = 2 * Math.max(maxX, -minX, 0)
+        if (building.width < needW) building.width = needW
+        // length bounds must keep containing every item
+        let bMin = building.centerZ - building.length / 2
+        let bMax = building.centerZ + building.length / 2
+        bMin = Math.min(bMin, minZ)
+        bMax = Math.max(bMax, maxZ)
+        building.length = bMax - bMin
+        building.centerZ = (bMin + bMax) / 2
+      }
+
+      // doors follow their wall; outdoor items get pushed back into the apron
+      const objects = get().objects.map((o) =>
+        o.rule === 'floor' ? o : { ...o, ...resolveAfterResize(o, building) },
+      )
       set({ building, objects })
+    },
+
+    setBuildingUndoable: (patch) => {
+      get().snapshot(true)
+      get().setBuilding(patch)
     },
 
     // picking a new item implicitly confirms any pending one
@@ -184,6 +289,7 @@ export const useStore = create<GymState>()(
     commitPlacing: () => {
       const { placingDef, ghost } = get()
       if (!placingDef || !ghost || !ghost.valid) return
+      get().snapshot()
       const obj: Placed = {
         id: uid(),
         defId: placingDef.id,
@@ -219,7 +325,10 @@ export const useStore = create<GymState>()(
       })
     },
 
-    setResizing: (r) => set({ resizing: r }),
+    setResizing: (r) => {
+      if (r !== null) get().snapshot() // one undo step per resize gesture
+      set({ resizing: r })
+    },
 
     // Apply a resize WITHOUT re-snapping the center to the grid — the dragged
     // edge follows the pointer while the opposite edge stays exactly in place.
@@ -267,6 +376,7 @@ export const useStore = create<GymState>()(
     beginMove: (id, px, pz) => {
       const o = get().objects.find((v) => v.id === id)
       if (!o) return
+      get().snapshot() // one undo step per move gesture
       const { pendingId } = get()
       set({
         selectedId: id,
@@ -320,6 +430,7 @@ export const useStore = create<GymState>()(
         return
       }
       if (!selectedId) return
+      get().snapshot()
       set({
         objects: get().objects.map((o) => {
           if (o.id !== selectedId || o.rule === 'edge') return o
@@ -333,6 +444,7 @@ export const useStore = create<GymState>()(
     removeSelected: () => {
       const { selectedId, pendingId } = get()
       if (!selectedId) return
+      get().snapshot()
       set({
         objects: get().objects.filter((o) => o.id !== selectedId),
         selectedId: null,
@@ -341,6 +453,7 @@ export const useStore = create<GymState>()(
     },
 
     updateObject: (id, patch) => {
+      get().snapshot(true) // coalesce rapid inspector edits into one step
       const { building } = get()
       set({
         objects: get().objects.map((o) => {
@@ -355,10 +468,14 @@ export const useStore = create<GymState>()(
       })
     },
 
-    clearAll: () => set({ objects: [], selectedId: null, placingDef: null, ghost: null, pendingId: null }),
+    clearAll: () => {
+      get().snapshot()
+      set({ objects: [], selectedId: null, placingDef: null, ghost: null, pendingId: null })
+    },
 
     importLayout: (file) => {
       if (!file || !file.building || !Array.isArray(file.objects)) throw new Error('Invalid layout file')
+      get().snapshot()
       set({
         ...normalizeFile(file),
         shell: { ...DEFAULT_SHELL, ...file.shell },

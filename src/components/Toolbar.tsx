@@ -45,7 +45,7 @@ function NumberField({
 
 export function Toolbar() {
   const building = useStore((s) => s.building)
-  const setBuilding = useStore((s) => s.setBuilding)
+  const setBuilding = useStore((s) => s.setBuildingUndoable)
   const showGrid = useStore((s) => s.showGrid)
   const showLabels = useStore((s) => s.showLabels)
   const toggleGrid = useStore((s) => s.toggleGrid)
@@ -53,6 +53,10 @@ export function Toolbar() {
   const resetView = useStore((s) => s.resetView)
   const shellMode = useStore((s) => s.shell.mode)
   const cycleShell = useStore((s) => s.cycleShell)
+  const undo = useStore((s) => s.undo)
+  const redo = useStore((s) => s.redo)
+  const canUndo = useStore((s) => s.past.length > 0)
+  const canRedo = useStore((s) => s.future.length > 0)
   const clearAll = useStore((s) => s.clearAll)
   const importLayout = useStore((s) => s.importLayout)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -95,6 +99,12 @@ export function Toolbar() {
         <NumberField label="Apron (m)" value={building.apron} min={0} max={50} onChange={(v) => setBuilding({ apron: v })} />
       </div>
       <div className="tb-group">
+        <button onClick={undo} disabled={!canUndo} title="Ctrl+Z">
+          ↶ Undo
+        </button>
+        <button onClick={redo} disabled={!canRedo} title="Ctrl+Shift+Z">
+          ↷ Redo
+        </button>
         <button onClick={resetView} title="Return to the default isometric view">Reset view</button>
         <button className={showGrid ? 'on' : ''} onClick={toggleGrid} title="G">Grid</button>
         <button className={showLabels ? 'on' : ''} onClick={toggleLabels} title="L">Labels</button>
