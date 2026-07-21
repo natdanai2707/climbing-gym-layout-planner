@@ -193,8 +193,9 @@ export function WarehouseShell() {
         </group>
       )}
 
-      {/* adjustment arrows: shell length (at the far gable) + eave height (at the ridge) */}
+      {/* adjustment arrows: shell length at BOTH gable ends + eave height at the ridge */}
       <ArrowHandle color="#f97316" pos={[0, 1.2, L / 2 + 0.6]} rot={[Math.PI / 2, 0, 0]} onDown={startResize('length')} size={1.4} />
+      <ArrowHandle color="#f97316" pos={[0, 1.2, -L / 2 - 0.6]} rot={[-Math.PI / 2, 0, 0]} onDown={startResize('length')} size={1.4} />
       <ArrowHandle color="#f97316" pos={[0, ridge + 0.4, 0]} rot={[0, 0, 0]} onDown={startResize('height')} size={1.4} />
     </group>
   )

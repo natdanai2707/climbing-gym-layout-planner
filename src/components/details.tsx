@@ -251,65 +251,83 @@ function ProfiledFace({
   )
 }
 
-// Wall anchored at the BACK edge of the footprint, split into sections across its
-// width — each section gets a different polygonal profile (overhang, roof cave,
-// vertical, slab) so the wall reads like a real climbing wall, not one flat angle.
+// Wall anchored at the BACK edge of the footprint, split into sections across
+// its width — each section gets a mildly different profile (slight overhang,
+// vertical, slab), kept mostly upright. A steel support skeleton at least
+// 60 cm deep stands between the footprint back edge and the climbing panels.
 function ClimbingWall({ o, tint }: { o: Placed; tint: string | null }) {
   const color = tint ?? o.color
   const backZ = -o.d / 2
   const h = o.h
-  const maxOff = Math.max(0.25, Math.min(o.d - 0.4, h * 0.45))
+  const SKEL = 0.6 // steel skeleton depth behind the panels (min clearance)
+  const wallBack = backZ + SKEL
+  // gentle lean only — walls read as mostly straight-up
+  const maxOff = clampN(Math.min(o.d - SKEL - 0.5, h * 0.16), 0.2, 1.2)
 
   const profiles: ProfilePoint[][] = useMemo(() => {
     const overhang: ProfilePoint[] = [
-      { y: 0, off: 0.15 },
-      { y: h * 0.3, off: 0.25 },
+      { y: 0, off: 0.12 },
+      { y: h * 0.35, off: 0.18 },
       { y: h, off: maxOff },
     ]
-    const roof: ProfilePoint[] = [
-      { y: 0, off: 0.12 },
-      { y: h * 0.45, off: 0.18 },
-      { y: h * 0.68, off: maxOff * 0.9 },
-      { y: h, off: maxOff },
+    const steep: ProfilePoint[] = [
+      { y: 0, off: 0.1 },
+      { y: h * 0.55, off: 0.16 },
+      { y: h, off: maxOff * 0.75 },
     ]
     const vertical: ProfilePoint[] = [
       { y: 0, off: 0.12 },
-      { y: h * 0.78, off: 0.18 },
-      { y: h, off: Math.min(0.55, maxOff) },
+      { y: h * 0.82, off: 0.16 },
+      { y: h, off: Math.min(0.35, maxOff) },
     ]
     const slab: ProfilePoint[] = [
-      { y: 0, off: Math.min(0.85, maxOff) },
-      { y: h * 0.55, off: 0.3 },
-      { y: h, off: 0.38 },
+      { y: 0, off: Math.min(0.5, maxOff + 0.15) },
+      { y: h * 0.6, off: 0.22 },
+      { y: h, off: 0.28 },
     ]
-    return [overhang, roof, vertical, slab]
+    return [overhang, vertical, steep, slab]
   }, [h, maxOff])
 
   const nSec = Math.round(clampN(Math.floor(o.w / 3.5), 1, 4))
   const secW = o.w / nSec
   const nClimbers = Math.round(clampN(o.w / 6, 1, 3))
+  const posts = useMemo(() => spread(Math.max(2, Math.round(o.w / 1.6)), o.w - 0.25), [o.w])
 
   return (
     <group>
+      {/* steel skeleton: rear posts, cross beams into the panels, diagonals */}
+      {posts.map((x, i) => (
+        <group key={`s${i}`} position={[x, 0, 0]}>
+          <Box args={[0.08, h, 0.08]} pos={[0, h / 2, backZ + 0.06]} color={STEEL} />
+          <Box args={[0.07, 0.07, SKEL + 0.3]} pos={[0, h * 0.35, backZ + (SKEL + 0.3) / 2]} color={STEEL} />
+          <Box args={[0.07, 0.07, SKEL + maxOff * 0.7]} pos={[0, h * 0.85, backZ + (SKEL + maxOff * 0.7) / 2]} color={STEEL} />
+          <Box
+            args={[0.06, Math.hypot(h * 0.5, SKEL + 0.2), 0.06]}
+            pos={[0, h * 0.6, backZ + (SKEL + 0.2) / 2]}
+            rot={[Math.atan2(SKEL + 0.2, h * 0.5), 0, 0]}
+            color={STEEL}
+          />
+        </group>
+      ))}
       {Array.from({ length: nSec }, (_, i) => (
         <group key={i} position={[-o.w / 2 + secW * (i + 0.5), 0, 0]}>
-          <ProfiledFace w={secW - 0.04} profile={profiles[i % profiles.length]} color={color} backZ={backZ} />
+          <ProfiledFace w={secW - 0.04} profile={profiles[i % profiles.length]} color={color} backZ={wallBack} />
           {/* top cap board per section */}
           <Box
             args={[secW - 0.04, 0.12, 0.5]}
-            pos={[0, h + 0.06, backZ + 0.11 + profiles[i % profiles.length][profiles[i % profiles.length].length - 1].off]}
+            pos={[0, h + 0.06, wallBack + 0.11 + profiles[i % profiles.length][profiles[i % profiles.length].length - 1].off]}
             color={tint ?? '#e6e1d6'}
           />
         </group>
       ))}
-      {/* resident climbers working the wall */}
+      {/* resident climbers, held clear of the panel surface */}
       {Array.from({ length: nClimbers }, (_, i) => (
         <Climber
           key={`c${i}`}
           idx={i}
           lx={-o.w / 2 + ((i + 0.7) / (nClimbers + 0.4)) * o.w}
           wallH={h}
-          face={(y) => backZ + 0.5 + maxOff * (y / h) * 0.8}
+          face={(y) => wallBack + 0.5 + maxOff * (y / h)}
         />
       ))}
     </group>
@@ -320,7 +338,7 @@ function ClimbingWall({ o, tint }: { o: Placed; tint: string | null }) {
 // outward (bottom tucked in, top flared) around a core, with holds all around.
 function IslandBoulder({ o, tint }: { o: Placed; tint: string | null }) {
   const color = tint ?? o.color
-  const flare = clampN(Math.min(o.w, o.d) * 0.16, 0.3, 0.9)
+  const flare = clampN(Math.min(o.w, o.d) * 0.13, 0.25, 0.6)
   const face = (width: number, half: number) => {
     const p0 = { y: 0, off: -flare } // bottom tucked toward center
     const p1 = { y: o.h * 0.55, off: -flare * 0.55 }
@@ -359,10 +377,10 @@ function IslandBoulder({ o, tint }: { o: Placed; tint: string | null }) {
       <group rotation-y={-Math.PI / 2}>{face(o.d, o.w / 2)}</group>
       {/* top cap */}
       <Box args={[Math.max(0.4, o.w - flare), 0.14, Math.max(0.4, o.d - flare)]} pos={[0, o.h + 0.07, 0]} color={tint ?? '#e6e1d6'} />
-      {/* climbers on opposite faces */}
-      <Climber idx={0} lx={-o.w / 6} wallH={o.h} face={(y) => o.d / 2 - flare * (1 - y / o.h) + 0.28} />
+      {/* climbers on opposite faces, clear of the surface */}
+      <Climber idx={0} lx={-o.w / 6} wallH={o.h} face={(y) => o.d / 2 - flare * (1 - y / o.h) + 0.42} />
       <group rotation-y={Math.PI}>
-        <Climber idx={1} lx={o.w / 5} wallH={o.h} face={(y) => o.d / 2 - flare * (1 - y / o.h) + 0.28} />
+        <Climber idx={1} lx={o.w / 5} wallH={o.h} face={(y) => o.d / 2 - flare * (1 - y / o.h) + 0.42} />
       </group>
     </group>
   )
