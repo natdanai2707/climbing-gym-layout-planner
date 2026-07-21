@@ -57,7 +57,8 @@ export function WarehouseShell() {
     return Array.from({ length: n }, (_, i) => ({ z: startZ + i * (segW + gap) + segW / 2, y, segW, h: 1.1 }))
   }, [L, eave])
 
-  const doors = useMemo(() => objects.filter((o) => o.category === 'door'), [objects])
+  // only perimeter doors show on the facade — interior room doors stay inside
+  const doors = useMemo(() => objects.filter((o) => o.category === 'door' && o.rule === 'edge'), [objects])
 
   if (shell.mode === 0) return null
   const transparent = shell.mode === 1

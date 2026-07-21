@@ -621,42 +621,132 @@ function TrainingZone({ o, tint }: { o: Placed; tint: string | null }) {
   )
 }
 
-// Hyrox: sled + track, rower, plyo boxes, wall balls
+// A competition sled with push bars, sitting at a lane start
+function Sled({ pos, color = '#1f2937' }: { pos: [number, number, number]; color?: string }) {
+  return (
+    <group position={pos}>
+      <Box args={[0.9, 0.22, 0.65]} pos={[0, 0.12, 0]} color={color} />
+      <Box args={[0.5, 0.35, 0.45]} pos={[0, 0.4, 0]} color="#111827" />
+      <Box args={[0.07, 1.0, 0.07]} pos={[-0.35, 0.6, 0.25]} color={STEEL} />
+      <Box args={[0.07, 1.0, 0.07]} pos={[0.35, 0.6, 0.25]} color={STEEL} />
+      <Box args={[0.07, 1.0, 0.07]} pos={[-0.35, 0.6, -0.25]} color={STEEL} />
+      <Box args={[0.07, 1.0, 0.07]} pos={[0.35, 0.6, -0.25]} color={STEEL} />
+    </group>
+  )
+}
+
+// SkiErg: tall frame with a flywheel head and hanging cords
+function SkiErg({ pos }: { pos: [number, number, number] }) {
+  return (
+    <group position={pos}>
+      <Box args={[0.55, 0.08, 0.7]} pos={[0, 0.04, 0]} color={STEEL} />
+      <Box args={[0.13, 2.15, 0.13]} pos={[0, 1.12, 0]} color={STEEL} />
+      <Box args={[0.5, 0.55, 0.28]} pos={[0, 1.95, 0.1]} color="#111827" />
+      <Box args={[0.04, 0.6, 0.04]} pos={[-0.15, 1.4, 0.2]} color="#6b7280" />
+      <Box args={[0.04, 0.6, 0.04]} pos={[0.15, 1.4, 0.2]} color="#6b7280" />
+    </group>
+  )
+}
+
+// Concept-style rower
+function Rower({ pos, ry = 0 }: { pos: [number, number, number]; ry?: number }) {
+  return (
+    <group position={pos} rotation-y={ry}>
+      <Box args={[2.1, 0.14, 0.4]} pos={[0, 0.32, 0]} color="#1f2937" />
+      <Box args={[0.38, 0.55, 0.45]} pos={[-0.95, 0.35, 0]} color={STEEL} />
+      <Box args={[0.35, 0.06, 0.3]} pos={[0.35, 0.42, 0]} color="#374151" />
+      <Box args={[0.1, 0.3, 0.1]} pos={[1.0, 0.15, 0]} color={STEEL} />
+    </group>
+  )
+}
+
+// Kettlebell: ball + handle
+function Kettlebell({ pos, color = '#374151' }: { pos: [number, number, number]; color?: string }) {
+  return (
+    <group position={pos}>
+      <mesh position={[0, 0.16, 0]} castShadow>
+        <sphereGeometry args={[0.15, 10, 8]} />
+        <meshStandardMaterial color={color} {...MAT} />
+      </mesh>
+      <Box args={[0.2, 0.06, 0.06]} pos={[0, 0.36, 0]} color={color} />
+    </group>
+  )
+}
+
+/**
+ * Hyrox training zone modeled on the real race stations: marked sled-push /
+ * sled-pull / burpee-broad-jump lanes with lane lines, plus a stations row —
+ * SkiErgs, rowers, sleds, wall-ball target with balls, kettlebells (farmers
+ * carry) and sandbags (lunges). Equipment count scales with the footprint.
+ */
 function HyroxZone({ o, tint }: { o: Placed; tint: string | null }) {
-  const big = o.w >= 8 && o.d >= 6
+  const laneLen = Math.max(4, Math.min(o.w - 2, o.w * 0.8))
+  const laneW = 1.6
+  const nLanes = Math.max(1, Math.min(3, Math.floor((o.d - 4) / laneW)))
+  const laneZ = (i: number) => o.d / 2 - 1.0 - laneW * (i + 0.5)
+  const backZ = -o.d / 2
+  const big = o.w >= 10
+
   return (
     <group>
       <ZonePatch o={o} tint={tint} />
-      {/* sled track lanes */}
-      <Box args={[Math.min(o.w * 0.7, 12), 0.02, 1.6]} pos={[0, 0.09, -o.d / 4]} color="#7a8699" opacity={0.9} />
-      {/* sled */}
-      <group position={[-Math.min(o.w * 0.28, 4.5), 0.1, -o.d / 4]}>
-        <Box args={[0.9, 0.25, 0.7]} pos={[0, 0.13, 0]} color={tint ?? '#374151'} />
-        <Box args={[0.08, 1.0, 0.08]} pos={[-0.3, 0.6, 0]} color={STEEL} />
-        <Box args={[0.08, 1.0, 0.08]} pos={[0.3, 0.6, 0]} color={STEEL} />
-      </group>
-      {/* rower */}
-      <group position={[Math.min(o.w / 4, 4), 0.08, o.d / 4]}>
-        <Box args={[2.0, 0.18, 0.45]} pos={[0, 0.3, 0]} color="#1f2937" />
-        <Box args={[0.35, 0.5, 0.45]} pos={[-0.85, 0.35, 0]} color={STEEL} />
-      </group>
-      {/* plyo boxes */}
-      <Box args={[0.6, 0.6, 0.6]} pos={[-Math.min(o.w / 4, 3), 0.38, o.d / 4]} color={WOOD} />
-      {big && <Box args={[0.6, 0.75, 0.6]} pos={[-Math.min(o.w / 4, 3) + 0.9, 0.46, o.d / 4]} color={WOOD} />}
-      {/* wall balls */}
-      {[0, 0.55, 1.1].map((x, i) => (
-        <mesh key={i} position={[x + o.w / 8, 0.33, -o.d / 8]} castShadow>
-          <sphereGeometry args={[0.25, 12, 10]} />
-          <meshStandardMaterial color={HOLD_COLORS[(i + 2) % HOLD_COLORS.length]} {...MAT} />
-        </mesh>
+      {/* ---- marked lanes (sled push / sled pull / burpee broad jumps) ---- */}
+      {Array.from({ length: nLanes }, (_, i) => (
+        <group key={`lane${i}`} position={[0, 0, laneZ(i)]}>
+          <Box args={[laneLen, 0.015, laneW - 0.14]} pos={[0, 0.095, 0]} color={tint ?? '#3f4652'} />
+          <Box args={[laneLen, 0.02, 0.07]} pos={[0, 0.1, laneW / 2 - 0.05]} color="#f3f4f6" />
+          <Box args={[laneLen, 0.02, 0.07]} pos={[0, 0.1, -laneW / 2 + 0.05]} color="#f3f4f6" />
+          {/* start / finish marks */}
+          <Box args={[0.1, 0.022, laneW - 0.14]} pos={[-laneLen / 2 + 0.1, 0.1, 0]} color="#facc15" />
+          <Box args={[0.1, 0.022, laneW - 0.14]} pos={[laneLen / 2 - 0.1, 0.1, 0]} color="#facc15" />
+        </group>
       ))}
-      {/* athletes: one pushing the sled, one by the rower */}
-      <group position={[-Math.min(o.w * 0.28, 4.5) + 0.9, 0.1, -o.d / 4]} rotation-y={-Math.PI / 2}>
-        <group rotation-x={0.35}>
-          <Figure pose="push" shirt="#f97316" idx={1} />
+      {/* sleds at the start of the first two lanes */}
+      {nLanes >= 1 && <Sled pos={[-laneLen / 2 + 0.8, 0.1, laneZ(0)]} color={tint ?? '#1f2937'} />}
+      {nLanes >= 2 && <Sled pos={[-laneLen / 2 + 0.8, 0.1, laneZ(1)]} color={tint ?? '#7f1d1d'} />}
+      {/* athlete pushing the first sled */}
+      {nLanes >= 1 && (
+        <group position={[-laneLen / 2 + 1.7, 0.1, laneZ(0)]} rotation-y={-Math.PI / 2}>
+          <group rotation-x={0.35}>
+            <Figure pose="push" shirt="#f97316" idx={1} />
+          </group>
+        </group>
+      )}
+
+      {/* ---- stations row along the back edge ---- */}
+      <SkiErg pos={[-o.w / 2 + 1.2, 0.08, backZ + 1.0]} />
+      {big && <SkiErg pos={[-o.w / 2 + 2.4, 0.08, backZ + 1.0]} />}
+      {/* skierg athlete, arms driving down */}
+      <group position={[-o.w / 2 + 1.2, 0.08, backZ + 1.8]} rotation-y={Math.PI}>
+        <group rotation-x={-0.2}>
+          <Figure pose="push" shirt="#22c55e" idx={4} />
         </group>
       </group>
-      <Figure pose="sit" pos={[Math.min(o.w / 4, 4) - 0.3, 0.28, o.d / 4]} ry={-Math.PI / 2} shirt="#3b82f6" idx={3} />
+      {/* rowers + seated athlete */}
+      <Rower pos={[-o.w / 2 + 4.6, 0.08, backZ + 1.0]} />
+      {big && <Rower pos={[-o.w / 2 + 4.6, 0.08, backZ + 1.9]} />}
+      <Figure pose="sit" pos={[-o.w / 2 + 4.3, 0.28, backZ + 1.0]} ry={-Math.PI / 2} shirt="#3b82f6" idx={3} />
+      {/* wall-ball target + balls */}
+      <group position={[Math.min(o.w / 2 - 1.2, o.w / 4), 0, backZ + 0.6]}>
+        <Box args={[0.14, 3.0, 0.14]} pos={[0, 1.5, 0]} color={STEEL} />
+        <mesh position={[0, 2.9, 0.12]} rotation-x={Math.PI / 2} castShadow>
+          <cylinderGeometry args={[0.28, 0.28, 0.08, 14]} />
+          <meshStandardMaterial color="#facc15" {...MAT} />
+        </mesh>
+        {[0, 0.55, 1.1].map((x, i) => (
+          <mesh key={i} position={[x - 0.5, 0.26, 0.7]} castShadow>
+            <sphereGeometry args={[0.24, 12, 10]} />
+            <meshStandardMaterial color={HOLD_COLORS[(i + 2) % HOLD_COLORS.length]} {...MAT} />
+          </mesh>
+        ))}
+      </group>
+      {/* farmers-carry kettlebells */}
+      {[0, 0.5, 1.0, 1.5].map((x, i) => (
+        <Kettlebell key={i} pos={[o.w / 2 - 2.4 + x, 0.08, backZ + 1.6]} color={i % 2 ? '#374151' : '#7c2d12'} />
+      ))}
+      {/* sandbags for lunges */}
+      <Box args={[0.75, 0.26, 0.32]} pos={[o.w / 2 - 1.6, 0.22, backZ + 2.4]} rot={[0, 0.4, 0]} color="#4d3f33" />
+      {big && <Box args={[0.75, 0.26, 0.32]} pos={[o.w / 2 - 2.5, 0.22, backZ + 2.5]} rot={[0, -0.3, 0]} color="#3f3429" />}
     </group>
   )
 }
@@ -850,6 +940,28 @@ function Parking({ o, tint }: { o: Placed; tint: string | null }) {
 }
 
 function Door({ o, tint }: { o: Placed; tint: string | null }) {
+  // Interior room door (rule 'floor'): a real frame with the leaf slightly ajar.
+  // Place it in a partition or a room wall for toilets / storage.
+  if (o.rule === 'floor') {
+    const t = Math.max(0.1, o.d)
+    const leafW = Math.max(0.2, o.w - 0.12)
+    return (
+      <group>
+        <Box args={[0.07, o.h, t]} pos={[-o.w / 2 + 0.035, o.h / 2, 0]} color={tint ?? '#8a8378'} />
+        <Box args={[0.07, o.h, t]} pos={[o.w / 2 - 0.035, o.h / 2, 0]} color={tint ?? '#8a8378'} />
+        <Box args={[o.w, 0.08, t]} pos={[0, o.h - 0.04, 0]} color={tint ?? '#8a8378'} />
+        {/* leaf hinged on the left, swung open ~30° */}
+        <group position={[-o.w / 2 + 0.06, 0, 0]} rotation-y={-0.55}>
+          <Box args={[leafW, o.h - 0.1, 0.05]} pos={[leafW / 2, (o.h - 0.1) / 2, 0]} color={tint ?? o.color} />
+          <mesh position={[leafW - 0.1, o.h / 2, 0.06]} castShadow>
+            <sphereGeometry args={[0.035, 8, 6]} />
+            <meshStandardMaterial color="#d4d4d8" roughness={0.4} metalness={0.5} />
+          </mesh>
+        </group>
+      </group>
+    )
+  }
+  // Perimeter door: colored marker embedded in the shell wall
   return (
     <mesh position={[0, o.h / 2, 0]} castShadow>
       <boxGeometry args={[o.w, o.h, Math.max(0.28, o.d)]} />

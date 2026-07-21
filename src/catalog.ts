@@ -4,6 +4,7 @@ import type { Category, ObjectDef } from './types'
 export const CATALOG: ObjectDef[] = [
   { id: 'door_main', label: 'Main Entrance', category: 'door', w: 2.0, d: 0.3, h: 2.4, color: '#f59e0b', rule: 'edge' },
   { id: 'door_fire', label: 'Fire Exit', category: 'door', w: 1.5, d: 0.3, h: 2.4, color: '#ef4444', rule: 'edge' },
+  { id: 'door_room', label: 'Room Door', category: 'door', w: 0.9, d: 0.15, h: 2.1, color: '#c9a06c', rule: 'floor' },
   { id: 'parking', label: 'Parking (1 car)', category: 'parking', w: 5.0, d: 2.5, h: 0.05, color: '#8ea0b5', rule: 'outdoor' },
   { id: 'reception', label: 'Reception Counter', category: 'reception', w: 3.0, d: 1.5, h: 1.1, color: '#d9995f', rule: 'floor' },
   { id: 'storage', label: 'Storage Room', category: 'room', w: 4.0, d: 3.0, h: 2.6, color: '#b9b2a6', rule: 'floor' },
