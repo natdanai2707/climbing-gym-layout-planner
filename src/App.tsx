@@ -4,10 +4,12 @@ import { Toolbar } from './components/Toolbar'
 import { Palette } from './components/Palette'
 import { Inspector } from './components/Inspector'
 import { StatsPanel } from './components/StatsPanel'
+import { WallDesigner } from './components/WallDesigner'
 import { useStore } from './store'
 import { fp } from './placement'
 
 export default function App() {
+  const page = useStore((s) => s.page)
   const panelRight = useStore((s) => s.panelRight)
   const setPanelLeft = useStore((s) => s.setPanelLeft)
   const setPanelRight = useStore((s) => s.setPanelRight)
@@ -43,6 +45,7 @@ export default function App() {
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return
       const s = useStore.getState()
+      if (s.page === 'wall') return
       if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
         e.preventDefault()
         if (e.shiftKey) s.redo()
@@ -84,6 +87,8 @@ export default function App() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  if (page === 'wall') return <WallDesigner />
 
   return (
     <div className="app">

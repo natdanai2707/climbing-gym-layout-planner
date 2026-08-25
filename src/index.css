@@ -547,3 +547,72 @@ button.wide {
     width: calc(100% - 20px);
   }
 }
+
+/* ---------- wall designer page ---------- */
+.wall-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.wall-params {
+  width: 300px;
+}
+
+.wd-name {
+  width: 140px;
+  padding: 4px 6px;
+  border: 1px solid #d4cfc3;
+  border-radius: 6px;
+  font: inherit;
+  background: #faf9f6;
+}
+
+.wd-sec-title {
+  margin-top: 16px !important;
+}
+
+.wd-section {
+  border: 1px solid #e4e0d6;
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 8px;
+  background: #fbfaf7;
+}
+
+.wd-sec-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.wd-sec-head button {
+  padding: 2px 8px;
+}
+
+.wd-lib-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+
+.wd-lib-load {
+  flex: 1;
+  text-align: left;
+  font-weight: 600;
+}
+
+.wd-hint {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(43, 41, 38, 0.75);
+  color: #fff;
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 11px;
+  pointer-events: none;
+  white-space: nowrap;
+}

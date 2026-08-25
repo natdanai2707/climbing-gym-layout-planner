@@ -3,6 +3,9 @@ import type { ReactNode } from 'react'
 import * as THREE from 'three'
 import { Edges } from '@react-three/drei'
 import type { Placed } from '../types'
+import { useWallStore } from '../wall/wallStore'
+import { WallModel } from '../wall/WallModel'
+import { designDepth, designWidth } from '../wall/profile'
 
 /**
  * Category / item specific 3D renderers.
@@ -164,7 +167,7 @@ function Climber({
 /* ------------------------------ climbing walls ------------------------------ */
 
 // A cloud of climbing holds scattered over a w × len plane (local xy), sticking out in +z
-function Holds({ w, len, count }: { w: number; len: number; count: number }) {
+export function Holds({ w, len, count }: { w: number; len: number; count: number }) {
   const ref = useRef<THREE.InstancedMesh>(null)
   const items = useMemo(
     () =>
@@ -988,6 +991,23 @@ function Door({ o, tint }: { o: Placed; tint: string | null }) {
   )
 }
 
+// A wall designed on the Wall Design page, scaled to the placed dimensions
+function CustomWallObject({ o, tint }: { o: Placed; tint: string | null }) {
+  const design = useWallStore((s) => s.designs.find((d) => `custom:${d.id}` === o.defId))
+  if (!design)
+    return <Box args={[o.w, o.h, o.d]} pos={[0, o.h / 2, 0]} color={tint ?? o.color} />
+  const sx = o.w / Math.max(0.1, designWidth(design))
+  const sy = o.h / Math.max(0.1, design.height)
+  const sz = o.d / Math.max(0.1, designDepth(design))
+  return (
+    <group scale={[sx, sy, sz]} position={[0, 0, 0]}>
+      <group position={[0, 0, 0]}>
+        <WallModel design={design} tint={tint} />
+      </group>
+    </group>
+  )
+}
+
 /* ------------------------------- dispatcher ------------------------------- */
 
 export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
@@ -997,6 +1017,8 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
       return <ClimbingWall o={o} tint={tint} />
     case 'wall_island':
       return <IslandBoulder o={o} tint={tint} />
+    case 'wall_custom':
+      return <CustomWallObject o={o} tint={tint} />
     case 'mat':
       return <Mats o={o} tint={tint} />
     case 'mezzanine':

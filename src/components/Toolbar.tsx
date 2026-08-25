@@ -57,6 +57,7 @@ export function Toolbar() {
   const redo = useStore((s) => s.redo)
   const canUndo = useStore((s) => s.past.length > 0)
   const canRedo = useStore((s) => s.future.length > 0)
+  const setPage = useStore((s) => s.setPage)
   const clearAll = useStore((s) => s.clearAll)
   const importLayout = useStore((s) => s.importLayout)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -117,6 +118,9 @@ export function Toolbar() {
         </button>
       </div>
       <div className="tb-group">
+        <button onClick={() => setPage('wall')} title="Design a custom climbing wall">
+          🧱 Wall Design
+        </button>
         <button className="save" onClick={exportJson}>💾 Save JSON</button>
         <button onClick={() => fileRef.current?.click()}>Import JSON</button>
         <button onClick={exportPng}>Export PNG</button>

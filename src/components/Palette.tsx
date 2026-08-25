@@ -1,6 +1,8 @@
 import { CATALOG, CATEGORY_LABELS, CATEGORY_ORDER } from '../catalog'
 import type { ObjectDef } from '../types'
 import { useStore } from '../store'
+import { useWallStore } from '../wall/wallStore'
+import { designDepth, designWidth } from '../wall/profile'
 
 function PaletteCard({ def }: { def: ObjectDef }) {
   const startPlacing = useStore((s) => s.startPlacing)
@@ -29,6 +31,32 @@ function PaletteCard({ def }: { def: ObjectDef }) {
   )
 }
 
+// Walls saved on the Wall Design page, offered as placeable items
+function CustomWallCards() {
+  const designs = useWallStore((s) => s.designs)
+  if (designs.length === 0) return null
+  return (
+    <div className="palette-group">
+      <h3>{CATEGORY_LABELS.wall_custom}</h3>
+      {designs.map((d) => (
+        <PaletteCard
+          key={d.id}
+          def={{
+            id: `custom:${d.id}`,
+            label: d.name,
+            category: 'wall_custom',
+            w: Math.round(designWidth(d) * 100) / 100,
+            d: Math.round(designDepth(d) * 100) / 100,
+            h: d.height,
+            color: d.color,
+            rule: 'floor',
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
 export function Palette() {
   const open = useStore((s) => s.panelLeft)
   const setPanelLeft = useStore((s) => s.setPanelLeft)
@@ -39,6 +67,7 @@ export function Palette() {
       </button>
       <h2>Objects (tap to place)</h2>
       {CATEGORY_ORDER.map((cat) => {
+        if (cat === 'wall_custom') return <CustomWallCards key={cat} />
         const defs = CATALOG.filter((d) => d.category === cat)
         if (defs.length === 0) return null
         return (

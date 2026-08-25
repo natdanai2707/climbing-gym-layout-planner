@@ -12,6 +12,7 @@ export type Category =
   | 'stairs'
   | 'furniture'
   | 'wall_island'
+  | 'wall_custom'
   | 'column'
   | 'partition'
   | 'person'
@@ -59,9 +60,32 @@ export interface ShellConfig {
   eave: number // side-wall height (m); ridge = eave + gable rise
 }
 
+// One vertical strip of a custom wall. The profile is generated from a kicker
+// plus one or two angled parts (angle in degrees: + leans out, - slab).
+export interface WallSection {
+  width: number
+  kickerH: number
+  angle1: number
+  breakH: number // 0 = single angle all the way up
+  angle2: number
+}
+
+export interface WallDesign {
+  id: string
+  name: string
+  height: number
+  thickness: number // panel thickness (m)
+  skeletonDepth: number // free space behind the panels for the steel frame (m)
+  matDepth: number // landing mat in front (m)
+  matThick: number
+  color: string
+  sections: WallSection[]
+}
+
 export interface LayoutFile {
   version: number
   building: Building
   objects: Placed[]
   shell?: ShellConfig
+  wallDesigns?: WallDesign[]
 }

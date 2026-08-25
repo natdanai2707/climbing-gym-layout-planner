@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
 import type { Building, LayoutFile, ObjectDef, Placed, ShellConfig } from './types'
 import { clampInside, computeDrop, elevationFor, fp, resolveAfterResize } from './placement'
+import { useWallStore } from './wall/wallStore'
 
 interface Snapshot {
   building: Building
@@ -79,6 +80,10 @@ export interface GymState {
   panelRight: boolean
   setPanelLeft: (v: boolean) => void
   setPanelRight: (v: boolean) => void
+
+  // app page: main layout planner or the wall designer
+  page: 'layout' | 'wall'
+  setPage: (p: 'layout' | 'wall') => void
 
   // undo / redo history (snapshots of building + objects + shell)
   past: Snapshot[]
@@ -226,6 +231,8 @@ export const useStore = create<GymState>()(
     panelRight: false,
     setPanelLeft: (v) => set({ panelLeft: v }),
     setPanelRight: (v) => set({ panelRight: v }),
+    page: 'layout',
+    setPage: (p) => set({ page: p }),
 
     // Resizing never squeezes the layout: floor items stay exactly where they
     // are, and the building simply refuses to shrink past their outer edges.
@@ -476,6 +483,7 @@ export const useStore = create<GymState>()(
     importLayout: (file) => {
       if (!file || !file.building || !Array.isArray(file.objects)) throw new Error('Invalid layout file')
       get().snapshot()
+      if (file.wallDesigns) useWallStore.getState().mergeDesigns(file.wallDesigns)
       set({
         ...normalizeFile(file),
         shell: { ...DEFAULT_SHELL, ...file.shell },
@@ -511,7 +519,7 @@ useStore.subscribe(
 
 export function exportLayout(): LayoutFile {
   const { building, objects, shell } = useStore.getState()
-  return { version: FILE_VERSION, building, objects, shell }
+  return { version: FILE_VERSION, building, objects, shell, wallDesigns: useWallStore.getState().designs }
 }
 
 // handy for debugging / automated UI tests
