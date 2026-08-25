@@ -60,26 +60,27 @@ export interface ShellConfig {
   eave: number // side-wall height (m); ridge = eave + gable rise
 }
 
-// One vertical strip of a custom wall. The profile is generated from a kicker
-// plus one or two angled parts (angle in degrees: + leans out, - slab).
-export interface WallSection {
-  width: number
-  kickerH: number
-  angle1: number
-  breakH: number // 0 = single angle all the way up
-  angle2: number
-}
-
+/**
+ * Freeform faceted wall ("shaping rocks"): a nx × ny grid of control vertices
+ * over the back plane. Each vertex k = j*nx + i has offsets from its base grid
+ * position — ox (sideways), oy (up/down) and z (depth out of the back plane) —
+ * and the surface is the flat-faceted mesh over the grid, closed at the sides
+ * and back into a solid volume.
+ */
 export interface WallDesign {
   id: string
   name: string
+  color: string
+  width: number
   height: number
-  thickness: number // panel thickness (m)
-  skeletonDepth: number // free space behind the panels for the steel frame (m)
+  nx: number
+  ny: number
+  ox: number[]
+  oy: number[]
+  z: number[]
+  skeletonDepth: number // free space behind the back plane for the steel frame (m)
   matDepth: number // landing mat in front (m)
   matThick: number
-  color: string
-  sections: WallSection[]
 }
 
 export interface LayoutFile {

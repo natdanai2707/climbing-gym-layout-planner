@@ -1,12 +1,11 @@
 import * as THREE from 'three'
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js'
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { WallDesign } from '../types'
-import { designDepth, designMaxOff, designWidth, sectionPoints } from './profile'
+import { buildWallTriangles } from './profile'
 
 /**
- * File exporters for wall designs. One merged triangle mesh (panels + steel
- * skeleton + landing mat) feeds all three formats:
+ * File exporters for wall designs. One triangle mesh (faceted rock volume +
+ * steel skeleton + landing mat) feeds all three formats:
  *  - STL  (binary, millimeters — ready for slicers)
  *  - 3MF  (OPC zip with a 3D/3dmodel.model, millimeters)
  *  - DAE  (COLLADA, meters, Z-up — SketchUp: File → Import)
@@ -14,77 +13,13 @@ import { designDepth, designMaxOff, designWidth, sectionPoints } from './profile
  * format SketchUp imports natively.
  */
 
-function box(w: number, h: number, d: number, x: number, y: number, z: number, rotX = 0): THREE.BufferGeometry {
-  const g = new THREE.BoxGeometry(w, h, d)
-  if (rotX !== 0) g.rotateX(rotX)
-  g.translate(x, y, z)
-  return g
-}
-
-// Build the wall as one merged geometry, in the same local frame the app
-// renders: x across the width, y up, z toward the mat.
+// Build the wall as one triangle-soup geometry, in the same local frame the
+// app renders: x across the width, y up, z toward the mat.
 export function buildWallGeometry(design: WallDesign): THREE.BufferGeometry {
-  const parts: THREE.BufferGeometry[] = []
-  const W = designWidth(design)
-  const depth = designDepth(design)
-  const t = design.thickness
-  const backZ = -depth / 2
-  const wallBack = backZ + design.skeletonDepth
-  const H = design.height
-
-  // climbing panels per section
-  let x = -W / 2
-  for (const sec of design.sections) {
-    const cx = x + sec.width / 2
-    const pts = sectionPoints(sec, H)
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p0 = pts[i]
-      const p1 = pts[i + 1]
-      const dy = p1.y - p0.y
-      const doff = p1.off - p0.off
-      const len = Math.hypot(dy, doff) + 0.1
-      const ang = Math.atan2(doff, dy)
-      parts.push(
-        box(sec.width, len, t, cx, (p0.y + p1.y) / 2, wallBack + t / 2 + (p0.off + p1.off) / 2, ang),
-      )
-    }
-    // top cap
-    const topOff = pts[pts.length - 1].off
-    parts.push(box(sec.width, 0.12, 0.5, cx, H + 0.06, wallBack + t / 2 + topOff))
-    x += sec.width
-  }
-
-  // steel skeleton: rear posts + cross beams + diagonals
-  const nPosts = Math.max(2, Math.round(W / 1.6))
-  const maxOff = designMaxOff(design)
-  for (let i = 0; i < nPosts; i++) {
-    const px = -W / 2 + 0.15 + (i * (W - 0.3)) / (nPosts - 1)
-    parts.push(box(0.08, H, 0.08, px, H / 2, backZ + 0.06))
-    parts.push(box(0.07, 0.07, design.skeletonDepth + 0.3, px, H * 0.35, backZ + (design.skeletonDepth + 0.3) / 2))
-    parts.push(
-      box(0.07, 0.07, design.skeletonDepth + maxOff * 0.7, px, H * 0.85, backZ + (design.skeletonDepth + maxOff * 0.7) / 2),
-    )
-    parts.push(
-      box(
-        0.06,
-        Math.hypot(H * 0.5, design.skeletonDepth + 0.2),
-        0.06,
-        px,
-        H * 0.6,
-        backZ + (design.skeletonDepth + 0.2) / 2,
-        Math.atan2(design.skeletonDepth + 0.2, H * 0.5),
-      ),
-    )
-  }
-
-  // landing mat in front
-  if (design.matDepth > 0.05) {
-    parts.push(box(W, design.matThick, design.matDepth, 0, design.matThick / 2, depth / 2 - design.matDepth / 2))
-  }
-
-  const merged = mergeGeometries(parts, false)!
-  parts.forEach((p) => p.dispose())
-  return merged
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.BufferAttribute(buildWallTriangles(design), 3))
+  g.computeVertexNormals()
+  return g
 }
 
 function download(filename: string, blob: Blob) {

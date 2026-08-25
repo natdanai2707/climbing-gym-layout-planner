@@ -591,6 +591,12 @@ button.wide {
   padding: 2px 8px;
 }
 
+.wd-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .wd-lib-row {
   display: flex;
   gap: 6px;
