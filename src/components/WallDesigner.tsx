@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
@@ -52,18 +52,21 @@ const PRESETS: Array<{ name: PresetName; label: string }> = [
   { name: 'random', label: 'Random rock' },
 ]
 
-// closest point parameter t on the line (origin + t·dir) to a picking ray
-function closestT(ray: THREE.Ray, origin: THREE.Vector3, dir: THREE.Vector3): number {
-  const u = ray.direction
-  const w0 = new THREE.Vector3().subVectors(ray.origin, origin)
-  const a = u.dot(u)
-  const b = u.dot(dir)
-  const c = dir.dot(dir)
-  const d = u.dot(w0)
-  const e = dir.dot(w0)
-  const denom = a * c - b * b
-  if (Math.abs(denom) < 1e-6) return 0
-  return (a * e - b * d) / denom
+// Screen-linear axis drag: at grab time we measure how many pixels one meter
+// along the axis spans at the handle, then map cursor movement through that
+// fixed ratio. (Ray/axis closest-point math is not used because it blows up
+// hyperbolically as the cursor nears the axis' vanishing point in a
+// perspective view — a short drag would explode the value.)
+interface AxisDragMap {
+  ux: number // screen-space unit vector along the axis
+  uy: number
+  ppm: number // pixels per meter along the axis at the handle
+  sx: number // pointer position at grab time
+  sy: number
+}
+
+function metersDragged(map: AxisDragMap, clientX: number, clientY: number): number {
+  return ((clientX - map.sx) * map.ux + (clientY - map.sy) * map.uy) / map.ppm
 }
 
 const AXES: Array<{ axis: 'ox' | 'oy' | 'z'; dir: [number, number, number]; rot: [number, number, number]; color: string }> = [
@@ -78,14 +81,13 @@ function SculptHandles() {
   const selected = useWallStore((s) => s.selected)
   const setSelected = useWallStore((s) => s.setSelected)
   const setVertex = useWallStore((s) => s.setVertex)
+  const setDraft = useWallStore((s) => s.setDraft)
   const { camera, gl, controls } = useThree()
   const dragRef = useRef<null | {
-    axis: 'ox' | 'oy' | 'z'
+    axis: 'ox' | 'oy' | 'z' | 'width' | 'height'
     k: number
     start: number
-    t0: number
-    origin: THREE.Vector3
-    dir: THREE.Vector3
+    map: AxisDragMap
   }>(null)
 
   const depth = designDepth(draft)
@@ -97,15 +99,20 @@ function SculptHandles() {
     ;(window as unknown as Record<string, unknown>).__wallCanvas = gl.domElement
   }, [camera, gl])
 
-  const rayFromClient = (clientX: number, clientY: number) => {
+  const screenOf = (p: THREE.Vector3) => {
     const rect = gl.domElement.getBoundingClientRect()
-    const ndc = new THREE.Vector2(
-      ((clientX - rect.left) / rect.width) * 2 - 1,
-      -((clientY - rect.top) / rect.height) * 2 + 1,
-    )
-    const rc = new THREE.Raycaster()
-    rc.setFromCamera(ndc, camera)
-    return rc.ray
+    const v = p.clone().project(camera)
+    return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height }
+  }
+
+  // fixed screen-space mapping for a drag along `dir` starting at `origin`
+  const makeDragMap = (origin: THREE.Vector3, dir: THREE.Vector3, e: ThreeEvent<PointerEvent>): AxisDragMap => {
+    const p0 = screenOf(origin)
+    const p1 = screenOf(origin.clone().add(dir))
+    const dx = p1.x - p0.x
+    const dy = p1.y - p0.y
+    const len = Math.max(4, Math.hypot(dx, dy)) // guard: axis nearly head-on to the camera
+    return { ux: dx / len, uy: dy / len, ppm: len, sx: e.nativeEvent.clientX, sy: e.nativeEvent.clientY }
   }
 
   useEffect(() => {
@@ -113,9 +120,19 @@ function SculptHandles() {
       const d = dragRef.current
       if (!d) return
       e.preventDefault()
-      const t = closestT(rayFromClient(e.clientX, e.clientY), d.origin, d.dir)
-      const raw = d.start + (t - d.t0)
-      const snapped = Math.round(raw * 20) / 20 // 5 cm steps
+      const dm = metersDragged(d.map, e.clientX, e.clientY)
+      if (d.axis === 'width') {
+        // wall stays centered, so the dragged edge moves twice the width delta
+        const w = Math.round((d.start + 2 * dm) * 10) / 10
+        setDraft({ width: Math.min(30, Math.max(1, w)) })
+        return
+      }
+      if (d.axis === 'height') {
+        const h = Math.round((d.start + dm) * 10) / 10
+        setDraft({ height: Math.min(20, Math.max(1, h)) })
+        return
+      }
+      const snapped = Math.round((d.start + dm) * 20) / 20 // 5 cm steps
       if (d.axis === 'z') setVertex(d.k, { z: Math.min(6, Math.max(0.05, snapped)) })
       else setVertex(d.k, { [d.axis]: Math.min(4, Math.max(-4, snapped)) })
     }
@@ -134,7 +151,18 @@ function SculptHandles() {
       window.removeEventListener('pointercancel', up)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camera, gl, controls, setVertex])
+  }, [camera, gl, controls, setVertex, setDraft])
+
+  // whole-wall size arrows (width from either side edge, height from the top)
+  const startSizeDrag = (axis: 'width' | 'height', origin: [number, number, number], dir: [number, number, number]) => (
+    e: ThreeEvent<PointerEvent>,
+  ) => {
+    e.stopPropagation()
+    const map = makeDragMap(new THREE.Vector3(...origin), new THREE.Vector3(...dir), e)
+    dragRef.current = { axis, k: -1, start: axis === 'width' ? draft.width : draft.height, map }
+    const oc = controls as unknown as { enabled: boolean } | null
+    if (oc) oc.enabled = false
+  }
 
   const startDrag = (axis: 'ox' | 'oy' | 'z', dir: [number, number, number]) => (e: ThreeEvent<PointerEvent>) => {
     if (selected === null) return
@@ -143,11 +171,9 @@ function SculptHandles() {
     const i = selected % d.nx
     const j = Math.floor(selected / d.nx)
     const [x, y, z] = vertexPos(d, i, j)
-    const origin = new THREE.Vector3(x, y, z + zShift)
-    const dirV = new THREE.Vector3(...dir)
-    const t0 = closestT(rayFromClient(e.nativeEvent.clientX, e.nativeEvent.clientY), origin, dirV)
+    const map = makeDragMap(new THREE.Vector3(x, y, z + zShift), new THREE.Vector3(...dir), e)
     const start = axis === 'ox' ? d.ox[selected] : axis === 'oy' ? d.oy[selected] : d.z[selected]
-    dragRef.current = { axis, k: selected, start, t0, origin, dir: dirV }
+    dragRef.current = { axis, k: selected, start, map }
     const oc = controls as unknown as { enabled: boolean } | null
     if (oc) oc.enabled = false
   }
@@ -184,6 +210,28 @@ function SculptHandles() {
         AXES.map((a) => (
           <ArrowHandle key={a.axis} color={a.color} pos={selPos} rot={a.rot} size={0.85} onDown={startDrag(a.axis, a.dir)} />
         ))}
+      {/* whole-wall size arrows (orange, like the warehouse shell) */}
+      <ArrowHandle
+        color="#f97316"
+        pos={[draft.width / 2 + 0.4, draft.height * 0.5, zShift]}
+        rot={[0, 0, -Math.PI / 2]}
+        size={1.1}
+        onDown={startSizeDrag('width', [draft.width / 2, draft.height * 0.5, zShift], [1, 0, 0])}
+      />
+      <ArrowHandle
+        color="#f97316"
+        pos={[-draft.width / 2 - 0.4, draft.height * 0.5, zShift]}
+        rot={[0, 0, Math.PI / 2]}
+        size={1.1}
+        onDown={startSizeDrag('width', [-draft.width / 2, draft.height * 0.5, zShift], [-1, 0, 0])}
+      />
+      <ArrowHandle
+        color="#f97316"
+        pos={[0, draft.height + 0.3, zShift]}
+        rot={[0, 0, 0]}
+        size={1.1}
+        onDown={startSizeDrag('height', [0, draft.height, zShift], [0, 1, 0])}
+      />
     </group>
   )
 }
@@ -210,6 +258,8 @@ export function WallDesigner() {
   const loadDesign = useWallStore((s) => s.loadDesign)
   const newDraft = useWallStore((s) => s.newDraft)
   const deleteDesign = useWallStore((s) => s.deleteDesign)
+
+  const [panelOpen, setPanelOpen] = useState(false)
 
   const W = designWidth(draft)
   const depth = designDepth(draft)
@@ -251,7 +301,10 @@ export function WallDesigner() {
       </header>
 
       <div className="main">
-        <aside className="palette wall-params">
+        <aside className={`palette wall-params${panelOpen ? ' open' : ''}`}>
+          <button className="drawer-close" onClick={() => setPanelOpen(false)}>
+            ✕ Close
+          </button>
           <h2>Wall dimensions</h2>
           <div className="insp-grid">
             <Num label="Width (m)" value={draft.width} min={1} max={30} onChange={(v) => setDraft({ width: Math.max(1, v) })} />
@@ -343,7 +396,10 @@ export function WallDesigner() {
             <WallModel design={draft} holds={false} />
             <SculptHandles />
           </Canvas>
-          <div className="wd-hint">Tap a point · pull arrows to shape the rock · drag empty space to orbit</div>
+          <div className="fab-row">
+            <button onClick={() => setPanelOpen((v) => !v)}>⚙ Wall settings</button>
+          </div>
+          <div className="wd-hint">Tap a point · pull arrows to sculpt · orange arrows resize the wall</div>
         </div>
       </div>
     </div>

@@ -546,6 +546,10 @@ button.wide {
     margin: 10px 10px 0;
     width: calc(100% - 20px);
   }
+
+  .wd-hint {
+    bottom: 62px;
+  }
 }
 
 /* ---------- wall designer page ---------- */
