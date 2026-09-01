@@ -265,6 +265,20 @@ export function WallDesigner() {
   const depth = designDepth(draft)
   const camDist = Math.max(W, draft.height) * 1.1 + 4
 
+  // Saving an edited design also refits every instance already placed in the
+  // layout, so walls placed there can be reshaped here.
+  const onSave = () => {
+    const prev = useWallStore.getState().designs.find((d) => d.id === draft.id)
+    saveDraft()
+    if (prev) {
+      useStore.getState().syncDesignDims(
+        `custom:${draft.id}`,
+        { w: designWidth(prev), d: designDepth(prev), h: prev.height },
+        { w: W, d: depth, h: draft.height },
+      )
+    }
+  }
+
   return (
     <div className="wall-page">
       <header className="toolbar">
@@ -279,7 +293,7 @@ export function WallDesigner() {
               onChange={(e) => setDraft({ name: e.target.value })}
             />
           </label>
-          <button className="save" onClick={saveDraft} title="Save to the wall library — it becomes a placeable item">
+          <button className="save" onClick={onSave} title="Save to the wall library — placed copies in the layout update too">
             💾 Save to library
           </button>
           <button onClick={newDraft}>＋ New wall</button>

@@ -109,6 +109,11 @@ export interface GymState {
   rotate: () => void
   removeSelected: () => void
   updateObject: (id: string, patch: Partial<Placed>) => void
+  syncDesignDims: (
+    defId: string,
+    oldDims: { w: number; d: number; h: number },
+    newDims: { w: number; d: number; h: number },
+  ) => void
   clearAll: () => void
   importLayout: (file: LayoutFile) => void
   toggleGrid: () => void
@@ -469,6 +474,30 @@ export const useStore = create<GymState>()(
           next.w = Math.max(0.1, next.w)
           next.d = Math.max(0.1, next.d)
           next.h = Math.max(0.05, next.h)
+          const r = computeDrop(next, next.x, next.z, building)
+          return { ...next, x: r.x, z: r.z, rot: r.rot }
+        }),
+      })
+    },
+
+    // After a wall design is edited on the Wall Design page, refit every placed
+    // instance to the new natural size, preserving any intentional scaling the
+    // user applied relative to the old natural size.
+    syncDesignDims: (defId, oldDims, newDims) => {
+      const { building, objects } = get()
+      if (!objects.some((o) => o.defId === defId)) return
+      get().snapshot()
+      const refit = (placed: number, oldNat: number, newNat: number) =>
+        Math.round((placed / Math.max(0.1, oldNat)) * newNat * 100) / 100
+      set({
+        objects: objects.map((o) => {
+          if (o.defId !== defId) return o
+          const next = {
+            ...o,
+            w: Math.max(0.1, refit(o.w, oldDims.w, newDims.w)),
+            d: Math.max(0.1, refit(o.d, oldDims.d, newDims.d)),
+            h: Math.max(0.05, refit(o.h, oldDims.h, newDims.h)),
+          }
           const r = computeDrop(next, next.x, next.z, building)
           return { ...next, x: r.x, z: r.z, rot: r.rot }
         }),

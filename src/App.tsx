@@ -6,6 +6,7 @@ import { Inspector } from './components/Inspector'
 import { StatsPanel } from './components/StatsPanel'
 import { WallDesigner } from './components/WallDesigner'
 import { useStore } from './store'
+import { useWallStore } from './wall/wallStore'
 import { fp } from './placement'
 
 export default function App() {
@@ -28,6 +29,15 @@ export default function App() {
   const setMoveArmed = useStore((s) => s.setMoveArmed)
 
   const pending = objects.find((o) => o.id === pendingId)
+  // a selected placed custom wall can be reshaped on the Wall Design page
+  const selObj = objects.find((o) => o.id === selectedId)
+  const shapeDesignId = selObj?.category === 'wall_custom' ? selObj.defId.replace(/^custom:/, '') : null
+  const canShape = useWallStore((s) => (shapeDesignId ? s.designs.some((d) => d.id === shapeDesignId) : false))
+  const openShape = () => {
+    if (!shapeDesignId) return
+    useWallStore.getState().loadDesign(shapeDesignId)
+    useStore.getState().setPage('wall')
+  }
   // is the pending object over a mezzanine (so it could be lifted onto it)?
   const overMezz =
     pending &&
@@ -110,6 +120,7 @@ export default function App() {
                 ✥ Move{moveArmed ? ': ON' : ''}
               </button>
               <button onClick={rotate}>↻ 45°</button>
+              {canShape && <button onClick={openShape}>🧱 Shape</button>}
               <button onClick={() => setPanelRight(true)}>✎ Edit</button>
               <button className="danger" onClick={removeSelected}>
                 🗑 Delete
