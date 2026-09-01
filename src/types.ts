@@ -89,4 +89,5 @@ export interface LayoutFile {
   objects: Placed[]
   shell?: ShellConfig
   wallDesigns?: WallDesign[]
+  coolFactor?: number // aircon sizing assumption (BTU/hr per m³ of hall volume)
 }

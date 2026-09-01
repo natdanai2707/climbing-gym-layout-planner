@@ -73,6 +73,9 @@ export interface GymState {
   shell: ShellConfig
   cycleShell: () => void
   setShellEave: (v: number) => void
+  setShellEaveUndoable: (v: number) => void
+  coolFactor: number // BTU/hr per m³ for the aircon estimate
+  setCoolFactor: (v: number) => void
   shellResizing: 'length+' | 'length-' | 'height' | null
   setShellResizing: (v: 'length+' | 'length-' | 'height' | null) => void
 
@@ -140,19 +143,25 @@ function normalizeFile(file: LayoutFile): { building: Building; objects: Placed[
 
 const DEFAULT_SHELL: ShellConfig = { mode: 0, eave: 6 }
 
-function loadSaved(): { building: Building; objects: Placed[]; shell: ShellConfig } {
+const DEFAULT_COOL_FACTOR = 220 // ~600 BTU/m² at a 2.7 m ceiling, volume-based
+
+function loadSaved(): { building: Building; objects: Placed[]; shell: ShellConfig; coolFactor: number } {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const data = JSON.parse(raw) as LayoutFile
       if (data && data.building && Array.isArray(data.objects)) {
-        return { ...normalizeFile(data), shell: { ...DEFAULT_SHELL, ...data.shell } }
+        return {
+          ...normalizeFile(data),
+          shell: { ...DEFAULT_SHELL, ...data.shell },
+          coolFactor: typeof data.coolFactor === 'number' ? data.coolFactor : DEFAULT_COOL_FACTOR,
+        }
       }
     }
   } catch {
     // ignore corrupt saves
   }
-  return { building: DEFAULT_BUILDING, objects: [], shell: DEFAULT_SHELL }
+  return { building: DEFAULT_BUILDING, objects: [], shell: DEFAULT_SHELL, coolFactor: DEFAULT_COOL_FACTOR }
 }
 
 export const useStore = create<GymState>()(
@@ -176,6 +185,11 @@ export const useStore = create<GymState>()(
     setMoveArmed: (v) => set({ moveArmed: v }),
     cycleShell: () => set({ shell: { ...get().shell, mode: (get().shell.mode + 1) % 3 } }),
     setShellEave: (v) => set({ shell: { ...get().shell, eave: Math.max(3, Math.min(20, v)) } }),
+    setShellEaveUndoable: (v) => {
+      get().snapshot(true)
+      get().setShellEave(v)
+    },
+    setCoolFactor: (v) => set({ coolFactor: Math.max(50, Math.min(1000, v)) }),
     shellResizing: null,
     setShellResizing: (v) => {
       if (v !== null) get().snapshot() // one undo step per shell-arrow gesture
@@ -516,6 +530,7 @@ export const useStore = create<GymState>()(
       set({
         ...normalizeFile(file),
         shell: { ...DEFAULT_SHELL, ...file.shell },
+        coolFactor: typeof file.coolFactor === 'number' ? file.coolFactor : get().coolFactor,
         selectedId: null,
         placingDef: null,
         ghost: null,
@@ -532,12 +547,12 @@ export const useStore = create<GymState>()(
 // ---- auto-save to localStorage (debounced) ----
 let saveTimer: ReturnType<typeof setTimeout> | undefined
 useStore.subscribe(
-  (s) => [s.building, s.objects, s.shell] as const,
-  ([building, objects, shell]) => {
+  (s) => [s.building, s.objects, s.shell, s.coolFactor] as const,
+  ([building, objects, shell, coolFactor]) => {
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
       try {
-        const file: LayoutFile = { version: FILE_VERSION, building, objects, shell }
+        const file: LayoutFile = { version: FILE_VERSION, building, objects, shell, coolFactor }
         localStorage.setItem(STORAGE_KEY, JSON.stringify(file))
       } catch {
         // storage full / unavailable — ignore
@@ -547,8 +562,8 @@ useStore.subscribe(
 )
 
 export function exportLayout(): LayoutFile {
-  const { building, objects, shell } = useStore.getState()
-  return { version: FILE_VERSION, building, objects, shell, wallDesigns: useWallStore.getState().designs }
+  const { building, objects, shell, coolFactor } = useStore.getState()
+  return { version: FILE_VERSION, building, objects, shell, coolFactor, wallDesigns: useWallStore.getState().designs }
 }
 
 // handy for debugging / automated UI tests

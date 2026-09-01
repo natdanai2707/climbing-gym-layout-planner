@@ -2,13 +2,19 @@ import { useMemo } from 'react'
 import { useStore } from '../store'
 import { CATEGORY_LABELS } from '../catalog'
 import { usedStrip } from '../placement'
+import { ROOF_PITCH } from './WarehouseShell'
 import type { Category } from '../types'
 
 const fmt = (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 1 })
+const fmt0 = (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 0 })
 
 export function StatsPanel() {
   const building = useStore((s) => s.building)
   const objects = useStore((s) => s.objects)
+  const eave = useStore((s) => s.shell.eave)
+  const setEave = useStore((s) => s.setShellEaveUndoable)
+  const coolFactor = useStore((s) => s.coolFactor)
+  const setCoolFactor = useStore((s) => s.setCoolFactor)
 
   const stats = useMemo(() => {
     const buildingArea = building.width * building.length
@@ -104,6 +110,74 @@ export function StatsPanel() {
           {stats.parkingCount} cars · {fmt(stats.parkingArea)} m²
         </b>
       </div>
+
+      {/* the hall is a gable prism: cross-section = W·eave + W·rise/2 */}
+      {(() => {
+        const rise = (building.width / 2) * ROOF_PITCH
+        const ridge = eave + rise
+        const volume = building.length * (building.width * eave + (building.width * rise) / 2)
+        const btu = volume * coolFactor
+        return (
+          <>
+            <h3>Air conditioning</h3>
+            <div className="stat-row">
+              <span>Ceiling height (eave)</span>
+              <span className="stat-input">
+                <input
+                  type="number"
+                  value={eave}
+                  min={3}
+                  max={20}
+                  step={0.5}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value)
+                    if (!Number.isNaN(v)) setEave(v)
+                  }}
+                />
+                m
+              </span>
+            </div>
+            <div className="stat-row small">
+              <span>Ridge height (roof peak)</span>
+              <b>{fmt(ridge)} m</b>
+            </div>
+            <div className="stat-row">
+              <span>Hall air volume</span>
+              <b>{fmt0(volume)} m³</b>
+            </div>
+            <div className="stat-row small">
+              <span>Cooling factor (BTU/m³)</span>
+              <span className="stat-input">
+                <input
+                  type="number"
+                  value={coolFactor}
+                  min={50}
+                  max={1000}
+                  step={10}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value)
+                    if (!Number.isNaN(v)) setCoolFactor(v)
+                  }}
+                />
+              </span>
+            </div>
+            <div className="stat-row">
+              <span>Estimated cooling load</span>
+              <b>{fmt0(btu)} BTU/hr</b>
+            </div>
+            <div className="stat-row small">
+              <span>≈ capacity needed</span>
+              <b>
+                {fmt(btu / 12000)} tons · {fmt(btu / 3412)} kW
+              </b>
+            </div>
+            <p className="muted stat-note">
+              Rough sizing only: volume × factor. ~200–250 BTU/m³ suits an insulated hall; raise it for hot climates,
+              big glass areas or crowded sessions. Get a full heat-load calc before buying equipment.
+            </p>
+          </>
+        )
+      })()}
     </section>
   )
 }

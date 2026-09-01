@@ -52,6 +52,8 @@ export function Toolbar() {
   const toggleLabels = useStore((s) => s.toggleLabels)
   const resetView = useStore((s) => s.resetView)
   const shellMode = useStore((s) => s.shell.mode)
+  const eave = useStore((s) => s.shell.eave)
+  const setEave = useStore((s) => s.setShellEaveUndoable)
   const cycleShell = useStore((s) => s.cycleShell)
   const undo = useStore((s) => s.undo)
   const redo = useStore((s) => s.redo)
@@ -98,6 +100,7 @@ export function Toolbar() {
           </select>
         </label>
         <NumberField label="Apron (m)" value={building.apron} min={0} max={50} onChange={(v) => setBuilding({ apron: v })} />
+        <NumberField label="Ceiling (m)" value={eave} min={3} max={20} step={0.5} onChange={setEave} />
       </div>
       <div className="tb-group">
         <button onClick={undo} disabled={!canUndo} title="Ctrl+Z">
