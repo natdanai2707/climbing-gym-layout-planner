@@ -1,8 +1,8 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import { Canvas, useThree } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
-import { OrbitControls, OrthographicCamera } from '@react-three/drei'
+import { OrbitControls, OrthographicCamera, PerspectiveCamera } from '@react-three/drei'
 import { useStore } from '../store'
 import type { ResizeAxis, ResizeState } from '../store'
 import type { Placed } from '../types'
@@ -27,17 +27,246 @@ function CaptureBinder() {
   return null
 }
 
-// Default isometric camera + orbit controls. Remounted (via key) to reset the view.
-// Initial zoom scales with the viewport so the building fits on phone screens too.
+// Orbit camera with view presets (iso / top / front / side). Remounted (via
+// key) whenever a preset is chosen or the view is reset. The scroll wheel /
+// pinch zooms toward the cursor or finger position (zoomToCursor).
 function CameraRig() {
   const size = useThree((s) => s.size)
-  const zoom = useMemo(() => Math.max(4, Math.min(13, Math.min(size.width, size.height) / 65)), [])
+  const preset = useStore((s) => s.viewPreset)
+  const cfg = useMemo(() => {
+    const s = useStore.getState()
+    const { width, length, apron, centerZ } = s.building
+    const ridge = s.shell.eave + (width / 2) * ROOF_PITCH
+    const fit = (spanX: number, spanY: number) =>
+      Math.max(2, Math.min(40, 0.88 * Math.min(size.width / spanX, size.height / spanY)))
+    switch (preset) {
+      case 'top':
+        return {
+          pos: [0, 140, centerZ + 0.01] as [number, number, number],
+          target: [0, 0, centerZ] as [number, number, number],
+          zoom: fit(width + apron * 2 + 6, length + apron * 2 + 6),
+        }
+      case 'front': // looking down the length at a gable end
+        return {
+          pos: [0, ridge / 2, centerZ + length / 2 + 120] as [number, number, number],
+          target: [0, ridge / 2, centerZ] as [number, number, number],
+          zoom: fit(width + 8, ridge + 5),
+        }
+      case 'side': // looking at a long wall
+        return {
+          pos: [140, ridge / 2, centerZ] as [number, number, number],
+          target: [0, ridge / 2, centerZ] as [number, number, number],
+          zoom: fit(length + apron * 2 + 8, ridge + 5),
+        }
+      default:
+        return {
+          pos: [70, 70, 70] as [number, number, number],
+          target: [0, 0, 0] as [number, number, number],
+          zoom: Math.max(4, Math.min(13, Math.min(size.width, size.height) / 65)),
+        }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preset])
   return (
     <>
-      <OrthographicCamera makeDefault position={[70, 70, 70]} zoom={zoom} near={-500} far={1000} />
-      <OrbitControls makeDefault target={[0, 0, 0]} maxPolarAngle={Math.PI / 2.05} />
+      <OrthographicCamera makeDefault position={cfg.pos} zoom={cfg.zoom} near={-500} far={1000} />
+      <OrbitControls makeDefault target={cfg.target} maxPolarAngle={Math.PI / 2.05} zoomToCursor />
     </>
   )
+}
+
+/* ----------------------------- first person view ----------------------------- */
+
+// Touch joystick input, written by the on-screen joystick in App and read by
+// the walk rig every frame. x = strafe (-1..1), y = forward (-1 = forward).
+export const walkInput = { x: 0, y: 0 }
+
+// Solid things a walker bumps into; flat zones/mats and doors stay passable,
+// and mezzanines are open underneath.
+const WALK_PASSABLE = new Set(['zone', 'mat', 'door', 'person', 'parking', 'mezzanine'])
+
+function WalkRig() {
+  const gl = useThree((s) => s.gl)
+  const camera = useThree((s) => s.camera)
+  const st = useRef({ yaw: 0, pitch: 0, pos: new THREE.Vector3(0, 1.65, 0) })
+  const keys = useRef(new Set<string>())
+
+  // spawn just inside the entrance door (or at the near gable end), facing in
+  useEffect(() => {
+    const s = useStore.getState()
+    const door = s.objects.find((o) => o.category === 'door' && o.rule === 'edge')
+    const cz = s.building.centerZ
+    if (door) {
+      const dx = 0 - door.x
+      const dz = cz - door.z
+      const l = Math.hypot(dx, dz) || 1
+      st.current.pos.set(door.x + (dx / l) * 2, 1.65, door.z + (dz / l) * 2)
+      st.current.yaw = Math.atan2(-dx / l, -dz / l)
+    } else {
+      st.current.pos.set(0, 1.65, cz + s.building.length / 2 - 2)
+      st.current.yaw = 0 // facing -z, into the hall
+    }
+    st.current.pitch = 0
+  }, [])
+
+  // drag to look (mouse or touch) — the joystick overlay stops propagation,
+  // so pointers starting there never rotate the view
+  useEffect(() => {
+    const el = gl.domElement
+    let pid = -1
+    let lx = 0
+    let ly = 0
+    const down = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return
+      if (pid !== -1) return
+      pid = e.pointerId
+      lx = e.clientX
+      ly = e.clientY
+    }
+    const move = (e: PointerEvent) => {
+      if (e.pointerId !== pid) return
+      st.current.yaw -= (e.clientX - lx) * 0.005
+      st.current.pitch = Math.max(-1.35, Math.min(1.35, st.current.pitch - (e.clientY - ly) * 0.005))
+      lx = e.clientX
+      ly = e.clientY
+    }
+    const up = (e: PointerEvent) => {
+      if (e.pointerId === pid) pid = -1
+    }
+    el.addEventListener('pointerdown', down)
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+    return () => {
+      el.removeEventListener('pointerdown', down)
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+    }
+  }, [gl])
+
+  useEffect(() => {
+    const dn = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return
+      keys.current.add(e.code)
+    }
+    const up = (e: KeyboardEvent) => keys.current.delete(e.code)
+    window.addEventListener('keydown', dn)
+    window.addEventListener('keyup', up)
+    return () => {
+      window.removeEventListener('keydown', dn)
+      window.removeEventListener('keyup', up)
+    }
+  }, [])
+
+  useFrame((_, dtRaw) => {
+    const dt = Math.min(dtRaw, 0.05)
+    const k = keys.current
+    let f = 0
+    let r = 0
+    if (k.has('KeyW') || k.has('ArrowUp')) f += 1
+    if (k.has('KeyS') || k.has('ArrowDown')) f -= 1
+    if (k.has('KeyD') || k.has('ArrowRight')) r += 1
+    if (k.has('KeyA') || k.has('ArrowLeft')) r -= 1
+    f += -walkInput.y
+    r += walkInput.x
+    const len = Math.hypot(f, r)
+    if (len > 1) {
+      f /= len
+      r /= len
+    }
+    const v = st.current
+    if (len > 0.001) {
+      const speed = k.has('ShiftLeft') || k.has('ShiftRight') ? 6 : 3.2
+      const sin = Math.sin(v.yaw)
+      const cos = Math.cos(v.yaw)
+      let nx = v.pos.x + (-sin * f + cos * r) * speed * dt
+      let nz = v.pos.z + (-cos * f - sin * r) * speed * dt
+      const s = useStore.getState()
+      const bw = s.building.width / 2 + s.building.apron - 0.3
+      const bl = s.building.length / 2 + s.building.apron - 0.3
+      nx = Math.max(-bw, Math.min(bw, nx))
+      nz = Math.max(s.building.centerZ - bl, Math.min(s.building.centerZ + bl, nz))
+      const blocked = (x: number, z: number) => {
+        for (const o of s.objects) {
+          if (o.level === 'upper' || o.h < 0.9 || WALK_PASSABLE.has(o.category)) continue
+          const { fw, fd } = fp(o)
+          if (Math.abs(x - o.x) < fw / 2 + 0.25 && Math.abs(z - o.z) < fd / 2 + 0.25) return true
+        }
+        return false
+      }
+      if (!blocked(nx, nz)) v.pos.set(nx, 1.65, nz)
+      else if (!blocked(nx, v.pos.z)) v.pos.x = nx
+      else if (!blocked(v.pos.x, nz)) v.pos.z = nz
+    }
+    camera.position.copy(v.pos)
+    camera.rotation.order = 'YXZ'
+    camera.rotation.set(v.pitch, v.yaw, 0)
+  })
+
+  return <PerspectiveCamera makeDefault fov={72} near={0.08} far={400} />
+}
+
+/* ------------------------- lighting moods & render style ------------------------- */
+
+const MOODS = {
+  day: { bg: '#eceae4', dirColor: '#fff6e6', dirPos: [35, 60, 20], dirInt: 1.4, amb: 0.75, ambColor: '#ffffff', hemi: 0.35, lamps: false },
+  golden: { bg: '#f0d9ba', dirColor: '#ffab55', dirPos: [58, 16, 32], dirInt: 1.7, amb: 0.4, ambColor: '#ffd9b0', hemi: 0.22, lamps: false },
+  night: { bg: '#0f131d', dirColor: '#8aa2d6', dirPos: [-30, 45, -25], dirInt: 0.22, amb: 0.14, ambColor: '#38466a', hemi: 0.06, lamps: true },
+} as const
+
+function MoodLights() {
+  const mood = useStore((s) => s.lightMood)
+  const building = useStore((s) => s.building)
+  const eave = useStore((s) => s.shell.eave)
+  const m = MOODS[mood]
+  const lamps = useMemo(() => {
+    if (!m.lamps) return []
+    const n = Math.max(2, Math.min(8, Math.round(building.length / 10)))
+    return Array.from({ length: n }, (_, i) => {
+      const z = building.centerZ - building.length / 2 + ((i + 0.5) * building.length) / n
+      const x = i % 2 === 0 ? -building.width / 4 : building.width / 4
+      return [x, Math.max(3.5, eave - 0.8), z] as [number, number, number]
+    })
+  }, [m.lamps, building, eave])
+  return (
+    <>
+      <ambientLight intensity={m.amb} color={m.ambColor} />
+      <directionalLight
+        position={m.dirPos as unknown as [number, number, number]}
+        color={m.dirColor}
+        intensity={m.dirInt}
+        castShadow
+        shadow-mapSize={[2048, 2048]}
+        shadow-camera-left={-60}
+        shadow-camera-right={60}
+        shadow-camera-top={60}
+        shadow-camera-bottom={-60}
+        shadow-camera-near={1}
+        shadow-camera-far={200}
+        shadow-bias={-0.0004}
+      />
+      <hemisphereLight intensity={m.hemi} groundColor="#c8bfae" />
+      {lamps.map((p, i) => (
+        <pointLight key={i} position={p} color="#ffd9a2" intensity={55} distance={30} decay={1.8} />
+      ))}
+    </>
+  )
+}
+
+// Architect "clay model" style: one warm-white matte material over everything.
+function ClayOverride() {
+  const clay = useStore((s) => s.clayMode)
+  const scene = useThree((s) => s.scene)
+  const mat = useMemo(() => new THREE.MeshStandardMaterial({ color: '#efece4', roughness: 0.95 }), [])
+  useEffect(() => {
+    scene.overrideMaterial = clay ? mat : null
+    return () => {
+      scene.overrideMaterial = null
+    }
+  }, [clay, scene, mat])
+  return null
 }
 
 const snapDim = (v: number) => Math.max(0.25, Math.round(v / 0.25) * 0.25)
@@ -57,8 +286,10 @@ function DragController() {
   const dragging = useStore((s) => s.draggingId !== null)
   const resizing = useStore((s) => s.resizing !== null)
   const shellResizing = useStore((s) => s.shellResizing !== null)
+  const walking = useStore((s) => s.viewMode === 'walk')
 
   useEffect(() => {
+    if (walking) return
     if (!placing && !dragging && !resizing && !shellResizing) return
     const el = gl.domElement
     if (controls) controls.enabled = false
@@ -198,7 +429,7 @@ function DragController() {
       el.removeEventListener('pointerdown', onDown)
       if (controls) controls.enabled = true
     }
-  }, [placing, dragging, resizing, shellResizing, gl, camera, controls])
+  }, [placing, dragging, resizing, shellResizing, walking, gl, camera, controls])
 
   return null
 }
@@ -238,8 +469,11 @@ function ArrowPriorityPicker() {
   const controls = useThree((s) => s.controls) as { enabled?: boolean } | null
   const selectedId = useStore((s) => s.selectedId)
   const shellMode = useStore((s) => s.shell.mode)
+  const walking = useStore((s) => s.viewMode === 'walk')
+  const clay = useStore((s) => s.clayMode)
 
   useEffect(() => {
+    if (walking || clay) return // arrows are hidden in walk / clay presentation
     if (!selectedId && shellMode === 0) return
     const el = gl.domElement
 
@@ -301,7 +535,7 @@ function ArrowPriorityPicker() {
 
     el.addEventListener('pointerdown', onDown, { capture: true })
     return () => el.removeEventListener('pointerdown', onDown, { capture: true })
-  }, [selectedId, shellMode, gl, camera, controls])
+  }, [selectedId, shellMode, walking, clay, gl, camera, controls])
 
   return null
 }
@@ -337,31 +571,20 @@ function SceneContent() {
   const select = useStore((s) => s.select)
   const selectedId = useStore((s) => s.selectedId)
   const moveArmed = useStore((s) => s.moveArmed)
+  const walking = useStore((s) => s.viewMode === 'walk')
+  const clay = useStore((s) => s.clayMode)
   const warnings = useMemo(() => getWarningIds(objects, building), [objects, building])
   // hide the resize arrows while Move mode is armed — moving and resizing are
   // separate gestures, and the arrows would only get in the way of the drag
-  const selected = moveArmed ? undefined : objects.find((o) => o.id === selectedId)
+  const selected = moveArmed || walking || clay ? undefined : objects.find((o) => o.id === selectedId)
 
   return (
     <>
-      <ambientLight intensity={0.75} />
-      <directionalLight
-        position={[35, 60, 20]}
-        intensity={1.4}
-        castShadow
-        shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-60}
-        shadow-camera-right={60}
-        shadow-camera-top={60}
-        shadow-camera-bottom={-60}
-        shadow-camera-near={1}
-        shadow-camera-far={200}
-        shadow-bias={-0.0004}
-      />
-      <hemisphereLight intensity={0.35} groundColor="#c8bfae" />
+      <MoodLights />
+      <ClayOverride />
 
       <BuildingFloor />
-      <GridOverlay />
+      {!walking && !clay && <GridOverlay />}
       {objects.map((o) => (
         <PlacedObject key={o.id} o={o} warning={warnings.has(o.id)} elev={elevationFor(o, objects)} />
       ))}
@@ -386,12 +609,15 @@ function SceneContent() {
 
 export function Scene() {
   const viewKey = useStore((s) => s.viewKey)
+  const walking = useStore((s) => s.viewMode === 'walk')
+  const mood = useStore((s) => s.lightMood)
+  const clay = useStore((s) => s.clayMode)
+  const bg = clay ? '#ffffff' : MOODS[mood].bg
   return (
-    <Canvas shadows dpr={[1, 2]} gl={{ preserveDrawingBuffer: true, antialias: true }} style={{ background: '#eceae4' }}>
+    <Canvas shadows dpr={[1, 2]} gl={{ preserveDrawingBuffer: true, antialias: true }} style={{ background: bg }}>
+      <color attach="background" args={[bg]} />
       <CaptureBinder />
-      <group key={`rig-${viewKey}`}>
-        <CameraRig />
-      </group>
+      <group key={`rig-${viewKey}-${walking ? 'walk' : 'orbit'}`}>{walking ? <WalkRig /> : <CameraRig />}</group>
       <DragController />
       <ArrowPriorityPicker />
       <SceneContent />

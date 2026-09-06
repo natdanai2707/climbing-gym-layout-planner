@@ -34,8 +34,9 @@ export function PlacedObject({ o, warning, elev }: { o: Placed; warning: boolean
 
   const onPointerDown = (e: ThreeEvent<PointerEvent>) => {
     if (e.button !== 0) return
-    e.stopPropagation()
     const s = useStore.getState()
+    if (s.viewMode === 'walk') return // walking: taps steer the view, never select
+    e.stopPropagation()
     // Objects only drag when move mode is armed (or right after being dropped) —
     // a plain tap just selects, so brushing the screen can't shift the layout.
     const canDrag = s.pendingId === o.id || (s.moveArmed && s.selectedId === o.id)

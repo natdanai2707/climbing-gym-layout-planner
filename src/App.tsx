@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { Scene } from './components/Scene'
+import { useEffect, useRef } from 'react'
+import { Scene, walkInput } from './components/Scene'
 import { Toolbar } from './components/Toolbar'
 import { Palette } from './components/Palette'
 import { Inspector } from './components/Inspector'
@@ -8,6 +8,67 @@ import { WallDesigner } from './components/WallDesigner'
 import { useStore } from './store'
 import { useWallStore } from './wall/wallStore'
 import { fp } from './placement'
+
+// On-screen joystick for walking on touch devices: writes into walkInput,
+// which the walk rig reads every frame.
+function WalkJoystick() {
+  const baseRef = useRef<HTMLDivElement>(null)
+  const knobRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const base = baseRef.current
+    const knob = knobRef.current
+    if (!base || !knob) return
+    let pid = -1
+    const R = 44
+    const setKnob = (dx: number, dy: number) => {
+      knob.style.transform = `translate(${dx}px, ${dy}px)`
+    }
+    const down = (e: PointerEvent) => {
+      pid = e.pointerId
+      base.setPointerCapture(pid)
+      e.stopPropagation()
+    }
+    const move = (e: PointerEvent) => {
+      if (e.pointerId !== pid) return
+      const r = base.getBoundingClientRect()
+      let dx = e.clientX - (r.left + r.width / 2)
+      let dy = e.clientY - (r.top + r.height / 2)
+      const l = Math.hypot(dx, dy)
+      if (l > R) {
+        dx = (dx / l) * R
+        dy = (dy / l) * R
+      }
+      walkInput.x = dx / R
+      walkInput.y = dy / R
+      setKnob(dx, dy)
+      e.stopPropagation()
+    }
+    const up = (e: PointerEvent) => {
+      if (e.pointerId !== pid) return
+      pid = -1
+      walkInput.x = 0
+      walkInput.y = 0
+      setKnob(0, 0)
+    }
+    base.addEventListener('pointerdown', down)
+    base.addEventListener('pointermove', move)
+    base.addEventListener('pointerup', up)
+    base.addEventListener('pointercancel', up)
+    return () => {
+      walkInput.x = 0
+      walkInput.y = 0
+      base.removeEventListener('pointerdown', down)
+      base.removeEventListener('pointermove', move)
+      base.removeEventListener('pointerup', up)
+      base.removeEventListener('pointercancel', up)
+    }
+  }, [])
+  return (
+    <div ref={baseRef} className="walk-joystick">
+      <div ref={knobRef} className="walk-knob" />
+    </div>
+  )
+}
 
 export default function App() {
   const page = useStore((s) => s.page)
@@ -27,6 +88,8 @@ export default function App() {
   const updateObject = useStore((s) => s.updateObject)
   const moveArmed = useStore((s) => s.moveArmed)
   const setMoveArmed = useStore((s) => s.setMoveArmed)
+  const walking = useStore((s) => s.viewMode === 'walk')
+  const setViewMode = useStore((s) => s.setViewMode)
 
   const pending = objects.find((o) => o.id === pendingId)
   // a selected placed custom wall can be reshaped on the Wall Design page
@@ -56,6 +119,11 @@ export default function App() {
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return
       const s = useStore.getState()
       if (s.page === 'wall') return
+      if (s.viewMode === 'walk') {
+        // walking uses WASD/arrows for movement; Esc steps back out
+        if (e.key === 'Escape') s.setViewMode('iso')
+        return
+      }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
         e.preventDefault()
         if (e.shiftKey) s.redo()
@@ -107,14 +175,26 @@ export default function App() {
         <Palette />
         <div className="canvas-wrap">
           <Scene />
+          {/* first-person walk overlay */}
+          {walking && (
+            <>
+              <button className="walk-exit" onClick={() => setViewMode('iso')}>
+                ✕ Exit walk (Esc)
+              </button>
+              <div className="walk-hint">WASD / joystick to walk · drag to look · Shift to run</div>
+              <WalkJoystick />
+            </>
+          )}
           {/* mobile-only: drawer toggles */}
-          <div className="fab-row">
-            <button onClick={() => setPanelLeft(!panelLeft)}>☰ Objects</button>
-            <button onClick={() => setPanelRight(!panelRight)}>📋 Edit / Stats</button>
-          </div>
+          {!walking && (
+            <div className="fab-row">
+              <button onClick={() => setPanelLeft(!panelLeft)}>☰ Objects</button>
+              <button onClick={() => setPanelRight(!panelRight)}>📋 Edit / Stats</button>
+            </div>
+          )}
           {/* quick actions for a selected (already confirmed) object — all devices.
               Move must be armed explicitly so accidental touches can't shift items. */}
-          {selectedId && !placing && !pending && (
+          {!walking && selectedId && !placing && !pending && (
             <div className="quick-actions">
               <button className={moveArmed ? 'on' : ''} onClick={() => setMoveArmed(!moveArmed)}>
                 ✥ Move{moveArmed ? ': ON' : ''}
@@ -127,9 +207,11 @@ export default function App() {
               </button>
             </div>
           )}
-          {moveArmed && selectedId && !pending && <div className="move-hint">Drag the highlighted item to move it</div>}
+          {!walking && moveArmed && selectedId && !pending && (
+            <div className="move-hint">Drag the highlighted item to move it</div>
+          )}
           {/* pending placement: adjust with the arrows, then confirm (all devices) */}
-          {pending && (
+          {!walking && pending && (
             <div className="pending-bar">
               <span className="pb-hint">Drag arrows to resize · drag body to move</span>
               <div className="pb-buttons">

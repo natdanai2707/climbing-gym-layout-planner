@@ -185,6 +185,86 @@ button:disabled {
   line-height: 1.6;
 }
 
+/* ---------- view segment + walk mode ---------- */
+.view-seg {
+  display: flex;
+}
+
+.view-seg button {
+  border-radius: 0;
+  border-right-width: 0;
+}
+
+.view-seg button:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.view-seg button:last-child {
+  border-radius: 0 6px 6px 0;
+  border-right-width: 1px;
+}
+
+.walk-exit {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  background: #2b2926;
+  color: #fff;
+  border-color: #2b2926;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-weight: 600;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.walk-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  background: rgba(43, 41, 38, 0.78);
+  color: #fff;
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 11px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.walk-joystick {
+  position: absolute;
+  left: 18px;
+  bottom: 46px;
+  width: 108px;
+  height: 108px;
+  border-radius: 50%;
+  background: rgba(43, 41, 38, 0.18);
+  border: 2px solid rgba(43, 41, 38, 0.35);
+  z-index: 65;
+  touch-action: none;
+  display: none; /* touch devices only */
+  align-items: center;
+  justify-content: center;
+}
+
+.walk-knob {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+@media (pointer: coarse) {
+  .walk-joystick {
+    display: flex;
+  }
+}
+
 /* ---------- canvas ---------- */
 .canvas-wrap {
   flex: 1;

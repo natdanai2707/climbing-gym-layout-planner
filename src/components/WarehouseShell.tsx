@@ -27,6 +27,8 @@ export function WarehouseShell() {
   const objects = useStore((s) => s.objects)
   const setShellResizing = useStore((s) => s.setShellResizing)
   const controls = useThree((s) => s.controls) as { enabled?: boolean } | null
+  // no adjustment arrows while walking inside or in clay presentation
+  const presenting = useStore((s) => s.viewMode === 'walk' || s.clayMode)
 
   const W = building.width
   const L = building.length
@@ -198,9 +200,13 @@ export function WarehouseShell() {
       )}
 
       {/* adjustment arrows: each gable end moves ONLY its own end; height at the ridge */}
-      <ArrowHandle color="#f97316" pos={[0, 1.2, L / 2 + 0.6]} rot={[Math.PI / 2, 0, 0]} onDown={startResize('length+')} size={1.4} />
-      <ArrowHandle color="#f97316" pos={[0, 1.2, -L / 2 - 0.6]} rot={[-Math.PI / 2, 0, 0]} onDown={startResize('length-')} size={1.4} />
-      <ArrowHandle color="#f97316" pos={[0, ridge + 0.4, 0]} rot={[0, 0, 0]} onDown={startResize('height')} size={1.4} />
+      {!presenting && (
+        <>
+          <ArrowHandle color="#f97316" pos={[0, 1.2, L / 2 + 0.6]} rot={[Math.PI / 2, 0, 0]} onDown={startResize('length+')} size={1.4} />
+          <ArrowHandle color="#f97316" pos={[0, 1.2, -L / 2 - 0.6]} rot={[-Math.PI / 2, 0, 0]} onDown={startResize('length-')} size={1.4} />
+          <ArrowHandle color="#f97316" pos={[0, ridge + 0.4, 0]} rot={[0, 0, 0]} onDown={startResize('height')} size={1.4} />
+        </>
+      )}
     </group>
   )
 }

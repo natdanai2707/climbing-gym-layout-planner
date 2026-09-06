@@ -122,6 +122,16 @@ export interface GymState {
   toggleGrid: () => void
   toggleLabels: () => void
   resetView: () => void
+
+  // presentation & navigation
+  viewMode: 'iso' | 'walk'
+  setViewMode: (v: 'iso' | 'walk') => void
+  viewPreset: 'iso' | 'top' | 'front' | 'side'
+  setViewPreset: (v: 'iso' | 'top' | 'front' | 'side') => void
+  lightMood: 'day' | 'golden' | 'night'
+  setLightMood: (m: 'day' | 'golden' | 'night') => void
+  clayMode: boolean
+  toggleClay: () => void
 }
 
 // v1 files stored rot in 90° steps; v2 uses 45° steps. Older files kept an
@@ -540,7 +550,20 @@ export const useStore = create<GymState>()(
 
     toggleGrid: () => set({ showGrid: !get().showGrid }),
     toggleLabels: () => set({ showLabels: !get().showLabels }),
-    resetView: () => set({ viewKey: get().viewKey + 1 }),
+    resetView: () => set({ viewKey: get().viewKey + 1, viewPreset: 'iso' }),
+
+    viewMode: 'iso',
+    setViewMode: (v) => {
+      if (v === 'walk')
+        set({ viewMode: v, selectedId: null, moveArmed: false, placingDef: null, ghost: null })
+      else set({ viewMode: v, viewKey: get().viewKey + 1 })
+    },
+    viewPreset: 'iso',
+    setViewPreset: (v) => set({ viewPreset: v, viewMode: 'iso', viewKey: get().viewKey + 1 }),
+    lightMood: 'day',
+    setLightMood: (m) => set({ lightMood: m }),
+    clayMode: false,
+    toggleClay: () => set({ clayMode: !get().clayMode }),
   })),
 )
 

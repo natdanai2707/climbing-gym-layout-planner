@@ -60,6 +60,14 @@ export function Toolbar() {
   const canUndo = useStore((s) => s.past.length > 0)
   const canRedo = useStore((s) => s.future.length > 0)
   const setPage = useStore((s) => s.setPage)
+  const viewMode = useStore((s) => s.viewMode)
+  const setViewMode = useStore((s) => s.setViewMode)
+  const viewPreset = useStore((s) => s.viewPreset)
+  const setViewPreset = useStore((s) => s.setViewPreset)
+  const lightMood = useStore((s) => s.lightMood)
+  const setLightMood = useStore((s) => s.setLightMood)
+  const clayMode = useStore((s) => s.clayMode)
+  const toggleClay = useStore((s) => s.toggleClay)
   const clearAll = useStore((s) => s.clearAll)
   const importLayout = useStore((s) => s.importLayout)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -108,6 +116,42 @@ export function Toolbar() {
         </button>
         <button onClick={redo} disabled={!canRedo} title="Ctrl+Shift+Z">
           ↷ Redo
+        </button>
+        <div className="view-seg" role="group" title="Camera views — zoom follows the cursor / finger">
+          {(
+            [
+              ['iso', '3D'],
+              ['top', 'Top'],
+              ['front', 'Front'],
+              ['side', 'Side'],
+            ] as const
+          ).map(([v, label]) => (
+            <button
+              key={v}
+              className={viewMode === 'iso' && viewPreset === v ? 'on' : ''}
+              onClick={() => setViewPreset(v)}
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            className={viewMode === 'walk' ? 'on' : ''}
+            onClick={() => setViewMode(viewMode === 'walk' ? 'iso' : 'walk')}
+            title="First-person view: walk through the gym at eye level"
+          >
+            🚶 Walk
+          </button>
+        </div>
+        <label className="tb-field">
+          <span>Light</span>
+          <select value={lightMood} onChange={(e) => setLightMood(e.target.value as 'day' | 'golden' | 'night')}>
+            <option value="day">☀ Day</option>
+            <option value="golden">🌇 Sunset</option>
+            <option value="night">🌙 Night</option>
+          </select>
+        </label>
+        <button className={clayMode ? 'on' : ''} onClick={toggleClay} title="Architect clay-model render style">
+          🏛 Clay
         </button>
         <button onClick={resetView} title="Return to the default isometric view">Reset view</button>
         <button className={showGrid ? 'on' : ''} onClick={toggleGrid} title="G">Grid</button>
