@@ -164,8 +164,12 @@ export function Toolbar() {
             <option value="night">🌙 Night</option>
           </select>
         </label>
-        <button className={clayMode ? 'on' : ''} onClick={toggleClay} title="Architect clay-model render style">
-          🏛 Clay
+        <button
+          className={clayMode ? 'on' : ''}
+          onClick={toggleClay}
+          title="Architect presentation style: white background, soft light, amber people"
+        >
+          📐 Present
         </button>
         <button
           className={realMode ? 'on' : ''}

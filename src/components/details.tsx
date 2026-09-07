@@ -118,7 +118,13 @@ export function Figure({
   idx?: number
   scale?: number
 }) {
-  const skin = SKIN_COLORS[idx % SKIN_COLORS.length]
+  // Present style: everyone becomes a flat amber silhouette figure, the way
+  // architects mark people in space-planning boards
+  const present = useStore((s) => s.clayMode)
+  const AMBER = '#f0a63a'
+  const cShirt = present ? AMBER : shirt
+  const cSkin = present ? AMBER : SKIN_COLORS[idx % SKIN_COLORS.length]
+  const cPants = present ? AMBER : PANTS
   const P = POSES[pose]
   const rot3 = (a: number[]) => a as [number, number, number]
   return (
@@ -126,21 +132,21 @@ export function Figure({
       {/* torso + head */}
       <mesh position={[0, 0.76, 0]} castShadow>
         <capsuleGeometry args={[0.13, 0.34, 3, 8]} />
-        <meshStandardMaterial color={shirt} roughness={0.8} />
+        <meshStandardMaterial color={cShirt} roughness={0.8} />
       </mesh>
       <mesh position={[0, 1.18, 0]} castShadow>
         <sphereGeometry args={[0.12, 10, 8]} />
-        <meshStandardMaterial color={skin} roughness={0.7} />
+        <meshStandardMaterial color={cSkin} roughness={0.7} />
       </mesh>
       {/* arms from the shoulders */}
-      <Limb r={0.045} len={0.5} pos={[0.19, 0.92, 0]} rot={rot3(P.aL)} color={shirt} />
-      <Limb r={0.045} len={0.5} pos={[-0.19, 0.92, 0]} rot={rot3(P.aR)} color={shirt} />
+      <Limb r={0.045} len={0.5} pos={[0.19, 0.92, 0]} rot={rot3(P.aL)} color={cShirt} />
+      <Limb r={0.045} len={0.5} pos={[-0.19, 0.92, 0]} rot={rot3(P.aR)} color={cShirt} />
       {/* legs: thigh with nested shin (knee) */}
-      <Limb r={0.055} len={0.24} pos={[0.08, 0.55, 0]} rot={rot3(P.tL)} color={PANTS}>
-        <Limb r={0.048} len={0.24} pos={[0, -0.28, 0]} rot={rot3(P.sL)} color={PANTS} />
+      <Limb r={0.055} len={0.24} pos={[0.08, 0.55, 0]} rot={rot3(P.tL)} color={cPants}>
+        <Limb r={0.048} len={0.24} pos={[0, -0.28, 0]} rot={rot3(P.sL)} color={cPants} />
       </Limb>
-      <Limb r={0.055} len={0.24} pos={[-0.08, 0.55, 0]} rot={rot3(P.tR)} color={PANTS}>
-        <Limb r={0.048} len={0.24} pos={[0, -0.28, 0]} rot={rot3(P.sR)} color={PANTS} />
+      <Limb r={0.055} len={0.24} pos={[-0.08, 0.55, 0]} rot={rot3(P.tR)} color={cPants}>
+        <Limb r={0.048} len={0.24} pos={[0, -0.28, 0]} rot={rot3(P.sR)} color={cPants} />
       </Limb>
     </group>
   )

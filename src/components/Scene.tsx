@@ -433,18 +433,18 @@ function RealisticExtras() {
   )
 }
 
-// Architect "clay model" style: one warm-white matte material over everything.
-function ClayOverride() {
-  const clay = useStore((s) => s.clayMode)
-  const scene = useThree((s) => s.scene)
-  const mat = useMemo(() => new THREE.MeshStandardMaterial({ color: '#efece4', roughness: 0.95 }), [])
-  useEffect(() => {
-    scene.overrideMaterial = clay ? mat : null
-    return () => {
-      scene.overrideMaterial = null
-    }
-  }, [clay, scene, mat])
-  return null
+// Architect "presentation board" style: real colors stay, but on a clean
+// white ground with bright, soft, low-contrast light — the space-planning
+// render look. People turn amber inside Figure; grid and gizmos hide.
+function PresentStyle() {
+  const present = useStore((s) => s.clayMode)
+  if (!present) return null
+  return (
+    <>
+      <ambientLight intensity={0.55} color="#ffffff" />
+      <hemisphereLight intensity={0.3} color="#ffffff" groundColor="#e8e4da" />
+    </>
+  )
 }
 
 const snapDim = (v: number) => Math.max(0.25, Math.round(v / 0.25) * 0.25)
@@ -771,7 +771,7 @@ function SceneContent() {
   return (
     <>
       <MoodLights />
-      <ClayOverride />
+      <PresentStyle />
       <RealisticExtras />
 
       <BuildingFloor />
@@ -782,7 +782,7 @@ function SceneContent() {
       {selected && <ResizeGizmo o={selected} elev={elevationFor(selected, objects)} />}
       <Ghost />
       <WarehouseShell />
-      {!clay && <MeasureGraphics />}
+      <MeasureGraphics />
 
       {/* invisible catcher: click empty ground to deselect */}
       <mesh
