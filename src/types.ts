@@ -16,6 +16,9 @@ export type Category =
   | 'column'
   | 'partition'
   | 'person'
+  | 'ceiling'
+  | 'hvac'
+  | 'site'
 
 export type Rule = 'floor' | 'edge' | 'outdoor'
 

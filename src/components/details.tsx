@@ -7,6 +7,7 @@ import { useWallStore } from '../wall/wallStore'
 import { WallModel } from '../wall/WallModel'
 import { designDepth, designWidth } from '../wall/profile'
 import { SURFACE_TINTED, surfaceMap } from '../materials'
+import { useStore } from '../store'
 
 /**
  * Category / item specific 3D renderers.
@@ -1036,10 +1037,365 @@ function CustomWallObject({ o, tint }: { o: Placed; tint: string | null }) {
   )
 }
 
+/* -------------------------- ceiling & HVAC -------------------------- */
+
+// Suspended ceiling panel. H is the MOUNT height of the panel underside, so
+// the green height arrow tunes the ceiling level to match adjacent wall tops.
+function CeilingPanel({ o, tint }: { o: Placed; tint: string | null }) {
+  const y = Math.max(0.5, o.h)
+  const tiles = useMemo(() => {
+    const xs = spread(Math.max(1, Math.round(o.w / 1.2)) - 1, o.w).map((v) => v + o.w / (2 * Math.max(1, Math.round(o.w / 1.2))))
+    const zs = spread(Math.max(1, Math.round(o.d / 1.2)) - 1, o.d).map((v) => v + o.d / (2 * Math.max(1, Math.round(o.d / 1.2))))
+    return { xs: xs.filter((v) => Math.abs(v) < o.w / 2 - 0.05), zs: zs.filter((v) => Math.abs(v) < o.d / 2 - 0.05) }
+  }, [o.w, o.d])
+  return (
+    <group>
+      <mesh position={[0, y + 0.05, 0]} castShadow receiveShadow>
+        <boxGeometry args={[o.w, 0.1, o.d]} />
+        <meshStandardMaterial color={tint ?? o.color} {...MAT} />
+        <Edges color="#c9c2b4" />
+      </mesh>
+      {/* T-bar grid lines on the underside */}
+      {tiles.xs.map((x, i) => (
+        <Box key={`x${i}`} args={[0.03, 0.02, o.d]} pos={[x, y - 0.012, 0]} color="#cfc9bc" />
+      ))}
+      {tiles.zs.map((z, i) => (
+        <Box key={`z${i}`} args={[o.w, 0.02, 0.03]} pos={[0, y - 0.012, z]} color="#cfc9bc" />
+      ))}
+      {/* hanger rods at the corners */}
+      {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([sx, sz], i) => (
+        <Box key={i} args={[0.04, 0.7, 0.04]} pos={[(sx * (o.w - 0.4)) / 2, y + 0.45, (sz * (o.d - 0.4)) / 2]} color={STEEL} />
+      ))}
+    </group>
+  )
+}
+
+// Galvanized supply duct run at mount height H with joint rings and diffusers.
+// Chain several runs (45° rotation steps) to route a full system.
+function AirDuct({ o, tint }: { o: Placed; tint: string | null }) {
+  const y = Math.max(0.6, o.h)
+  const sec = clampN(o.d, 0.3, 1.2)
+  const joints = useMemo(() => spread(Math.max(1, Math.round(o.w / 1.5)), o.w - 0.2), [o.w])
+  const vents = useMemo(() => spread(Math.max(1, Math.round(o.w / 2.5)), o.w - 0.8), [o.w])
+  const metal = tint ?? o.color
+  return (
+    <group position={[0, y, 0]}>
+      <mesh castShadow>
+        <boxGeometry args={[o.w, sec * 0.7, sec]} />
+        <meshStandardMaterial color={metal} roughness={0.45} metalness={0.55} />
+      </mesh>
+      {joints.map((x, i) => (
+        <mesh key={i} position={[x, 0, 0]}>
+          <boxGeometry args={[0.06, sec * 0.7 + 0.05, sec + 0.05]} />
+          <meshStandardMaterial color="#8f959c" roughness={0.5} metalness={0.5} />
+        </mesh>
+      ))}
+      {/* ceiling diffusers blowing down */}
+      {vents.map((x, i) => (
+        <group key={`v${i}`} position={[x, -sec * 0.35 - 0.05, 0]}>
+          <Box args={[0.45, 0.1, 0.45]} pos={[0, 0, 0]} color={WHITE} />
+          <Box args={[0.3, 0.04, 0.3]} pos={[0, -0.06, 0]} color="#d6d3cb" />
+        </group>
+      ))}
+      {/* hanger rods */}
+      {joints.map((x, i) => (
+        <Box key={`h${i}`} args={[0.03, 0.8, 0.03]} pos={[x, sec * 0.35 + 0.4, 0]} color={STEEL} />
+      ))}
+    </group>
+  )
+}
+
+// Indoor unit (คอยล์เย็น): wall/ceiling-hung cassette at mount height H.
+function CoolingCoil({ o, tint }: { o: Placed; tint: string | null }) {
+  const y = Math.max(0.5, o.h)
+  const body = tint ?? o.color
+  return (
+    <group position={[0, y, 0]}>
+      <mesh castShadow>
+        <boxGeometry args={[o.w, 0.36, o.d]} />
+        <meshStandardMaterial color={body} roughness={0.6} />
+        <Edges color="#c6cad0" />
+      </mesh>
+      {/* louver + indicator */}
+      <Box args={[o.w - 0.1, 0.06, 0.05]} pos={[0, -0.13, o.d / 2 + 0.01]} color="#9aa2ab" />
+      <Box args={[0.08, 0.03, 0.02]} pos={[o.w / 2 - 0.15, 0.08, o.d / 2 + 0.02]} color="#22c55e" />
+      {/* refrigerant pipes running up */}
+      <Box args={[0.05, 0.9, 0.05]} pos={[-o.w / 2 + 0.12, 0.6, -o.d / 4]} color="#8f959c" />
+      <Box args={[0.05, 0.9, 0.05]} pos={[-o.w / 2 + 0.24, 0.6, -o.d / 4]} color="#b9bec5" />
+    </group>
+  )
+}
+
+// Outdoor condensing unit (คอยล์ร้อน) on a small pad, fan grille facing front.
+function Condenser({ o, tint }: { o: Placed; tint: string | null }) {
+  const body = tint ?? o.color
+  const h = clampN(o.h, 0.5, 1.6)
+  return (
+    <group>
+      <Box args={[o.w + 0.1, 0.08, o.d + 0.1]} pos={[0, 0.04, 0]} color="#b8b4aa" />
+      <mesh position={[0, 0.08 + h / 2, 0]} castShadow>
+        <boxGeometry args={[o.w, h, o.d]} />
+        <meshStandardMaterial color={body} roughness={0.55} />
+        <Edges color="#aab0b6" />
+      </mesh>
+      {/* fan grille */}
+      <mesh position={[0, 0.08 + h * 0.55, o.d / 2 + 0.01]} rotation-x={Math.PI / 2}>
+        <cylinderGeometry args={[Math.min(o.w, h) * 0.32, Math.min(o.w, h) * 0.32, 0.04, 20]} />
+        <meshStandardMaterial color="#3f454d" roughness={0.6} />
+      </mesh>
+      {/* side louvers */}
+      {spread(4, h * 0.7).map((yy, i) => (
+        <Box key={i} args={[o.w - 0.08, 0.02, 0.02]} pos={[0, 0.08 + h / 2 + yy, -o.d / 2 - 0.01]} color="#9aa2ab" />
+      ))}
+    </group>
+  )
+}
+
+// HVLS big ceiling fan: drop rod from above, hub and long blades at height H.
+function BigFan({ o, tint }: { o: Placed; tint: string | null }) {
+  const y = Math.max(2.5, o.h)
+  const r = Math.max(o.w, o.d) / 2
+  const color = tint ?? o.color
+  return (
+    <group position={[0, y, 0]}>
+      <Box args={[0.08, 1.0, 0.08]} pos={[0, 0.62, 0]} color={STEEL} />
+      <mesh castShadow>
+        <cylinderGeometry args={[0.22, 0.26, 0.3, 14]} />
+        <meshStandardMaterial color={color} roughness={0.5} metalness={0.3} />
+      </mesh>
+      {Array.from({ length: 6 }, (_, i) => (
+        <group key={i} rotation-y={(i * Math.PI) / 3}>
+          <Box args={[r - 0.3, 0.04, 0.22]} pos={[(r - 0.3) / 2 + 0.25, -0.02, 0]} color="#c8cdd3" rot={[0, 0, 0.06]} />
+        </group>
+      ))}
+    </group>
+  )
+}
+
+// Pedestal fan on the floor.
+function FloorFan({ o, tint }: { o: Placed; tint: string | null }) {
+  const h = clampN(o.h, 0.8, 2.2)
+  const r = clampN(Math.min(o.w, o.d) * 0.45, 0.2, 0.5)
+  const color = tint ?? o.color
+  return (
+    <group>
+      <mesh position={[0, 0.03, 0]} castShadow>
+        <cylinderGeometry args={[r * 0.9, r, 0.06, 16]} />
+        <meshStandardMaterial color={color} {...MAT} />
+      </mesh>
+      <Box args={[0.06, h - r - 0.1, 0.06]} pos={[0, (h - r) / 2, 0]} color="#6b7280" />
+      {/* head cage + blades */}
+      <group position={[0, h - r * 0.6, 0]}>
+        <mesh rotation-x={Math.PI / 2} castShadow>
+          <cylinderGeometry args={[r, r, 0.16, 20]} />
+          <meshStandardMaterial color="#9aa2ab" roughness={0.5} transparent opacity={0.45} />
+        </mesh>
+        <mesh rotation-x={Math.PI / 2}>
+          <cylinderGeometry args={[r * 0.25, r * 0.25, 0.18, 12]} />
+          <meshStandardMaterial color={color} {...MAT} />
+        </mesh>
+        {Array.from({ length: 4 }, (_, i) => (
+          <group key={i} rotation-z={(i * Math.PI) / 2 + 0.4}>
+            <Box args={[r * 0.75, r * 0.4, 0.02]} pos={[r * 0.5, 0, 0]} color="#d3d7db" />
+          </group>
+        ))}
+      </group>
+    </group>
+  )
+}
+
+/* ------------------------------ site & outdoors ------------------------------ */
+
+function Tree({ o, tint }: { o: Placed; tint: string | null }) {
+  const big = o.defId === 'tree_big'
+  const h = o.h
+  const trunkH = big ? h * 0.42 : h * 0.35
+  const leaf = tint ?? o.color
+  const r = Math.min(o.w, o.d) / 2
+  return (
+    <group>
+      <mesh position={[0, trunkH / 2, 0]} castShadow>
+        <cylinderGeometry args={[r * 0.09, r * 0.14, trunkH, 8]} />
+        <meshStandardMaterial color="#7a5b3a" roughness={0.9} />
+      </mesh>
+      <mesh position={[0, trunkH + (h - trunkH) * 0.45, 0]} castShadow>
+        <icosahedronGeometry args={[r * 0.92, 1]} />
+        <meshStandardMaterial color={leaf} roughness={0.9} flatShading />
+      </mesh>
+      <mesh position={[r * 0.35, trunkH + (h - trunkH) * 0.72, r * 0.15]} castShadow>
+        <icosahedronGeometry args={[r * 0.55, 1]} />
+        <meshStandardMaterial color={leaf} roughness={0.9} flatShading />
+      </mesh>
+      {big && (
+        <mesh position={[-r * 0.4, trunkH + (h - trunkH) * 0.6, -r * 0.25]} castShadow>
+          <icosahedronGeometry args={[r * 0.6, 1]} />
+          <meshStandardMaterial color="#5d8f4a" roughness={0.9} flatShading />
+        </mesh>
+      )}
+    </group>
+  )
+}
+
+function Fence({ o, tint }: { o: Placed; tint: string | null }) {
+  const posts = useMemo(() => spread(Math.max(2, Math.round(o.w / 1.5)), o.w - 0.1), [o.w])
+  const c = tint ?? o.color
+  return (
+    <group>
+      {posts.map((x, i) => (
+        <Box key={i} args={[0.07, o.h, 0.07]} pos={[x, o.h / 2, 0]} color={c} />
+      ))}
+      <Box args={[o.w, 0.06, 0.04]} pos={[0, o.h - 0.06, 0]} color={c} />
+      <Box args={[o.w, 0.06, 0.04]} pos={[0, o.h * 0.45, 0]} color={c} />
+      {/* vertical infill bars */}
+      {spread(Math.max(4, Math.round(o.w / 0.18)), o.w - 0.2).map((x, i) => (
+        <Box key={`b${i}`} args={[0.025, o.h - 0.15, 0.025]} pos={[x, (o.h - 0.15) / 2 + 0.05, 0]} color={c} />
+      ))}
+    </group>
+  )
+}
+
+function Hedge({ o, tint }: { o: Placed; tint: string | null }) {
+  const c = tint ?? o.color
+  return (
+    <group>
+      <mesh position={[0, o.h / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[o.w, o.h, o.d]} />
+        <meshStandardMaterial color={c} roughness={0.95} />
+      </mesh>
+      <mesh position={[0, o.h - 0.06, 0]} castShadow>
+        <boxGeometry args={[o.w - 0.12, 0.14, o.d - 0.12]} />
+        <meshStandardMaterial color="#5d8f4a" roughness={0.95} />
+      </mesh>
+    </group>
+  )
+}
+
+// Site light: pole + arm + lamp head; glows and casts real light at night.
+function LightPole({ o, tint }: { o: Placed; tint: string | null }) {
+  const night = useStore((s) => s.lightMood === 'night')
+  const c = tint ?? o.color
+  return (
+    <group>
+      <mesh position={[0, o.h / 2, 0]} castShadow>
+        <cylinderGeometry args={[0.045, 0.07, o.h, 10]} />
+        <meshStandardMaterial color={c} roughness={0.6} />
+      </mesh>
+      <Box args={[0.5, 0.05, 0.05]} pos={[0.25, o.h - 0.08, 0]} color={c} />
+      <mesh position={[0.48, o.h - 0.14, 0]}>
+        <boxGeometry args={[0.34, 0.09, 0.2]} />
+        <meshStandardMaterial
+          color="#e8e4d8"
+          emissive={night ? '#ffe9b0' : '#000000'}
+          emissiveIntensity={night ? 1.6 : 0}
+          roughness={0.5}
+        />
+      </mesh>
+      {night && <pointLight position={[0.48, o.h - 0.3, 0]} color="#ffe0a3" intensity={26} distance={14} decay={1.9} />}
+    </group>
+  )
+}
+
+function Wheel({ pos, r }: { pos: [number, number, number]; r: number }) {
+  return (
+    <mesh position={pos} rotation-x={Math.PI / 2} castShadow>
+      <cylinderGeometry args={[r, r, 0.22, 14]} />
+      <meshStandardMaterial color="#22252a" roughness={0.9} />
+    </mesh>
+  )
+}
+
+// Parked car — rotate in 45° steps to angle-park it.
+function Car({ o, tint }: { o: Placed; tint: string | null }) {
+  const body = tint ?? o.color
+  const L = o.w
+  const W = o.d
+  return (
+    <group>
+      <mesh position={[0, 0.55, 0]} castShadow>
+        <boxGeometry args={[L, 0.5, W]} />
+        <meshStandardMaterial color={body} roughness={0.35} metalness={0.15} />
+      </mesh>
+      <mesh position={[-L * 0.06, 0.98, 0]} castShadow>
+        <boxGeometry args={[L * 0.5, 0.42, W - 0.24]} />
+        <meshStandardMaterial color={body} roughness={0.35} metalness={0.15} />
+      </mesh>
+      {/* windows */}
+      <Box args={[L * 0.5 + 0.02, 0.24, W - 0.34]} pos={[-L * 0.06, 1.0, 0]} color="#3a4652" />
+      <Wheel pos={[L * 0.32, 0.3, W / 2 - 0.08]} r={0.3} />
+      <Wheel pos={[L * 0.32, 0.3, -W / 2 + 0.08]} r={0.3} />
+      <Wheel pos={[-L * 0.32, 0.3, W / 2 - 0.08]} r={0.3} />
+      <Wheel pos={[-L * 0.32, 0.3, -W / 2 + 0.08]} r={0.3} />
+      {/* lights */}
+      <Box args={[0.06, 0.1, 0.28]} pos={[L / 2 - 0.02, 0.62, W / 4]} color="#ffe9b0" />
+      <Box args={[0.06, 0.1, 0.28]} pos={[L / 2 - 0.02, 0.62, -W / 4]} color="#ffe9b0" />
+      <Box args={[0.06, 0.1, 0.24]} pos={[-L / 2 + 0.02, 0.62, W / 4]} color="#b3372c" />
+      <Box args={[0.06, 0.1, 0.24]} pos={[-L / 2 + 0.02, 0.62, -W / 4]} color="#b3372c" />
+    </group>
+  )
+}
+
+function Motorcycle({ o, tint }: { o: Placed; tint: string | null }) {
+  const body = tint ?? o.color
+  const L = o.w
+  return (
+    <group>
+      <Wheel pos={[L * 0.36, 0.3, 0]} r={0.3} />
+      <Wheel pos={[-L * 0.36, 0.3, 0]} r={0.3} />
+      <Box args={[L * 0.55, 0.22, 0.24]} pos={[0, 0.62, 0]} color={body} rot={[0, 0, 0.08]} />
+      <Box args={[L * 0.3, 0.1, 0.2]} pos={[-L * 0.12, 0.76, 0]} color="#2b2f35" />
+      {/* fork + handlebar */}
+      <Box args={[0.05, 0.5, 0.05]} pos={[L * 0.3, 0.62, 0]} color="#8f959c" rot={[0, 0, -0.5]} />
+      <Box args={[0.05, 0.05, 0.5]} pos={[L * 0.24, 0.92, 0]} color="#2b2f35" />
+    </group>
+  )
+}
+
+// Open carport: posts + gently sloped corrugated roof, cars park underneath.
+function Carport({ o, tint }: { o: Placed; tint: string | null }) {
+  const c = tint ?? o.color
+  const slope = 0.08
+  const ribs = useMemo(() => spread(Math.max(3, Math.round(o.w / 0.9)), o.w - 0.2), [o.w])
+  return (
+    <group>
+      {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([sx, sz], i) => (
+        <Box
+          key={i}
+          args={[0.1, o.h - (sz > 0 ? o.d * slope : 0), 0.1]}
+          pos={[(sx * (o.w - 0.3)) / 2, (o.h - (sz > 0 ? o.d * slope : 0)) / 2, (sz * (o.d - 0.3)) / 2]}
+          color={STEEL}
+        />
+      ))}
+      <group position={[0, o.h - (o.d * slope) / 2, 0]} rotation-x={Math.atan(slope)}>
+        <Box args={[o.w, 0.06, o.d + 0.3]} pos={[0, 0, 0]} color={c} />
+        {ribs.map((x, i) => (
+          <Box key={i} args={[0.08, 0.05, o.d + 0.3]} pos={[x, 0.05, 0]} color="#848d97" />
+        ))}
+      </group>
+    </group>
+  )
+}
+
 /* ------------------------------- dispatcher ------------------------------- */
 
 export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
   switch (o.category) {
+    case 'ceiling':
+      return <CeilingPanel o={o} tint={tint} />
+    case 'hvac':
+      if (o.defId === 'duct') return <AirDuct o={o} tint={tint} />
+      if (o.defId === 'fcu') return <CoolingCoil o={o} tint={tint} />
+      if (o.defId === 'condenser') return <Condenser o={o} tint={tint} />
+      if (o.defId === 'bigfan') return <BigFan o={o} tint={tint} />
+      return <FloorFan o={o} tint={tint} />
+    case 'site':
+      if (o.defId === 'tree_small' || o.defId === 'tree_big') return <Tree o={o} tint={tint} />
+      if (o.defId === 'fence') return <Fence o={o} tint={tint} />
+      if (o.defId === 'hedge') return <Hedge o={o} tint={tint} />
+      if (o.defId === 'lightpole') return <LightPole o={o} tint={tint} />
+      if (o.defId === 'car') return <Car o={o} tint={tint} />
+      if (o.defId === 'moto') return <Motorcycle o={o} tint={tint} />
+      if (o.defId === 'carport') return <Carport o={o} tint={tint} />
+      return <Box args={[o.w, o.h, o.d]} pos={[0, o.h / 2, 0]} color={tint ?? o.color} />
     case 'wall_low':
     case 'wall_high':
       return <ClimbingWall o={o} tint={tint} />

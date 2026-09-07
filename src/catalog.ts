@@ -27,6 +27,23 @@ export const CATALOG: ObjectDef[] = [
   { id: 'table', label: 'Table', category: 'furniture', w: 1.6, d: 0.8, h: 0.75, color: '#b98a5a', rule: 'floor' },
   { id: 'stool', label: 'Stool', category: 'furniture', w: 0.5, d: 0.5, h: 0.45, color: '#8a6f52', rule: 'floor' },
   { id: 'bench', label: 'Long Bench', category: 'furniture', w: 2.5, d: 0.4, h: 0.45, color: '#a1785c', rule: 'floor' },
+  // ceiling: H = mounting height of the panel underside — match it to wall tops
+  { id: 'ceiling', label: 'Ceiling Panel (H = mount height)', category: 'ceiling', w: 6.0, d: 6.0, h: 3.0, color: '#f4f1e8', rule: 'floor' },
+  // hvac: for suspended items H = mounting height, adjusted with the green arrow
+  { id: 'duct', label: 'Air Duct Run (H = mount height)', category: 'hvac', w: 6.0, d: 0.6, h: 3.6, color: '#b8bcc2', rule: 'floor' },
+  { id: 'fcu', label: 'Cooling Coil / FCU (H = mount height)', category: 'hvac', w: 1.4, d: 0.45, h: 2.6, color: '#eef0f2', rule: 'floor' },
+  { id: 'condenser', label: 'Condenser (hot coil)', category: 'hvac', w: 1.0, d: 0.42, h: 0.85, color: '#d8dadd', rule: 'outdoor' },
+  { id: 'bigfan', label: 'HVLS Big Fan (H = mount height)', category: 'hvac', w: 4.0, d: 4.0, h: 5.5, color: '#6b7280', rule: 'floor' },
+  { id: 'floorfan', label: 'Floor Fan', category: 'hvac', w: 0.7, d: 0.7, h: 1.5, color: '#374151', rule: 'floor' },
+  // site & outdoors
+  { id: 'tree_small', label: 'Small Tree', category: 'site', w: 1.6, d: 1.6, h: 2.2, color: '#6ca055', rule: 'outdoor' },
+  { id: 'tree_big', label: 'Big Tree', category: 'site', w: 4.0, d: 4.0, h: 7.0, color: '#4e7d3e', rule: 'outdoor' },
+  { id: 'fence', label: 'Fence', category: 'site', w: 3.0, d: 0.12, h: 1.5, color: '#8a9099', rule: 'outdoor' },
+  { id: 'hedge', label: 'Hedge Fence', category: 'site', w: 3.0, d: 0.6, h: 1.3, color: '#4e7d3e', rule: 'outdoor' },
+  { id: 'lightpole', label: 'Light Pole', category: 'site', w: 0.5, d: 0.5, h: 4.5, color: '#3f454d', rule: 'outdoor' },
+  { id: 'car', label: 'Car (parked)', category: 'site', w: 4.6, d: 1.8, h: 1.5, color: '#5b7fb4', rule: 'outdoor' },
+  { id: 'moto', label: 'Motorcycle', category: 'site', w: 2.1, d: 0.8, h: 1.2, color: '#c2452f', rule: 'outdoor' },
+  { id: 'carport', label: 'Carport Roof', category: 'site', w: 5.5, d: 5.5, h: 2.7, color: '#9aa3ad', rule: 'outdoor' },
 ]
 
 export const CATEGORY_LABELS: Record<Category, string> = {
@@ -47,6 +64,9 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   partition: 'Partitions',
   furniture: 'Furniture',
   person: 'People',
+  ceiling: 'Ceiling',
+  hvac: 'Air & Ventilation',
+  site: 'Site & Outdoors',
 }
 
 // Order in which categories appear in the palette
@@ -66,6 +86,9 @@ export const CATEGORY_ORDER: Category[] = [
   'fixture',
   'furniture',
   'person',
+  'ceiling',
+  'hvac',
   'door',
   'parking',
+  'site',
 ]

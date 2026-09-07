@@ -82,8 +82,10 @@ function CameraRig() {
 export const walkInput = { x: 0, y: 0 }
 
 // Solid things a walker bumps into; flat zones/mats and doors stay passable,
-// and mezzanines are open underneath.
-const WALK_PASSABLE = new Set(['zone', 'mat', 'door', 'person', 'parking', 'mezzanine'])
+// mezzanines are open underneath, and ceilings/ducts/fans hang overhead.
+const WALK_PASSABLE = new Set(['zone', 'mat', 'door', 'person', 'parking', 'mezzanine', 'ceiling', 'hvac'])
+// site items that are roofs on posts — walk (and park) beneath them
+const WALK_PASSABLE_DEFS = new Set(['carport'])
 
 function WalkRig() {
   const gl = useThree((s) => s.gl)
@@ -190,7 +192,7 @@ function WalkRig() {
       nz = Math.max(s.building.centerZ - bl, Math.min(s.building.centerZ + bl, nz))
       const blocked = (x: number, z: number) => {
         for (const o of s.objects) {
-          if (o.level === 'upper' || o.h < 0.9 || WALK_PASSABLE.has(o.category)) continue
+          if (o.level === 'upper' || o.h < 0.9 || WALK_PASSABLE.has(o.category) || WALK_PASSABLE_DEFS.has(o.defId)) continue
           const { fw, fd } = fp(o)
           if (Math.abs(x - o.x) < fw / 2 + 0.25 && Math.abs(z - o.z) < fd / 2 + 0.25) return true
         }
