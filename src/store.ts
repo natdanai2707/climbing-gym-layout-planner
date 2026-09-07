@@ -435,7 +435,11 @@ export const useStore = create<GymState>()(
 
     setResizing: (r) => {
       if (r !== null) get().snapshot() // one undo step per resize gesture
-      set({ resizing: r })
+      set(
+        r === null
+          ? { resizing: null, building: growToFit(get().building, get().objects) }
+          : { resizing: r },
+      )
     },
 
     // Apply a resize WITHOUT re-snapping the center to the grid — the dragged
@@ -548,6 +552,7 @@ export const useStore = create<GymState>()(
           return { ...o, rot, x: r.x, z: r.z }
         }),
       })
+      set({ building: growToFit(get().building, get().objects) })
     },
 
     removeSelected: () => {
@@ -575,6 +580,7 @@ export const useStore = create<GymState>()(
           return { ...next, x: r.x, z: r.z, rot: r.rot }
         }),
       })
+      set({ building: growToFit(get().building, get().objects) })
     },
 
     // After a wall design is edited on the Wall Design page, refit every placed
@@ -599,6 +605,7 @@ export const useStore = create<GymState>()(
           return { ...next, x: r.x, z: r.z, rot: r.rot }
         }),
       })
+      set({ building: growToFit(get().building, get().objects) })
     },
 
     clearAll: () => {
