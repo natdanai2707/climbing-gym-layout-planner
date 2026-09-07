@@ -44,6 +44,12 @@ export interface Placed {
   color: string
   rule: Rule
   level?: 'ground' | 'upper' // 'upper' = sits on a mezzanine floor
+  material?: 'epdm' | 'concrete' | 'birch' // surface finish for zones/mats
+}
+
+export interface FloorFinish {
+  material: 'paint' | 'epdm' | 'concrete' | 'birch'
+  color: string
 }
 
 export interface Building {
@@ -90,4 +96,5 @@ export interface LayoutFile {
   shell?: ShellConfig
   wallDesigns?: WallDesign[]
   coolFactor?: number // aircon sizing assumption (BTU/hr per m³ of hall volume)
+  floor?: FloorFinish
 }

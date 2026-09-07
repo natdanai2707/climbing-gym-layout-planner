@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
-import type { Building, LayoutFile, ObjectDef, Placed, ShellConfig } from './types'
+import type { Building, FloorFinish, LayoutFile, ObjectDef, Placed, ShellConfig } from './types'
 import { clampInside, computeDrop, elevationFor, fp, resolveAfterResize } from './placement'
 import { useWallStore } from './wall/wallStore'
 
@@ -8,6 +8,7 @@ interface Snapshot {
   building: Building
   objects: Placed[]
   shell: ShellConfig
+  floor: FloorFinish
 }
 
 let lastSnapAt = 0
@@ -132,7 +133,57 @@ export interface GymState {
   setLightMood: (m: 'day' | 'golden' | 'night') => void
   clayMode: boolean
   toggleClay: () => void
+
+  // whole-hall floor finish + one-tap color/material themes
+  floor: FloorFinish
+  setFloor: (f: Partial<FloorFinish>) => void
+  applyTheme: (name: ThemeName) => void
+
+  // measuring tape: click two floor points, repeat for more runs
+  measuring: boolean
+  toggleMeasure: () => void
+  measures: Array<{ a: [number, number]; b: [number, number] }>
+  measureDraft: [number, number] | null
+  addMeasurePoint: (x: number, z: number) => void
+
+  // walkthrough snapshot gallery (session only)
+  shots: string[]
+  addShot: (dataUrl: string) => void
+  clearShots: () => void
 }
+
+export type ThemeName = 'teal' | 'birch' | 'mono'
+
+// Preset looks matched to typical architect boards: walls cycle through the
+// accent palette, zones become EPDM rubber patches, mats and the hall floor
+// follow suit.
+const THEMES: Record<
+  ThemeName,
+  { floor: FloorFinish; walls: string[]; mat: string; zone: string; zoneSurface?: 'epdm' | 'concrete' | 'birch' }
+> = {
+  teal: {
+    floor: { material: 'concrete', color: '#ffffff' },
+    walls: ['#1fb2a6', '#eef0ec', '#0e8f86', '#f4f6f2'],
+    mat: '#9aa2ab',
+    zone: '#cbd4d2',
+    zoneSurface: 'epdm',
+  },
+  birch: {
+    floor: { material: 'concrete', color: '#f4ede3' },
+    walls: ['#e6cfa4', '#f2c9c9', '#5b6472', '#efe1c2'],
+    mat: '#cdd7e2',
+    zone: '#e0d9cd',
+    zoneSurface: 'epdm',
+  },
+  mono: {
+    floor: { material: 'paint', color: '#f0eee8' },
+    walls: ['#f4f1ea', '#e6e3dc', '#f4f1ea', '#dbd8d1'],
+    mat: '#e3e0d9',
+    zone: '#e9e6df',
+  },
+}
+
+const THEME_WALL_CATS = new Set(['wall_low', 'wall_high', 'wall_island', 'wall_custom', 'partition'])
 
 // v1 files stored rot in 90° steps; v2 uses 45° steps. Older files kept an
 // independent shell length/offset — those now fold into the building itself.
@@ -154,8 +205,15 @@ function normalizeFile(file: LayoutFile): { building: Building; objects: Placed[
 const DEFAULT_SHELL: ShellConfig = { mode: 0, eave: 6 }
 
 const DEFAULT_COOL_FACTOR = 220 // ~600 BTU/m² at a 2.7 m ceiling, volume-based
+const DEFAULT_FLOOR: FloorFinish = { material: 'paint', color: '#e4c9a3' }
 
-function loadSaved(): { building: Building; objects: Placed[]; shell: ShellConfig; coolFactor: number } {
+function loadSaved(): {
+  building: Building
+  objects: Placed[]
+  shell: ShellConfig
+  coolFactor: number
+  floor: FloorFinish
+} {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
@@ -165,13 +223,14 @@ function loadSaved(): { building: Building; objects: Placed[]; shell: ShellConfi
           ...normalizeFile(data),
           shell: { ...DEFAULT_SHELL, ...data.shell },
           coolFactor: typeof data.coolFactor === 'number' ? data.coolFactor : DEFAULT_COOL_FACTOR,
+          floor: { ...DEFAULT_FLOOR, ...data.floor },
         }
       }
     }
   } catch {
     // ignore corrupt saves
   }
-  return { building: DEFAULT_BUILDING, objects: [], shell: DEFAULT_SHELL, coolFactor: DEFAULT_COOL_FACTOR }
+  return { building: DEFAULT_BUILDING, objects: [], shell: DEFAULT_SHELL, coolFactor: DEFAULT_COOL_FACTOR, floor: DEFAULT_FLOOR }
 }
 
 export const useStore = create<GymState>()(
@@ -215,19 +274,20 @@ export const useStore = create<GymState>()(
       const now = Date.now()
       if (coalesce && now - lastSnapAt < 800) return
       lastSnapAt = now
-      const { building, objects, shell, past } = get()
-      set({ past: [...past.slice(-99), { building, objects, shell }], future: [] })
+      const { building, objects, shell, floor, past } = get()
+      set({ past: [...past.slice(-99), { building, objects, shell, floor }], future: [] })
     },
     undo: () => {
-      const { past, future, building, objects, shell } = get()
+      const { past, future, building, objects, shell, floor } = get()
       if (past.length === 0) return
       const prev = past[past.length - 1]
       set({
         past: past.slice(0, -1),
-        future: [...future.slice(-99), { building, objects, shell }],
+        future: [...future.slice(-99), { building, objects, shell, floor }],
         building: prev.building,
         objects: prev.objects,
         shell: prev.shell,
+        floor: prev.floor ?? floor,
         selectedId: null,
         pendingId: null,
         resizing: null,
@@ -238,15 +298,16 @@ export const useStore = create<GymState>()(
       })
     },
     redo: () => {
-      const { past, future, building, objects, shell } = get()
+      const { past, future, building, objects, shell, floor } = get()
       if (future.length === 0) return
       const next = future[future.length - 1]
       set({
         future: future.slice(0, -1),
-        past: [...past.slice(-99), { building, objects, shell }],
+        past: [...past.slice(-99), { building, objects, shell, floor }],
         building: next.building,
         objects: next.objects,
         shell: next.shell,
+        floor: next.floor ?? floor,
         selectedId: null,
         pendingId: null,
         resizing: null,
@@ -541,6 +602,7 @@ export const useStore = create<GymState>()(
         ...normalizeFile(file),
         shell: { ...DEFAULT_SHELL, ...file.shell },
         coolFactor: typeof file.coolFactor === 'number' ? file.coolFactor : get().coolFactor,
+        floor: { ...DEFAULT_FLOOR, ...file.floor },
         selectedId: null,
         placingDef: null,
         ghost: null,
@@ -564,18 +626,63 @@ export const useStore = create<GymState>()(
     setLightMood: (m) => set({ lightMood: m }),
     clayMode: false,
     toggleClay: () => set({ clayMode: !get().clayMode }),
+
+    setFloor: (f) => {
+      get().snapshot(true)
+      set({ floor: { ...get().floor, ...f } })
+    },
+
+    // One undo step restores both the previous colors and the previous floor.
+    applyTheme: (name) => {
+      const t = THEMES[name]
+      if (!t) return
+      get().snapshot()
+      let wi = 0
+      set({
+        floor: t.floor,
+        objects: get().objects.map((o) => {
+          if (THEME_WALL_CATS.has(o.category)) return { ...o, color: t.walls[wi++ % t.walls.length] }
+          if (o.category === 'mat') return { ...o, color: t.mat }
+          if (o.category === 'zone') return { ...o, color: t.zone, material: t.zoneSurface }
+          return o
+        }),
+      })
+    },
+
+    measuring: false,
+    measures: [],
+    measureDraft: null,
+    toggleMeasure: () => {
+      const on = !get().measuring
+      set({
+        measuring: on,
+        measures: on ? get().measures : [],
+        measureDraft: null,
+        selectedId: on ? null : get().selectedId,
+        moveArmed: on ? false : get().moveArmed,
+      })
+    },
+    addMeasurePoint: (x, z) => {
+      const d = get().measureDraft
+      if (!d) set({ measureDraft: [x, z] })
+      else set({ measureDraft: null, measures: [...get().measures, { a: d, b: [x, z] }] })
+    },
+
+    shots: [],
+    addShot: (dataUrl) => set({ shots: [...get().shots.slice(-23), dataUrl] }),
+    clearShots: () => set({ shots: [] }),
   })),
 )
 
 // ---- auto-save to localStorage (debounced) ----
 let saveTimer: ReturnType<typeof setTimeout> | undefined
 useStore.subscribe(
-  (s) => [s.building, s.objects, s.shell, s.coolFactor] as const,
-  ([building, objects, shell, coolFactor]) => {
+  (s) => [s.building, s.objects, s.shell, s.coolFactor, s.floor] as const,
+  ([building, objects, shell, coolFactor, floor]) => {
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
       try {
-        const file: LayoutFile = { version: FILE_VERSION, building, objects, shell, coolFactor }
+        const file: LayoutFile = { version: FILE_VERSION, building, objects, shell, coolFactor, floor }
         localStorage.setItem(STORAGE_KEY, JSON.stringify(file))
       } catch {
         // storage full / unavailable — ignore
@@ -585,8 +692,8 @@ useStore.subscribe(
 )
 
 export function exportLayout(): LayoutFile {
-  const { building, objects, shell, coolFactor } = useStore.getState()
-  return { version: FILE_VERSION, building, objects, shell, coolFactor, wallDesigns: useWallStore.getState().designs }
+  const { building, objects, shell, coolFactor, floor } = useStore.getState()
+  return { version: FILE_VERSION, building, objects, shell, coolFactor, floor, wallDesigns: useWallStore.getState().designs }
 }
 
 // handy for debugging / automated UI tests

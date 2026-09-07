@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { exportLayout, useStore } from '../store'
+import type { ThemeName } from '../store'
 import type { LayoutFile } from '../types'
 import { canvasCapture } from './Scene'
 
@@ -68,7 +69,18 @@ export function Toolbar() {
   const setLightMood = useStore((s) => s.setLightMood)
   const clayMode = useStore((s) => s.clayMode)
   const toggleClay = useStore((s) => s.toggleClay)
+  const applyTheme = useStore((s) => s.applyTheme)
+  const floor = useStore((s) => s.floor)
+  const setFloor = useStore((s) => s.setFloor)
+  const measuring = useStore((s) => s.measuring)
+  const toggleMeasure = useStore((s) => s.toggleMeasure)
+  const addShot = useStore((s) => s.addShot)
   const clearAll = useStore((s) => s.clearAll)
+
+  const takeShot = () => {
+    const el = canvasCapture.el
+    if (el) addShot(el.toDataURL('image/png'))
+  }
   const importLayout = useStore((s) => s.importLayout)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -152,6 +164,45 @@ export function Toolbar() {
         </label>
         <button className={clayMode ? 'on' : ''} onClick={toggleClay} title="Architect clay-model render style">
           🏛 Clay
+        </button>
+        <label className="tb-field">
+          <span>Theme</span>
+          <select
+            value=""
+            onChange={(e) => {
+              if (e.target.value) applyTheme(e.target.value as ThemeName)
+              e.target.value = ''
+            }}
+            title="One-tap color & material scheme for walls, zones, mats and floor (undoable)"
+          >
+            <option value="">Apply…</option>
+            <option value="teal">Teal + Concrete</option>
+            <option value="birch">Birch + Pastel</option>
+            <option value="mono">Mono White</option>
+          </select>
+        </label>
+        <label className="tb-field">
+          <span>Floor</span>
+          <select
+            value={floor.material}
+            onChange={(e) => setFloor({ material: e.target.value as typeof floor.material })}
+            title="Hall floor finish"
+          >
+            <option value="paint">Painted</option>
+            <option value="concrete">Concrete</option>
+            <option value="birch">Birch wood</option>
+            <option value="epdm">EPDM rubber</option>
+          </select>
+        </label>
+        <button
+          className={measuring ? 'on' : ''}
+          onClick={toggleMeasure}
+          title="Measuring tape: tap two points on the floor; repeat for more runs"
+        >
+          📏 Measure
+        </button>
+        <button onClick={takeShot} title="Capture the current view into the shot gallery">
+          📸 Shot
         </button>
         <button onClick={resetView} title="Return to the default isometric view">Reset view</button>
         <button className={showGrid ? 'on' : ''} onClick={toggleGrid} title="G">Grid</button>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
-import { OrbitControls, OrthographicCamera, PerspectiveCamera } from '@react-three/drei'
+import { Html, Line, OrbitControls, OrthographicCamera, PerspectiveCamera } from '@react-three/drei'
 import { useStore } from '../store'
 import type { ResizeAxis, ResizeState } from '../store'
 import type { Placed } from '../types'
@@ -255,6 +255,105 @@ function MoodLights() {
   )
 }
 
+/* ------------------------------ measuring tape ------------------------------ */
+
+// While measuring, canvas taps drop points on the floor plane (snapped to
+// 25 cm); two points make a run. Runs stay visible until measuring is toggled
+// off. Selection is suspended so taps never grab objects.
+function MeasureController() {
+  const gl = useThree((s) => s.gl)
+  const camera = useThree((s) => s.camera)
+  const measuring = useStore((s) => s.measuring)
+  const walking = useStore((s) => s.viewMode === 'walk')
+
+  useEffect(() => {
+    if (!measuring || walking) return
+    const el = gl.domElement
+    const raycaster = new THREE.Raycaster()
+    const pt = new THREE.Vector3()
+    let downAt: { x: number; y: number } | null = null
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0 && e.pointerType !== 'touch') return
+      downAt = { x: e.clientX, y: e.clientY }
+    }
+    const onUp = (e: PointerEvent) => {
+      // only a tap (not an orbit drag) places a point
+      if (!downAt || Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 8) {
+        downAt = null
+        return
+      }
+      downAt = null
+      const rect = el.getBoundingClientRect()
+      const ndc = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      )
+      raycaster.setFromCamera(ndc, camera)
+      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+      if (!raycaster.ray.intersectPlane(plane, pt)) return
+      const snap = (v: number) => Math.round(v / 0.25) * 0.25
+      useStore.getState().addMeasurePoint(snap(pt.x), snap(pt.z))
+    }
+    el.addEventListener('pointerdown', onDown)
+    el.addEventListener('pointerup', onUp)
+    return () => {
+      el.removeEventListener('pointerdown', onDown)
+      el.removeEventListener('pointerup', onUp)
+    }
+  }, [measuring, walking, gl, camera])
+  return null
+}
+
+function MeasurePoint({ p }: { p: [number, number] }) {
+  return (
+    <mesh position={[p[0], 0.06, p[1]]} renderOrder={6}>
+      <cylinderGeometry args={[0.14, 0.14, 0.06, 16]} />
+      <meshBasicMaterial color="#e11d48" depthTest={false} />
+    </mesh>
+  )
+}
+
+function MeasureGraphics() {
+  const measures = useStore((s) => s.measures)
+  const draft = useStore((s) => s.measureDraft)
+  const measuring = useStore((s) => s.measuring)
+  if (!measuring) return null
+  return (
+    <group>
+      {measures.map((m, i) => {
+        const dist = Math.hypot(m.b[0] - m.a[0], m.b[1] - m.a[1])
+        const mid: [number, number, number] = [(m.a[0] + m.b[0]) / 2, 0.1, (m.a[1] + m.b[1]) / 2]
+        return (
+          <group key={i}>
+            <Line
+              points={[
+                [m.a[0], 0.07, m.a[1]],
+                [m.b[0], 0.07, m.b[1]],
+              ]}
+              color="#e11d48"
+              lineWidth={2.5}
+              depthTest={false}
+            />
+            <MeasurePoint p={m.a} />
+            <MeasurePoint p={m.b} />
+            <Html position={mid} center zIndexRange={[45, 0]} style={{ pointerEvents: 'none' }}>
+              <div className="measure-label">{dist.toFixed(2)} m</div>
+            </Html>
+          </group>
+        )
+      })}
+      {draft && (
+        <group>
+          <MeasurePoint p={draft} />
+          <Html position={[draft[0], 0.35, draft[1]]} center zIndexRange={[45, 0]} style={{ pointerEvents: 'none' }}>
+            <div className="measure-label">tap the second point…</div>
+          </Html>
+        </group>
+      )}
+    </group>
+  )
+}
+
 // Architect "clay model" style: one warm-white matte material over everything.
 function ClayOverride() {
   const clay = useStore((s) => s.clayMode)
@@ -472,8 +571,10 @@ function ArrowPriorityPicker() {
   const walking = useStore((s) => s.viewMode === 'walk')
   const clay = useStore((s) => s.clayMode)
 
+  const measuring = useStore((s) => s.measuring)
+
   useEffect(() => {
-    if (walking || clay) return // arrows are hidden in walk / clay presentation
+    if (walking || clay || measuring) return // arrows hidden while presenting / measuring
     if (!selectedId && shellMode === 0) return
     const el = gl.domElement
 
@@ -535,7 +636,7 @@ function ArrowPriorityPicker() {
 
     el.addEventListener('pointerdown', onDown, { capture: true })
     return () => el.removeEventListener('pointerdown', onDown, { capture: true })
-  }, [selectedId, shellMode, walking, clay, gl, camera, controls])
+  }, [selectedId, shellMode, walking, clay, measuring, gl, camera, controls])
 
   return null
 }
@@ -591,6 +692,7 @@ function SceneContent() {
       {selected && <ResizeGizmo o={selected} elev={elevationFor(selected, objects)} />}
       <Ghost />
       <WarehouseShell />
+      {!clay && <MeasureGraphics />}
 
       {/* invisible catcher: click empty ground to deselect */}
       <mesh
@@ -620,6 +722,7 @@ export function Scene() {
       <group key={`rig-${viewKey}-${walking ? 'walk' : 'orbit'}`}>{walking ? <WalkRig /> : <CameraRig />}</group>
       <DragController />
       <ArrowPriorityPicker />
+      <MeasureController />
       <SceneContent />
     </Canvas>
   )

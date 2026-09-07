@@ -265,6 +265,89 @@ button:disabled {
   }
 }
 
+.walk-shot {
+  position: absolute;
+  right: 16px;
+  bottom: 46px;
+  z-index: 65;
+  font-size: 22px;
+  padding: 12px 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.measure-label {
+  background: #e11d48;
+  color: #fff;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.measure-hint {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  background: #e11d48;
+  color: #fff;
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.shots-panel {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 62;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #ddd8cd;
+  border-radius: 10px;
+  padding: 6px 8px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18);
+  max-width: min(46vw, 420px);
+}
+
+.shots-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+  font-size: 12px;
+}
+
+.shots-head b {
+  flex: 1;
+}
+
+.shots-head button {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.shots-strip {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+}
+
+.shots-strip img {
+  height: 56px;
+  border-radius: 6px;
+  border: 1px solid #d4cfc3;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 /* ---------- canvas ---------- */
 .canvas-wrap {
   flex: 1;

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Scene, walkInput } from './components/Scene'
+import { Scene, canvasCapture, walkInput } from './components/Scene'
 import { Toolbar } from './components/Toolbar'
 import { Palette } from './components/Palette'
 import { Inspector } from './components/Inspector'
@@ -90,6 +90,24 @@ export default function App() {
   const setMoveArmed = useStore((s) => s.setMoveArmed)
   const walking = useStore((s) => s.viewMode === 'walk')
   const setViewMode = useStore((s) => s.setViewMode)
+  const measuring = useStore((s) => s.measuring)
+  const shots = useStore((s) => s.shots)
+  const addShot = useStore((s) => s.addShot)
+  const clearShots = useStore((s) => s.clearShots)
+
+  const takeShot = () => {
+    const el = canvasCapture.el
+    if (el) addShot(el.toDataURL('image/png'))
+  }
+  const downloadShot = (url: string, i: number) => {
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `gym-walkthrough-${String(i + 1).padStart(2, '0')}.png`
+    a.click()
+  }
+  const downloadAllShots = () => {
+    shots.forEach((url, i) => setTimeout(() => downloadShot(url, i), i * 350))
+  }
 
   const pending = objects.find((o) => o.id === pendingId)
   // a selected placed custom wall can be reshaped on the Wall Design page
@@ -122,6 +140,10 @@ export default function App() {
       if (s.viewMode === 'walk') {
         // walking uses WASD/arrows for movement; Esc steps back out
         if (e.key === 'Escape') s.setViewMode('iso')
+        return
+      }
+      if (s.measuring && e.key === 'Escape') {
+        s.toggleMeasure()
         return
       }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
@@ -181,9 +203,32 @@ export default function App() {
               <button className="walk-exit" onClick={() => setViewMode('iso')}>
                 ✕ Exit walk (Esc)
               </button>
-              <div className="walk-hint">WASD / joystick to walk · drag to look · Shift to run</div>
+              <button className="walk-shot" onClick={takeShot} title="Capture this view for the presentation set">
+                📸
+              </button>
+              <div className="walk-hint">WASD / joystick to walk · drag to look · 📸 to snap</div>
               <WalkJoystick />
             </>
+          )}
+          {measuring && !walking && (
+            <div className="measure-hint">📏 Tap two points on the floor · Esc or the button to finish</div>
+          )}
+          {/* walkthrough shot gallery */}
+          {shots.length > 0 && (
+            <div className="shots-panel">
+              <div className="shots-head">
+                <b>📸 {shots.length} shot{shots.length > 1 ? 's' : ''}</b>
+                <button onClick={downloadAllShots}>⬇ All</button>
+                <button className="danger" onClick={clearShots}>
+                  ✕
+                </button>
+              </div>
+              <div className="shots-strip">
+                {shots.map((url, i) => (
+                  <img key={i} src={url} alt={`shot ${i + 1}`} title="Tap to download" onClick={() => downloadShot(url, i)} />
+                ))}
+              </div>
+            </div>
           )}
           {/* mobile-only: drawer toggles */}
           {!walking && (

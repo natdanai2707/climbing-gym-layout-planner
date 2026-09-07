@@ -6,6 +6,7 @@ import type { Placed } from '../types'
 import { useWallStore } from '../wall/wallStore'
 import { WallModel } from '../wall/WallModel'
 import { designDepth, designWidth } from '../wall/profile'
+import { SURFACE_TINTED, surfaceMap } from '../materials'
 
 /**
  * Category / item specific 3D renderers.
@@ -402,7 +403,16 @@ function Mats({ o, tint }: { o: Placed; tint: string | null }) {
     <group>
       <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[o.w, h, o.d]} />
-        <meshStandardMaterial color={tint ?? o.color} {...MAT} />
+        {o.material ? (
+          <meshStandardMaterial
+            key={o.material}
+            color={tint ?? (SURFACE_TINTED[o.material] ? o.color : '#ffffff')}
+            map={surfaceMap(o.material, o.w, o.d)}
+            roughness={0.95}
+          />
+        ) : (
+          <meshStandardMaterial color={tint ?? o.color} {...MAT} />
+        )}
         <Edges color="#ffffff" />
       </mesh>
       {seams.map((x, i) => (
@@ -570,6 +580,22 @@ function StoolMesh({ o, tint }: { o: Placed; tint: string | null }) {
 /* -------------------------------- zones -------------------------------- */
 
 function ZonePatch({ o, tint, opacity = 0.85 }: { o: Placed; tint: string | null; opacity?: number }) {
+  const surf = o.material
+  if (surf) {
+    // real surface finish (EPDM rubber / concrete / birch), tinted by the
+    // item color where the material allows it
+    return (
+      <mesh position={[0, 0.04, 0]} receiveShadow>
+        <boxGeometry args={[o.w, 0.08, o.d]} />
+        <meshStandardMaterial
+          key={surf}
+          color={tint ?? (SURFACE_TINTED[surf] ? o.color : '#ffffff')}
+          map={surfaceMap(surf, o.w, o.d)}
+          roughness={0.95}
+        />
+      </mesh>
+    )
+  }
   return (
     <mesh position={[0, 0.04, 0]} receiveShadow>
       <boxGeometry args={[o.w, 0.08, o.d]} />
@@ -999,10 +1025,12 @@ function CustomWallObject({ o, tint }: { o: Placed; tint: string | null }) {
   const sx = o.w / Math.max(0.1, designWidth(design))
   const sy = o.h / Math.max(0.1, design.height)
   const sz = o.d / Math.max(0.1, designDepth(design))
+  // a recolored instance (inspector edit or theme) overrides the design color
+  const colorTint = tint ?? (o.color && o.color !== design.color ? o.color : null)
   return (
     <group scale={[sx, sy, sz]} position={[0, 0, 0]}>
       <group position={[0, 0, 0]}>
-        <WallModel design={design} tint={tint} />
+        <WallModel design={design} tint={colorTint} />
       </group>
     </group>
   )

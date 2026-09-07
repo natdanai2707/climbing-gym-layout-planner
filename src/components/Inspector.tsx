@@ -75,6 +75,20 @@ export function Inspector() {
         <span>Color</span>
         <input type="color" value={selected.color} onChange={(e) => set({ color: e.target.value })} />
       </label>
+      {(selected.category === 'zone' || selected.category === 'mat') && (
+        <label className="insp-field wide">
+          <span>Surface material</span>
+          <select
+            value={selected.material ?? ''}
+            onChange={(e) => set({ material: (e.target.value || undefined) as Placed['material'] })}
+          >
+            <option value="">Plain color</option>
+            <option value="epdm">EPDM rubber (tinted by color)</option>
+            <option value="concrete">Concrete</option>
+            <option value="birch">Birch plywood</option>
+          </select>
+        </label>
+      )}
       {selected.category !== 'mezzanine' && selected.rule === 'floor' && (
         <label className="insp-field wide">
           <span>Level</span>
