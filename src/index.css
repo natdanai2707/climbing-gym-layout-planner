@@ -250,6 +250,13 @@ button:disabled {
   justify-content: center;
 }
 
+.walk-joystick.look {
+  left: auto;
+  right: 18px;
+  background: rgba(37, 99, 235, 0.14);
+  border-color: rgba(37, 99, 235, 0.4);
+}
+
 .walk-knob {
   width: 44px;
   height: 44px;
@@ -257,6 +264,12 @@ button:disabled {
   background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: #55524b;
+  user-select: none;
 }
 
 @media (pointer: coarse) {
@@ -275,6 +288,13 @@ button:disabled {
   border-radius: 50%;
   background: #ffffff;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+@media (pointer: coarse) {
+  /* the right look-stick takes the corner — lift the camera button above it */
+  .walk-shot {
+    bottom: 172px;
+  }
 }
 
 .measure-label {

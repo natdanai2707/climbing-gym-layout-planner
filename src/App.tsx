@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Scene, canvasCapture, walkInput } from './components/Scene'
+import { Scene, canvasCapture, walkInput, walkLook } from './components/Scene'
 import { Toolbar } from './components/Toolbar'
 import { Palette } from './components/Palette'
 import { Inspector } from './components/Inspector'
@@ -9,9 +9,10 @@ import { useStore } from './store'
 import { useWallStore } from './wall/wallStore'
 import { fp } from './placement'
 
-// On-screen joystick for walking on touch devices: writes into walkInput,
-// which the walk rig reads every frame.
-function WalkJoystick() {
+// On-screen joystick for touch devices: writes into a shared {x, y} target
+// read by the walk rig every frame. Used twice — left stick walks
+// (walkInput), right stick turns the view (walkLook).
+function WalkJoystick({ target, look = false }: { target: { x: number; y: number }; look?: boolean }) {
   const baseRef = useRef<HTMLDivElement>(null)
   const knobRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -23,13 +24,7 @@ function WalkJoystick() {
     const setKnob = (dx: number, dy: number) => {
       knob.style.transform = `translate(${dx}px, ${dy}px)`
     }
-    const down = (e: PointerEvent) => {
-      pid = e.pointerId
-      base.setPointerCapture(pid)
-      e.stopPropagation()
-    }
-    const move = (e: PointerEvent) => {
-      if (e.pointerId !== pid) return
+    const apply = (e: PointerEvent) => {
       const r = base.getBoundingClientRect()
       let dx = e.clientX - (r.left + r.width / 2)
       let dy = e.clientY - (r.top + r.height / 2)
@@ -38,16 +33,26 @@ function WalkJoystick() {
         dx = (dx / l) * R
         dy = (dy / l) * R
       }
-      walkInput.x = dx / R
-      walkInput.y = dy / R
+      target.x = dx / R
+      target.y = dy / R
       setKnob(dx, dy)
+    }
+    const down = (e: PointerEvent) => {
+      pid = e.pointerId
+      base.setPointerCapture(pid)
+      apply(e) // react immediately, even to a tap-and-hold at the rim
+      e.stopPropagation()
+    }
+    const move = (e: PointerEvent) => {
+      if (e.pointerId !== pid) return
+      apply(e)
       e.stopPropagation()
     }
     const up = (e: PointerEvent) => {
       if (e.pointerId !== pid) return
       pid = -1
-      walkInput.x = 0
-      walkInput.y = 0
+      target.x = 0
+      target.y = 0
       setKnob(0, 0)
     }
     base.addEventListener('pointerdown', down)
@@ -55,17 +60,19 @@ function WalkJoystick() {
     base.addEventListener('pointerup', up)
     base.addEventListener('pointercancel', up)
     return () => {
-      walkInput.x = 0
-      walkInput.y = 0
+      target.x = 0
+      target.y = 0
       base.removeEventListener('pointerdown', down)
       base.removeEventListener('pointermove', move)
       base.removeEventListener('pointerup', up)
       base.removeEventListener('pointercancel', up)
     }
-  }, [])
+  }, [target])
   return (
-    <div ref={baseRef} className="walk-joystick">
-      <div ref={knobRef} className="walk-knob" />
+    <div ref={baseRef} className={`walk-joystick${look ? ' look' : ''}`}>
+      <div ref={knobRef} className="walk-knob">
+        {look ? '⟲' : '✥'}
+      </div>
     </div>
   )
 }
@@ -206,8 +213,9 @@ export default function App() {
               <button className="walk-shot" onClick={takeShot} title="Capture this view for the presentation set">
                 📸
               </button>
-              <div className="walk-hint">WASD / joystick to walk · drag to look · 📸 to snap</div>
-              <WalkJoystick />
+              <div className="walk-hint">Left stick / WASD walk · right stick or drag to look · 📸 snap</div>
+              <WalkJoystick target={walkInput} />
+              <WalkJoystick target={walkLook} look />
             </>
           )}
           {measuring && !walking && (

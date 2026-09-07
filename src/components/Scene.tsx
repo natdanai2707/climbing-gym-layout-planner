@@ -77,9 +77,12 @@ function CameraRig() {
 
 /* ----------------------------- first person view ----------------------------- */
 
-// Touch joystick input, written by the on-screen joystick in App and read by
-// the walk rig every frame. x = strafe (-1..1), y = forward (-1 = forward).
+// Touch joystick input, written by the on-screen joysticks in App and read by
+// the walk rig every frame. walkInput: left stick, x = strafe, y = forward
+// (-1 = forward). walkLook: right stick, turns/tilts the view continuously
+// while held — much easier than swiping repeatedly on a phone.
 export const walkInput = { x: 0, y: 0 }
+export const walkLook = { x: 0, y: 0 }
 
 // Solid things a walker bumps into; flat zones/mats and doors stay passable,
 // mezzanines are open underneath, and ceilings/ducts/fans hang overhead.
@@ -127,8 +130,10 @@ function WalkRig() {
     }
     const move = (e: PointerEvent) => {
       if (e.pointerId !== pid) return
-      st.current.yaw -= (e.clientX - lx) * 0.005
-      st.current.pitch = Math.max(-1.35, Math.min(1.35, st.current.pitch - (e.clientY - ly) * 0.005))
+      // fingers swipe short distances on small screens — boost touch sensitivity
+      const k = e.pointerType === 'touch' ? 0.0085 : 0.005
+      st.current.yaw -= (e.clientX - lx) * k
+      st.current.pitch = Math.max(-1.35, Math.min(1.35, st.current.pitch - (e.clientY - ly) * k))
       lx = e.clientX
       ly = e.clientY
     }
@@ -181,6 +186,11 @@ function WalkRig() {
     const v = st.current
     const EYE = 1.65
     const s = useStore.getState()
+    // right stick: continuous turn/tilt while held
+    if (walkLook.x !== 0 || walkLook.y !== 0) {
+      v.yaw -= walkLook.x * 2.4 * dt
+      v.pitch = Math.max(-1.35, Math.min(1.35, v.pitch - walkLook.y * 1.7 * dt))
+    }
     // walkable surface height at a point: ground, stair ramps, mezzanine tops
     const supportAt = (x: number, z: number, foot: number) => {
       let best = 0
@@ -237,7 +247,7 @@ function WalkRig() {
     // follow the ground / ramp / mezzanine smoothly
     const targetY = EYE + supportAt(v.pos.x, v.pos.z, v.pos.y - EYE)
     v.pos.y += (targetY - v.pos.y) * Math.min(1, dt * 12)
-    ;(window as unknown as Record<string, unknown>).__walkPos = [v.pos.x, v.pos.y, v.pos.z] // for tests
+    ;(window as unknown as Record<string, unknown>).__walkPos = [v.pos.x, v.pos.y, v.pos.z, v.yaw] // for tests
     camera.position.copy(v.pos)
     camera.rotation.order = 'YXZ'
     camera.rotation.set(v.pitch, v.yaw, 0)
