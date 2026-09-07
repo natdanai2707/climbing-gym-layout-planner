@@ -69,6 +69,8 @@ export function Toolbar() {
   const setLightMood = useStore((s) => s.setLightMood)
   const clayMode = useStore((s) => s.clayMode)
   const toggleClay = useStore((s) => s.toggleClay)
+  const realMode = useStore((s) => s.realMode)
+  const toggleReal = useStore((s) => s.toggleReal)
   const applyTheme = useStore((s) => s.applyTheme)
   const floor = useStore((s) => s.floor)
   const setFloor = useStore((s) => s.setFloor)
@@ -164,6 +166,13 @@ export function Toolbar() {
         </label>
         <button className={clayMode ? 'on' : ''} onClick={toggleClay} title="Architect clay-model render style">
           🏛 Clay
+        </button>
+        <button
+          className={realMode ? 'on' : ''}
+          onClick={toggleReal}
+          title="Realistic render: real sky, soft shadows, polished reflective floor"
+        >
+          ✨ Real
         </button>
         <label className="tb-field">
           <span>Theme</span>

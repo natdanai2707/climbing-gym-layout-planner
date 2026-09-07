@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
-import { Html, Line, OrbitControls, OrthographicCamera, PerspectiveCamera } from '@react-three/drei'
+import { Html, Line, OrbitControls, OrthographicCamera, PerspectiveCamera, Sky, SoftShadows, Stars } from '@react-three/drei'
 import { useStore } from '../store'
 import type { ResizeAxis, ResizeState } from '../store'
 import type { Placed } from '../types'
@@ -163,7 +163,7 @@ function WalkRig() {
   }, [])
 
   useFrame((_, dtRaw) => {
-    const dt = Math.min(dtRaw, 0.05)
+    const dt = Math.min(dtRaw, 0.12)
     const k = keys.current
     let f = 0
     let r = 0
@@ -179,29 +179,65 @@ function WalkRig() {
       r /= len
     }
     const v = st.current
+    const EYE = 1.65
+    const s = useStore.getState()
+    // walkable surface height at a point: ground, stair ramps, mezzanine tops
+    const supportAt = (x: number, z: number, foot: number) => {
+      let best = 0
+      for (const o of s.objects) {
+        let cand = -1
+        if (o.category === 'mezzanine') {
+          const { fw, fd } = fp(o)
+          if (Math.abs(x - o.x) < fw / 2 && Math.abs(z - o.z) < fd / 2) cand = o.h
+        } else if (o.category === 'stairs') {
+          // stairs climb from local +d/2 (bottom) to -d/2 (top)
+          const th = (o.rot * Math.PI) / 4
+          const dx = x - o.x
+          const dz = z - o.z
+          const lx = dx * Math.cos(th) - dz * Math.sin(th)
+          const lz = dx * Math.sin(th) + dz * Math.cos(th)
+          if (Math.abs(lx) < o.w / 2 + 0.1 && Math.abs(lz) < o.d / 2 + 0.3) {
+            const t = Math.max(0, Math.min(1, (o.d / 2 - lz) / o.d))
+            cand = o.h * t
+          }
+        }
+        // can step up ~half a meter; any drop is allowed
+        if (cand >= 0 && cand <= foot + 0.55 && cand > best) best = cand
+      }
+      return best
+    }
     if (len > 0.001) {
       const speed = k.has('ShiftLeft') || k.has('ShiftRight') ? 6 : 3.2
       const sin = Math.sin(v.yaw)
       const cos = Math.cos(v.yaw)
       let nx = v.pos.x + (-sin * f + cos * r) * speed * dt
       let nz = v.pos.z + (-cos * f - sin * r) * speed * dt
-      const s = useStore.getState()
       const bw = s.building.width / 2 + s.building.apron - 0.3
       const bl = s.building.length / 2 + s.building.apron - 0.3
       nx = Math.max(-bw, Math.min(bw, nx))
       nz = Math.max(s.building.centerZ - bl, Math.min(s.building.centerZ + bl, nz))
+      const foot = v.pos.y - EYE
       const blocked = (x: number, z: number) => {
         for (const o of s.objects) {
-          if (o.level === 'upper' || o.h < 0.9 || WALK_PASSABLE.has(o.category) || WALK_PASSABLE_DEFS.has(o.defId)) continue
+          if (o.h < 0.9 || o.category === 'stairs' || WALK_PASSABLE.has(o.category) || WALK_PASSABLE_DEFS.has(o.defId)) continue
+          const elev = elevationFor(o, s.objects)
+          if (elev + o.h <= foot + 0.45) continue // entirely below the feet
+          if (elev >= foot + 1.55) continue // entirely above the head
           const { fw, fd } = fp(o)
           if (Math.abs(x - o.x) < fw / 2 + 0.25 && Math.abs(z - o.z) < fd / 2 + 0.25) return true
         }
         return false
       }
-      if (!blocked(nx, nz)) v.pos.set(nx, 1.65, nz)
-      else if (!blocked(nx, v.pos.z)) v.pos.x = nx
+      if (!blocked(nx, nz)) {
+        v.pos.x = nx
+        v.pos.z = nz
+      } else if (!blocked(nx, v.pos.z)) v.pos.x = nx
       else if (!blocked(v.pos.x, nz)) v.pos.z = nz
     }
+    // follow the ground / ramp / mezzanine smoothly
+    const targetY = EYE + supportAt(v.pos.x, v.pos.z, v.pos.y - EYE)
+    v.pos.y += (targetY - v.pos.y) * Math.min(1, dt * 12)
+    ;(window as unknown as Record<string, unknown>).__walkPos = [v.pos.x, v.pos.y, v.pos.z] // for tests
     camera.position.copy(v.pos)
     camera.rotation.order = 'YXZ'
     camera.rotation.set(v.pitch, v.yaw, 0)
@@ -356,6 +392,37 @@ function MeasureGraphics() {
   )
 }
 
+// Realistic presentation: procedural sky (stars at night), percent-closer
+// soft shadows, a touch more exposure. The reflective floor lives in
+// BuildingFloor. No external assets — everything is generated on the GPU.
+function RealisticExtras() {
+  const real = useStore((s) => s.realMode)
+  const mood = useStore((s) => s.lightMood)
+  const gl = useThree((s) => s.gl)
+  useEffect(() => {
+    gl.toneMappingExposure = real ? 1.15 : 1
+    return () => {
+      gl.toneMappingExposure = 1
+    }
+  }, [real, gl])
+  if (!real) return null
+  return (
+    <>
+      <SoftShadows size={16} samples={10} focus={0.6} />
+      {mood === 'night' ? (
+        <Stars radius={260} depth={60} count={3200} factor={5} saturation={0} fade speed={0} />
+      ) : (
+        <Sky
+          distance={4000}
+          sunPosition={mood === 'golden' ? [58, 10, 32] : [35, 60, 20]}
+          turbidity={mood === 'golden' ? 8 : 4}
+          rayleigh={mood === 'golden' ? 2.5 : 1}
+        />
+      )}
+    </>
+  )
+}
+
 // Architect "clay model" style: one warm-white matte material over everything.
 function ClayOverride() {
   const clay = useStore((s) => s.clayMode)
@@ -371,6 +438,16 @@ function ClayOverride() {
 }
 
 const snapDim = (v: number) => Math.max(0.25, Math.round(v / 0.25) * 0.25)
+
+// Height at which the side resize arrows sit. Suspended/elevated items
+// (ceilings, ducts, FCUs, big fans, mezzanine floors) get their arrows at
+// their own working level instead of near the floor, so they're reachable.
+function arrowLevel(o: Placed): number {
+  if (o.category === 'ceiling' || o.category === 'mezzanine') return Math.max(0.25, o.h)
+  if (o.category === 'hvac' && (o.defId === 'duct' || o.defId === 'fcu' || o.defId === 'bigfan'))
+    return Math.max(0.25, o.h)
+  return Math.min(Math.max(o.h * 0.5, 0.25), 1.2)
+}
 
 /**
  * Handles the three pointer-driven interactions by raycasting from window-level
@@ -609,7 +686,7 @@ function ArrowPriorityPicker() {
             elev + ly,
             o.z - lx * Math.sin(th) + lz * Math.cos(th),
           )
-        const yMid = Math.min(Math.max(o.h * 0.5, 0.25), 1.2)
+        const yMid = arrowLevel(o)
         const start = (axis: ResizeAxis, sign: 1 | -1) => () =>
           s.setResizing({ id: o.id, axis, sign, start: { w: o.w, d: o.d, x: o.x, z: o.z } })
         add(loc(o.w / 2 + 0.95, yMid, 0), start('x', 1))
@@ -656,7 +733,7 @@ function ResizeGizmo({ o, elev }: { o: Placed; elev: number }) {
     const r: ResizeState = { id: o.id, axis, sign, start: { w: o.w, d: o.d, x: o.x, z: o.z } }
     setResizing(r)
   }
-  const yMid = Math.min(Math.max(o.h * 0.5, 0.25), 1.2)
+  const yMid = arrowLevel(o)
   return (
     <group position={[o.x, elev, o.z]} rotation-y={(o.rot * Math.PI) / 4}>
       <ArrowHandle color="#dc2626" pos={[o.w / 2 + 0.35, yMid, 0]} rot={[0, 0, -Math.PI / 2]} onDown={start('x', 1)} />
@@ -685,6 +762,7 @@ function SceneContent() {
     <>
       <MoodLights />
       <ClayOverride />
+      <RealisticExtras />
 
       <BuildingFloor />
       {!walking && !clay && <GridOverlay />}

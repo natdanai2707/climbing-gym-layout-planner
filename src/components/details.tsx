@@ -404,7 +404,7 @@ function Mats({ o, tint }: { o: Placed; tint: string | null }) {
     <group>
       <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[o.w, h, o.d]} />
-        {o.material ? (
+        {o.material && o.material !== 'glass' ? (
           <meshStandardMaterial
             key={o.material}
             color={tint ?? (SURFACE_TINTED[o.material] ? o.color : '#ffffff')}
@@ -581,7 +581,7 @@ function StoolMesh({ o, tint }: { o: Placed; tint: string | null }) {
 /* -------------------------------- zones -------------------------------- */
 
 function ZonePatch({ o, tint, opacity = 0.85 }: { o: Placed; tint: string | null; opacity?: number }) {
-  const surf = o.material
+  const surf = o.material && o.material !== 'glass' ? o.material : undefined
   if (surf) {
     // real surface finish (EPDM rubber / concrete / birch), tinted by the
     // item color where the material allows it
@@ -1070,6 +1070,50 @@ function CeilingPanel({ o, tint }: { o: Placed; tint: string | null }) {
   )
 }
 
+// Glass panel with frame + mullions, shared by partitions and bulkheads.
+function GlassPanel({ w, h, t, tint }: { w: number; h: number; t: number; tint: string | null }) {
+  const posts = useMemo(() => spread(Math.max(2, Math.round(w / 1.2)), w - 0.06), [w])
+  return (
+    <group>
+      <mesh castShadow>
+        <boxGeometry args={[w, h, Math.max(0.02, t * 0.35)]} />
+        <meshStandardMaterial color={tint ?? '#bfe0ea'} transparent opacity={0.25} roughness={0.08} metalness={0.1} depthWrite={false} />
+      </mesh>
+      <Box args={[w, 0.06, t]} pos={[0, h / 2 - 0.03, 0]} color="#3f454d" />
+      <Box args={[w, 0.06, t]} pos={[0, -h / 2 + 0.03, 0]} color="#3f454d" />
+      {posts.map((x, i) => (
+        <Box key={i} args={[0.05, h, t]} pos={[x, 0, 0]} color="#3f454d" />
+      ))}
+    </group>
+  )
+}
+
+// Vertical ceiling / bulkhead: a partition-like panel hanging DOWN from the
+// roof. H is the height of its BOTTOM edge (line it up with wall tops); the
+// panel extends `drop` meters upward from there, with hanger rods on top.
+function Bulkhead({ o, tint }: { o: Placed; tint: string | null }) {
+  const bottom = Math.max(0.3, o.h)
+  const drop = clampN(o.drop ?? 1.5, 0.3, 12)
+  const t = Math.max(0.08, o.d)
+  const rods = useMemo(() => spread(Math.max(2, Math.round(o.w / 2)), o.w - 0.3), [o.w])
+  return (
+    <group position={[0, bottom + drop / 2, 0]}>
+      {o.material === 'glass' ? (
+        <GlassPanel w={o.w} h={drop} t={t} tint={tint} />
+      ) : (
+        <mesh castShadow receiveShadow>
+          <boxGeometry args={[o.w, drop, t]} />
+          <meshStandardMaterial color={tint ?? o.color} {...MAT} />
+          <Edges color="#c9c2b4" />
+        </mesh>
+      )}
+      {rods.map((x, i) => (
+        <Box key={i} args={[0.04, 0.7, 0.04]} pos={[x, drop / 2 + 0.35, 0]} color={STEEL} />
+      ))}
+    </group>
+  )
+}
+
 // Galvanized supply duct run at mount height H with joint rings and diffusers.
 // Chain several runs (45° rotation steps) to route a full system.
 function AirDuct({ o, tint }: { o: Placed; tint: string | null }) {
@@ -1380,6 +1424,7 @@ function Carport({ o, tint }: { o: Placed; tint: string | null }) {
 export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
   switch (o.category) {
     case 'ceiling':
+      if (o.defId === 'bulkhead') return <Bulkhead o={o} tint={tint} />
       return <CeilingPanel o={o} tint={tint} />
     case 'hvac':
       if (o.defId === 'duct') return <AirDuct o={o} tint={tint} />
@@ -1412,7 +1457,13 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
     case 'column':
       return <Column o={o} tint={tint} />
     case 'partition':
-      // interior partition wall: a plain slab, resizable/rotatable like the rest
+      // interior partition wall: solid slab, or a framed clear-glass panel
+      if (o.material === 'glass')
+        return (
+          <group position={[0, o.h / 2, 0]}>
+            <GlassPanel w={o.w} h={o.h} t={Math.max(0.08, o.d)} tint={tint} />
+          </group>
+        )
       return (
         <mesh position={[0, o.h / 2, 0]} castShadow receiveShadow>
           <boxGeometry args={[o.w, o.h, Math.max(0.08, o.d)]} />

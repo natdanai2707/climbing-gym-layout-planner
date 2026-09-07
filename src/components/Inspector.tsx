@@ -75,6 +75,26 @@ export function Inspector() {
         <span>Color</span>
         <input type="color" value={selected.color} onChange={(e) => set({ color: e.target.value })} />
       </label>
+      {(selected.category === 'partition' || selected.defId === 'bulkhead') && (
+        <label className="insp-field wide">
+          <span>Finish</span>
+          <select
+            value={selected.material === 'glass' ? 'glass' : ''}
+            onChange={(e) => set({ material: (e.target.value || undefined) as Placed['material'] })}
+          >
+            <option value="">Solid panel</option>
+            <option value="glass">Clear glass</option>
+          </select>
+        </label>
+      )}
+      {selected.defId === 'bulkhead' && (
+        <Field
+          label="Panel drop below hangers (m)"
+          value={selected.drop ?? 1.5}
+          min={0.3}
+          onChange={(v) => set({ drop: v })}
+        />
+      )}
       {(selected.category === 'zone' || selected.category === 'mat') && (
         <label className="insp-field wide">
           <span>Surface material</span>

@@ -47,7 +47,8 @@ export interface Placed {
   color: string
   rule: Rule
   level?: 'ground' | 'upper' // 'upper' = sits on a mezzanine floor
-  material?: 'epdm' | 'concrete' | 'birch' // surface finish for zones/mats
+  material?: 'epdm' | 'concrete' | 'birch' | 'glass' // surface finish (zones/mats) or glass partitions
+  drop?: number // vertical ceiling (bulkhead): panel extent hanging below its top hangers (m)
 }
 
 export interface FloorFinish {

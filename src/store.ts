@@ -133,6 +133,8 @@ export interface GymState {
   setLightMood: (m: 'day' | 'golden' | 'night') => void
   clayMode: boolean
   toggleClay: () => void
+  realMode: boolean // realistic presentation: sky, soft shadows, reflective floor
+  toggleReal: () => void
 
   // whole-hall floor finish + one-tap color/material themes
   floor: FloorFinish
@@ -625,7 +627,9 @@ export const useStore = create<GymState>()(
     lightMood: 'day',
     setLightMood: (m) => set({ lightMood: m }),
     clayMode: false,
-    toggleClay: () => set({ clayMode: !get().clayMode }),
+    toggleClay: () => set({ clayMode: !get().clayMode, realMode: false }),
+    realMode: false,
+    toggleReal: () => set({ realMode: !get().realMode, clayMode: false }),
 
     setFloor: (f) => {
       get().snapshot(true)

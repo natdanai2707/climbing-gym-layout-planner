@@ -29,6 +29,8 @@ export const CATALOG: ObjectDef[] = [
   { id: 'bench', label: 'Long Bench', category: 'furniture', w: 2.5, d: 0.4, h: 0.45, color: '#a1785c', rule: 'floor' },
   // ceiling: H = mounting height of the panel underside — match it to wall tops
   { id: 'ceiling', label: 'Ceiling Panel (H = mount height)', category: 'ceiling', w: 6.0, d: 6.0, h: 3.0, color: '#f4f1e8', rule: 'floor' },
+  // vertical ceiling: hangs down from the roof like a partition; H = bottom edge height
+  { id: 'bulkhead', label: 'Vertical Ceiling (H = bottom edge)', category: 'ceiling', w: 6.0, d: 0.15, h: 3.0, color: '#f4f1e8', rule: 'floor' },
   // hvac: for suspended items H = mounting height, adjusted with the green arrow
   { id: 'duct', label: 'Air Duct Run (H = mount height)', category: 'hvac', w: 6.0, d: 0.6, h: 3.6, color: '#b8bcc2', rule: 'floor' },
   { id: 'fcu', label: 'Cooling Coil / FCU (H = mount height)', category: 'hvac', w: 1.4, d: 0.45, h: 2.6, color: '#eef0f2', rule: 'floor' },
