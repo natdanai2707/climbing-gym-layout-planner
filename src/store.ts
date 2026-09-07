@@ -201,7 +201,40 @@ function normalizeFile(file: LayoutFile): { building: Building; objects: Placed[
     if (typeof legacyShell.length === 'number') building.length = legacyShell.length
     if (typeof legacyShell.offset === 'number' && building.centerZ === 0) building.centerZ = legacyShell.offset
   }
-  return { building, objects }
+  // open at the right size: the shell must already cover every placed item
+  return { building: growToFit(building, objects), objects }
+}
+
+// Grow the building (never shrink) so its footprint contains every floor
+// item. Used by resizing AND on every load/import, so a saved layout whose
+// items outgrew the stored building opens with the shell at the right size
+// instead of snapping only when an arrow is first touched.
+function growToFit(building: Building, objects: Placed[]): Building {
+  const floors = objects.filter((o) => o.rule === 'floor')
+  if (floors.length === 0) return building
+  const b = { ...building }
+  let minX = Infinity
+  let maxX = -Infinity
+  let minZ = Infinity
+  let maxZ = -Infinity
+  for (const o of floors) {
+    const { fw, fd } = fp(o)
+    minX = Math.min(minX, o.x - fw / 2)
+    maxX = Math.max(maxX, o.x + fw / 2)
+    minZ = Math.min(minZ, o.z - fd / 2)
+    maxZ = Math.max(maxZ, o.z + fd / 2)
+  }
+  // width is centered on x = 0
+  const needW = 2 * Math.max(maxX, -minX, 0)
+  if (b.width < needW) b.width = needW
+  // length bounds must keep containing every item
+  let bMin = b.centerZ - b.length / 2
+  let bMax = b.centerZ + b.length / 2
+  bMin = Math.min(bMin, minZ)
+  bMax = Math.max(bMax, maxZ)
+  b.length = bMax - bMin
+  b.centerZ = (bMin + bMax) / 2
+  return b
 }
 
 const DEFAULT_SHELL: ShellConfig = { mode: 0, eave: 6 }
@@ -329,35 +362,11 @@ export const useStore = create<GymState>()(
     // Resizing never squeezes the layout: floor items stay exactly where they
     // are, and the building simply refuses to shrink past their outer edges.
     setBuilding: (patch) => {
-      const building = { ...get().building, ...patch }
+      let building = { ...get().building, ...patch }
       building.width = Math.max(2, building.width)
       building.length = Math.max(4, Math.min(300, building.length))
       building.apron = Math.max(0, building.apron)
-
-      const floors = get().objects.filter((o) => o.rule === 'floor')
-      if (floors.length > 0) {
-        let minX = Infinity
-        let maxX = -Infinity
-        let minZ = Infinity
-        let maxZ = -Infinity
-        for (const o of floors) {
-          const { fw, fd } = fp(o)
-          minX = Math.min(minX, o.x - fw / 2)
-          maxX = Math.max(maxX, o.x + fw / 2)
-          minZ = Math.min(minZ, o.z - fd / 2)
-          maxZ = Math.max(maxZ, o.z + fd / 2)
-        }
-        // width is centered on x = 0
-        const needW = 2 * Math.max(maxX, -minX, 0)
-        if (building.width < needW) building.width = needW
-        // length bounds must keep containing every item
-        let bMin = building.centerZ - building.length / 2
-        let bMax = building.centerZ + building.length / 2
-        bMin = Math.min(bMin, minZ)
-        bMax = Math.max(bMax, maxZ)
-        building.length = bMax - bMin
-        building.centerZ = (bMin + bMax) / 2
-      }
+      building = growToFit(building, get().objects)
 
       // doors follow their wall; outdoor items get pushed back into the apron
       const objects = get().objects.map((o) =>
@@ -412,7 +421,7 @@ export const useStore = create<GymState>()(
       })
     },
 
-    confirmPending: () => set({ pendingId: null }),
+    confirmPending: () => set({ pendingId: null, building: growToFit(get().building, get().objects) }),
 
     cancelPending: () => {
       const { pendingId } = get()
@@ -512,7 +521,8 @@ export const useStore = create<GymState>()(
           objects: get().objects.map((o) => (o.id === draggingId ? { ...o, ...dragOrigin } : o)),
         })
       }
-      set({ draggingId: null, dragOrigin: null, dragValid: true })
+      // the shell/building always covers the layout, even right after a move
+      set({ draggingId: null, dragOrigin: null, dragValid: true, building: growToFit(get().building, get().objects) })
     },
 
     // rotates in 45° steps; edge objects (doors) stay flush with their wall
