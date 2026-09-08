@@ -59,6 +59,7 @@ function Box({
 
 const HOLD_COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#a855f7', '#eab308', '#ec4899', '#14b8a6']
 const SKIN_COLORS = ['#f2c9a0', '#e0ac7e', '#b98058', '#8d5f3d']
+const HAIR_COLORS = ['#2c2320', '#171717', '#4a382a', '#5b4632', '#3a3a3e']
 const PANTS = '#374151'
 
 export type Pose = 'stand' | 'walk' | 'sit' | 'climb' | 'push' | 'hang'
@@ -125,28 +126,57 @@ export function Figure({
   const cShirt = present ? AMBER : shirt
   const cSkin = present ? AMBER : SKIN_COLORS[idx % SKIN_COLORS.length]
   const cPants = present ? AMBER : PANTS
+  const cHair = present ? AMBER : HAIR_COLORS[(idx * 3 + 1) % HAIR_COLORS.length]
+  const cShoe = present ? AMBER : '#2b2f35'
   const P = POSES[pose]
   const rot3 = (a: number[]) => a as [number, number, number]
+  const hand = (
+    <mesh position={[0, -0.5, 0]} castShadow>
+      <sphereGeometry args={[0.042, 8, 6]} />
+      <meshStandardMaterial color={cSkin} roughness={0.7} />
+    </mesh>
+  )
   return (
     <group position={pos} rotation-y={ry} scale={scale}>
-      {/* torso + head */}
-      <mesh position={[0, 0.76, 0]} castShadow>
-        <capsuleGeometry args={[0.13, 0.34, 3, 8]} />
-        <meshStandardMaterial color={cShirt} roughness={0.8} />
+      {/* shirt torso over pants hips */}
+      <mesh position={[0, 0.8, 0]} castShadow>
+        <capsuleGeometry args={[0.125, 0.28, 4, 10]} />
+        <meshStandardMaterial color={cShirt} roughness={0.85} />
       </mesh>
-      <mesh position={[0, 1.18, 0]} castShadow>
-        <sphereGeometry args={[0.12, 10, 8]} />
+      <mesh position={[0, 0.58, 0]} castShadow>
+        <capsuleGeometry args={[0.108, 0.1, 3, 10]} />
+        <meshStandardMaterial color={cPants} roughness={0.85} />
+      </mesh>
+      {/* neck, head and a hair cap so heads stop reading as clay balls */}
+      <mesh position={[0, 1.05, 0]}>
+        <cylinderGeometry args={[0.045, 0.052, 0.09, 8]} />
         <meshStandardMaterial color={cSkin} roughness={0.7} />
       </mesh>
-      {/* arms from the shoulders */}
-      <Limb r={0.045} len={0.5} pos={[0.19, 0.92, 0]} rot={rot3(P.aL)} color={cShirt} />
-      <Limb r={0.045} len={0.5} pos={[-0.19, 0.92, 0]} rot={rot3(P.aR)} color={cShirt} />
-      {/* legs: thigh with nested shin (knee) */}
+      <mesh position={[0, 1.17, 0]} castShadow>
+        <sphereGeometry args={[0.105, 12, 10]} />
+        <meshStandardMaterial color={cSkin} roughness={0.7} />
+      </mesh>
+      <mesh position={[0, 1.2, -0.018]} scale={[1.05, 0.85, 1.05]} castShadow>
+        <sphereGeometry args={[0.106, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
+        <meshStandardMaterial color={cHair} roughness={0.95} />
+      </mesh>
+      {/* arms from the shoulders, with hands */}
+      <Limb r={0.042} len={0.48} pos={[0.185, 0.94, 0]} rot={rot3(P.aL)} color={cShirt}>
+        {hand}
+      </Limb>
+      <Limb r={0.042} len={0.48} pos={[-0.185, 0.94, 0]} rot={rot3(P.aR)} color={cShirt}>
+        {hand}
+      </Limb>
+      {/* legs: thigh with nested shin (knee), shoes at the ankles */}
       <Limb r={0.055} len={0.24} pos={[0.08, 0.55, 0]} rot={rot3(P.tL)} color={cPants}>
-        <Limb r={0.048} len={0.24} pos={[0, -0.28, 0]} rot={rot3(P.sL)} color={cPants} />
+        <Limb r={0.046} len={0.24} pos={[0, -0.28, 0]} rot={rot3(P.sL)} color={cPants}>
+          <Box args={[0.085, 0.06, 0.19]} pos={[0, -0.29, 0.045]} color={cShoe} />
+        </Limb>
       </Limb>
       <Limb r={0.055} len={0.24} pos={[-0.08, 0.55, 0]} rot={rot3(P.tR)} color={cPants}>
-        <Limb r={0.048} len={0.24} pos={[0, -0.28, 0]} rot={rot3(P.sR)} color={cPants} />
+        <Limb r={0.046} len={0.24} pos={[0, -0.28, 0]} rot={rot3(P.sR)} color={cPants}>
+          <Box args={[0.085, 0.06, 0.19]} pos={[0, -0.29, 0.045]} color={cShoe} />
+        </Limb>
       </Limb>
     </group>
   )
@@ -748,17 +778,38 @@ function BenchMesh({ o, tint }: { o: Placed; tint: string | null }) {
   )
 }
 
+// Four-leg wooden stool with a slim padded seat and a foot ring.
 function StoolMesh({ o, tint }: { o: Placed; tint: string | null }) {
   const r = Math.min(o.w, o.d) / 2
+  const lr = r * 0.62 // leg circle radius
   return (
     <group>
-      <mesh position={[0, o.h, 0]} castShadow>
-        <cylinderGeometry args={[r * 0.8, r * 0.8, 0.06, 16]} />
-        <meshStandardMaterial color={tint ?? o.color} {...MAT} />
+      <mesh position={[0, o.h - 0.025, 0]} castShadow>
+        <cylinderGeometry args={[r * 0.78, r * 0.72, 0.05, 18]} />
+        <meshStandardMaterial color={tint ?? o.color} roughness={0.75} />
       </mesh>
-      <mesh position={[0, o.h / 2, 0]}>
-        <cylinderGeometry args={[0.05, r * 0.5, o.h, 10]} />
-        <meshStandardMaterial color={STEEL} {...MAT} />
+      <mesh position={[0, o.h - 0.06, 0]}>
+        <cylinderGeometry args={[r * 0.6, r * 0.6, 0.02, 14]} />
+        <meshStandardMaterial color="#6e5335" roughness={0.8} />
+      </mesh>
+      {[0, 1, 2, 3].map((i) => {
+        const a = (i / 4) * Math.PI * 2 + Math.PI / 4
+        return (
+          <mesh
+            key={i}
+            position={[Math.cos(a) * lr, (o.h - 0.07) / 2, Math.sin(a) * lr]}
+            rotation={[Math.sin(a) * 0.12, 0, -Math.cos(a) * 0.12]}
+            castShadow
+          >
+            <cylinderGeometry args={[0.02, 0.024, o.h - 0.07, 8]} />
+            <meshStandardMaterial color="#6e5335" roughness={0.85} />
+          </mesh>
+        )
+      })}
+      {/* foot ring */}
+      <mesh position={[0, o.h * 0.32, 0]} rotation-x={Math.PI / 2}>
+        <torusGeometry args={[lr * 1.02, 0.012, 8, 20]} />
+        <meshStandardMaterial color={STEEL} roughness={0.4} metalness={0.6} />
       </mesh>
     </group>
   )
@@ -1438,6 +1489,7 @@ function Parking({ o, tint }: { o: Placed; tint: string | null }) {
 }
 
 function Door({ o, tint }: { o: Placed; tint: string | null }) {
+  if (o.defId === 'door_glass') return <GlassDoorInterior o={o} tint={tint} />
   // Interior room door (rule 'floor'): a real frame with the leaf slightly ajar.
   // Place it in a partition or a room wall for toilets / storage.
   if (o.rule === 'floor') {
@@ -1909,18 +1961,44 @@ function Fence({ o, tint }: { o: Placed; tint: string | null }) {
   )
 }
 
+// Trimmed hedge: a dark leafy core with hundreds of small leaf tufts scattered
+// over the clipped faces, so it reads as foliage rather than a painted box.
 function Hedge({ o, tint }: { o: Placed; tint: string | null }) {
-  const c = tint ?? o.color
+  const list = useMemo(() => {
+    const rnd = seededRnd(o.id)
+    const base = new THREE.Color(tint ?? o.color)
+    const hw = o.w / 2
+    const hd = o.d / 2
+    const out: Clump[] = []
+    // spread tufts over the faces, weighted by face area (top, sides, ends)
+    const aTop = o.w * o.d
+    const aSide = o.w * o.h * 2
+    const aEnd = o.d * o.h * 2
+    const aSum = aTop + aSide + aEnd
+    const n = Math.round(clampN((aTop + aSide / 2 + aEnd / 2) * 55, 80, 420))
+    for (let i = 0; i < n; i++) {
+      const f = rnd() * aSum
+      let p: [number, number, number]
+      if (f < aTop) p = [(rnd() - 0.5) * o.w, o.h - 0.03, (rnd() - 0.5) * o.d]
+      else if (f < aTop + aSide) p = [(rnd() - 0.5) * o.w, 0.08 + rnd() * (o.h - 0.14), (rnd() > 0.5 ? 1 : -1) * hd]
+      else p = [(rnd() > 0.5 ? 1 : -1) * hw, 0.08 + rnd() * (o.h - 0.14), (rnd() - 0.5) * o.d]
+      const t = p[1] / o.h
+      out.push({
+        p,
+        s: 0.08 + rnd() * 0.06,
+        e: [rnd() * 0.9 - 0.45, rnd() * Math.PI * 2, rnd() * 0.9 - 0.45],
+        c: base.clone().offsetHSL((rnd() - 0.5) * 0.03, -0.04 + rnd() * 0.06, -0.14 + t * 0.18 + rnd() * 0.06),
+      })
+    }
+    return out
+  }, [o.id, o.w, o.d, o.h, o.color, tint])
   return (
     <group>
       <mesh position={[0, o.h / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[o.w, o.h, o.d]} />
-        <meshStandardMaterial color={c} roughness={0.95} />
+        <boxGeometry args={[o.w - 0.08, o.h - 0.06, o.d - 0.08]} />
+        <meshStandardMaterial color={new THREE.Color(tint ?? o.color).offsetHSL(0, 0, -0.12)} roughness={0.95} />
       </mesh>
-      <mesh position={[0, o.h - 0.06, 0]} castShadow>
-        <boxGeometry args={[o.w - 0.12, 0.14, o.d - 0.12]} />
-        <meshStandardMaterial color="#5d8f4a" roughness={0.95} />
-      </mesh>
+      <LeafClumps list={list} />
     </group>
   )
 }
@@ -1952,10 +2030,18 @@ function LightPole({ o, tint }: { o: Placed; tint: string | null }) {
 
 function Wheel({ pos, r }: { pos: [number, number, number]; r: number }) {
   return (
-    <mesh position={pos} rotation-x={Math.PI / 2} castShadow>
-      <cylinderGeometry args={[r, r, 0.22, 14]} />
-      <meshStandardMaterial color="#22252a" roughness={0.9} />
-    </mesh>
+    <group position={pos} rotation-x={Math.PI / 2}>
+      <mesh castShadow>
+        <cylinderGeometry args={[r, r, 0.18, 18]} />
+        <meshStandardMaterial color="#1a1c20" roughness={0.95} />
+      </mesh>
+      {[0.08, -0.08].map((y, i) => (
+        <mesh key={i} position={[0, y, 0]}>
+          <cylinderGeometry args={[r * 0.55, r * 0.55, 0.04, 14]} />
+          <meshStandardMaterial color="#aeb4bb" metalness={0.7} roughness={0.35} />
+        </mesh>
+      ))}
+    </group>
   )
 }
 
@@ -2551,6 +2637,222 @@ function WashRoom({ o, tint }: { o: Placed; tint: string | null }) {
 
 /* ------------------------------- dispatcher ------------------------------- */
 
+// Open steel railing (1 m) for separating interior areas: round posts and top
+// rail, flat bottom rail, slim vertical balusters — see-through, gym style.
+function Railing({ o, tint }: { o: Placed; tint: string | null }) {
+  const c = tint ?? o.color
+  const posts = useMemo(() => spread(Math.max(2, Math.round(o.w / 1.4) + 1), o.w - 0.06), [o.w])
+  const bars = useMemo(() => spread(Math.max(4, Math.round(o.w / 0.12)), o.w - 0.2), [o.w])
+  return (
+    <group>
+      {posts.map((x, i) => (
+        <mesh key={i} position={[x, o.h / 2, 0]} castShadow>
+          <cylinderGeometry args={[0.022, 0.022, o.h, 10]} />
+          <meshStandardMaterial color={c} roughness={0.35} metalness={0.7} />
+        </mesh>
+      ))}
+      {/* round top rail */}
+      <mesh position={[0, o.h - 0.024, 0]} rotation-z={Math.PI / 2} castShadow>
+        <cylinderGeometry args={[0.025, 0.025, o.w, 12]} />
+        <meshStandardMaterial color={c} roughness={0.3} metalness={0.75} />
+      </mesh>
+      {/* flat bottom rail + balusters */}
+      <Alu args={[o.w, 0.045, 0.03]} pos={[0, 0.09, 0]} color={c} />
+      {bars.map((x, i) => (
+        <mesh key={`b${i}`} position={[x, (o.h - 0.2) / 2 + 0.11, 0]}>
+          <boxGeometry args={[0.013, o.h - 0.2, 0.013]} />
+          <meshStandardMaterial color={c} roughness={0.4} metalness={0.65} />
+        </mesh>
+      ))}
+      {/* base plates */}
+      {posts.map((x, i) => (
+        <Alu key={`p${i}`} args={[0.1, 0.012, 0.1]} pos={[x, 0.006, 0]} color={c} />
+      ))}
+    </group>
+  )
+}
+
+// Interior glass door: slim dark-aluminium frame, clear leaf swung ajar.
+// Same thickness family as partitions, so it slots into partition runs.
+function GlassDoorInterior({ o, tint }: { o: Placed; tint: string | null }) {
+  const t = Math.max(0.08, Math.min(o.d, 0.2))
+  const fc = tint ?? o.color
+  const leaves = o.w > 1.5 ? 2 : 1
+  const leafW = (o.w - 0.08 - (leaves - 1) * 0.02) / leaves
+  const leafH = o.h - 0.08
+  return (
+    <group>
+      <Alu args={[0.045, o.h, t]} pos={[-o.w / 2 + 0.022, o.h / 2, 0]} color={fc} />
+      <Alu args={[0.045, o.h, t]} pos={[o.w / 2 - 0.022, o.h / 2, 0]} color={fc} />
+      <Alu args={[o.w, 0.06, t]} pos={[0, o.h - 0.03, 0]} color={fc} />
+      {Array.from({ length: leaves }, (_, i) => {
+        const dir = i === 0 ? 1 : -1
+        const hingeX = i === 0 ? -o.w / 2 + 0.045 : o.w / 2 - 0.045
+        return (
+          <group key={i} position={[hingeX, 0, 0]} rotation-y={i === 0 ? -0.5 : 0}>
+            <mesh position={[(dir * leafW) / 2, leafH / 2, 0]} castShadow>
+              <boxGeometry args={[leafW - 0.04, leafH - 0.06, 0.012]} />
+              <meshStandardMaterial color="#cfe6ee" transparent opacity={0.26} roughness={0.05} metalness={0.1} depthWrite={false} />
+            </mesh>
+            {/* slim stiles, top rail and a wider bottom rail */}
+            <Alu args={[0.035, leafH, 0.035]} pos={[dir * 0.018, leafH / 2, 0]} color={fc} />
+            <Alu args={[0.035, leafH, 0.035]} pos={[dir * (leafW - 0.018), leafH / 2, 0]} color={fc} />
+            <Alu args={[leafW, 0.035, 0.035]} pos={[(dir * leafW) / 2, leafH - 0.018, 0]} color={fc} />
+            <Alu args={[leafW, 0.11, 0.035]} pos={[(dir * leafW) / 2, 0.055, 0]} color={fc} />
+            {/* vertical pull handles on both faces */}
+            <Alu args={[0.022, 0.5, 0.022]} pos={[dir * (leafW - 0.13), o.h * 0.46, 0.055]} color="#9aa2ab" />
+            <Alu args={[0.022, 0.5, 0.022]} pos={[dir * (leafW - 0.13), o.h * 0.46, -0.055]} color="#9aa2ab" />
+          </group>
+        )
+      })}
+    </group>
+  )
+}
+
+// Projected court image for the tennis simulator screen (drawn once, shared)
+let tennisTexCache: THREE.CanvasTexture | null = null
+function tennisScreenTexture(): THREE.CanvasTexture {
+  if (tennisTexCache) return tennisTexCache
+  const c = document.createElement('canvas')
+  c.width = 512
+  c.height = 288
+  const g = c.getContext('2d')!
+  // night-stadium backdrop with a crowd band
+  const sky = g.createLinearGradient(0, 0, 0, 124)
+  sky.addColorStop(0, '#0c1930')
+  sky.addColorStop(1, '#1d3b5e')
+  g.fillStyle = sky
+  g.fillRect(0, 0, 512, 124)
+  g.fillStyle = '#233246'
+  g.fillRect(0, 94, 512, 30)
+  for (let i = 0; i < 260; i++) {
+    g.fillStyle = `hsl(${(i * 47) % 360} 28% ${52 + ((i * 13) % 22)}%)`
+    g.fillRect((i * 61) % 510, 96 + ((i * 29) % 24), 2, 3)
+  }
+  // green surround, blue court in perspective
+  g.fillStyle = '#3f6f46'
+  g.fillRect(0, 124, 512, 164)
+  const trap = (top: number, bot: number, tw: number, bw: number) => {
+    g.beginPath()
+    g.moveTo(256 - tw / 2, top)
+    g.lineTo(256 + tw / 2, top)
+    g.lineTo(256 + bw / 2, bot)
+    g.lineTo(256 - bw / 2, bot)
+    g.closePath()
+  }
+  trap(130, 288, 200, 470)
+  g.fillStyle = '#2f6bb4'
+  g.fill()
+  g.strokeStyle = '#f2f5f7'
+  g.lineWidth = 3
+  trap(136, 282, 178, 430)
+  g.stroke()
+  // baseline centre tick, service line + centre service line
+  g.beginPath()
+  g.moveTo(256 - 132, 196)
+  g.lineTo(256 + 132, 196)
+  g.moveTo(256, 196)
+  g.lineTo(256, 282)
+  g.stroke()
+  // net across the near edge: white tape, dark mesh
+  g.fillStyle = 'rgba(20, 26, 32, 0.55)'
+  g.fillRect(0, 236, 512, 52)
+  g.fillStyle = '#eef2f5'
+  g.fillRect(0, 232, 512, 7)
+  g.strokeStyle = 'rgba(230, 236, 240, 0.25)'
+  g.lineWidth = 1
+  for (let x = 8; x < 512; x += 14) {
+    g.beginPath()
+    g.moveTo(x, 239)
+    g.lineTo(x, 288)
+    g.stroke()
+  }
+  // incoming ball
+  g.fillStyle = '#d9e94a'
+  g.beginPath()
+  g.arc(300, 210, 7, 0, Math.PI * 2)
+  g.fill()
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tennisTexCache = tex
+  return tex
+}
+
+// Tennis simulator: dark acoustic booth, glowing impact screen filling one
+// 5 m end, turf floor with a hitting lane, projector, ball machine and player.
+function TennisSimRoom({ o, tint }: { o: Placed; tint: string | null }) {
+  const t = 0.12
+  const wc = tint ?? '#3a4550'
+  const tex = useMemo(() => tennisScreenTexture(), [])
+  // door opening on the end wall opposite the screen
+  const doorW = Math.min(1.0, o.d * 0.35)
+  const doorH = Math.min(2.05, o.h - 0.3)
+  const doorZ = o.d / 2 - 0.4 - doorW / 2
+  const nearW = o.d / 2 - (doorZ + doorW / 2)
+  const farW = doorZ - doorW / 2 + o.d / 2
+  return (
+    <group>
+      {/* turf floor + blue hitting lane with white service lines */}
+      <Box args={[o.w, 0.05, o.d]} pos={[0, 0.025, 0]} color="#47734c" />
+      <Box args={[o.w * 0.66, 0.06, Math.min(o.d - 1.2, 3.4)]} pos={[-o.w * 0.08, 0.03, 0]} color="#2f5f9e" />
+      <Box args={[0.05, 0.065, Math.min(o.d - 1.2, 3.4)]} pos={[o.w * 0.22, 0.032, 0]} color="#eef2f5" />
+      <Box args={[o.w * 0.4, 0.065, 0.05]} pos={[-o.w * 0.12, 0.032, 0]} color="#eef2f5" />
+      {/* perimeter walls; screen end at -x */}
+      <Box args={[t, o.h, o.d]} pos={[-o.w / 2 + t / 2, o.h / 2, 0]} color={wc} />
+      <Box args={[o.w, o.h, t]} pos={[0, o.h / 2, -o.d / 2 + t / 2]} color={wc} />
+      <Box args={[o.w, o.h, t]} pos={[0, o.h / 2, o.d / 2 - t / 2]} color={wc} />
+      {/* end wall with the doorway */}
+      {farW > 0.05 && <Box args={[t, o.h, farW]} pos={[o.w / 2 - t / 2, o.h / 2, -o.d / 2 + farW / 2]} color={wc} />}
+      {nearW > 0.05 && <Box args={[t, o.h, nearW]} pos={[o.w / 2 - t / 2, o.h / 2, o.d / 2 - nearW / 2]} color={wc} />}
+      <Box args={[t, Math.max(0.08, o.h - doorH), doorW]} pos={[o.w / 2 - t / 2, doorH + (o.h - doorH) / 2, doorZ]} color={wc} />
+      {/* black screen frame + glowing projected court */}
+      <Box args={[0.06, o.h - 0.44, o.d - 0.3]} pos={[-o.w / 2 + t + 0.05, o.h * 0.52, 0]} color="#14171b" />
+      <mesh position={[-o.w / 2 + t + 0.1, o.h * 0.52, 0]} rotation-y={Math.PI / 2}>
+        <planeGeometry args={[o.d - 0.5, o.h - 0.62]} />
+        <meshStandardMaterial map={tex} emissive="#ffffff" emissiveMap={tex} emissiveIntensity={0.7} roughness={0.9} />
+      </mesh>
+      {/* ceiling-mounted projector aimed at the screen */}
+      <group position={[o.w * 0.12, o.h - 0.32, 0]}>
+        <Alu args={[0.05, 0.32, 0.05]} pos={[0, 0.16, 0]} color="#3a3f45" />
+        <Box args={[0.42, 0.14, 0.3]} pos={[0, 0, 0]} color="#e8eaec" />
+        <mesh position={[-0.22, 0, 0]} rotation-z={Math.PI / 2}>
+          <cylinderGeometry args={[0.05, 0.05, 0.03, 12]} />
+          <meshStandardMaterial color="#1f2937" emissive="#aab8ff" emissiveIntensity={0.6} />
+        </mesh>
+      </group>
+      {/* ball machine + loose balls */}
+      <group position={[o.w * 0.3, 0, -o.d * 0.22]}>
+        <Box args={[0.45, 0.55, 0.4]} pos={[0, 0.3, 0]} color="#2b2f35" />
+        <mesh position={[-0.24, 0.52, 0]} rotation-z={1.15}>
+          <cylinderGeometry args={[0.07, 0.09, 0.3, 12]} />
+          <meshStandardMaterial color="#454b52" roughness={0.5} metalness={0.4} />
+        </mesh>
+      </group>
+      {[
+        [-o.w * 0.32, -o.d * 0.18],
+        [-o.w * 0.28, o.d * 0.24],
+        [-o.w * 0.38, 0.4],
+      ].map(([x, z], i) => (
+        <mesh key={i} position={[x, 0.09, z]} castShadow>
+          <sphereGeometry args={[0.055, 10, 8]} />
+          <meshStandardMaterial color="#d9e94a" roughness={0.7} />
+        </mesh>
+      ))}
+      {/* player facing the screen, racket raised */}
+      <group position={[o.w * 0.18, 0.06, o.d * 0.08]} rotation-y={-Math.PI / 2}>
+        <Figure pose="walk" shirt="#e2e8f0" idx={5} />
+        <group position={[0.28, 1.25, 0]} rotation-z={0.8}>
+          <Alu args={[0.025, 0.34, 0.025]} pos={[0, 0.17, 0]} color="#2b2f35" />
+          <mesh position={[0, 0.44, 0]}>
+            <torusGeometry args={[0.11, 0.014, 8, 18]} />
+            <meshStandardMaterial color="#c9ced4" roughness={0.4} metalness={0.5} />
+          </mesh>
+        </group>
+      </group>
+    </group>
+  )
+}
+
 export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
   switch (o.category) {
     case 'ceiling':
@@ -2600,6 +2902,7 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
     case 'column':
       return <Column o={o} tint={tint} />
     case 'partition':
+      if (o.defId === 'rail') return <Railing o={o} tint={tint} />
       // interior partition wall: solid slab, or a framed clear-glass panel
       if (o.material === 'glass')
         return (
@@ -2629,6 +2932,7 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
     case 'room':
       if (o.defId === 'toilet') return <Restroom o={o} tint={tint} />
       if (o.defId === 'sauna') return <Sauna o={o} tint={tint} />
+      if (o.defId === 'tennis_sim') return <TennisSimRoom o={o} tint={tint} />
       if (o.defId === 'washroom') return <WashRoom o={o} tint={tint} />
       return <StorageRoom o={o} tint={tint} />
     case 'reception':

@@ -1,5 +1,6 @@
 import { useStore } from '../store'
 import type { Placed } from '../types'
+import { NumInput } from './NumInput'
 
 function Field({
   label,
@@ -17,16 +18,7 @@ function Field({
   return (
     <label className="insp-field">
       <span>{label}</span>
-      <input
-        type="number"
-        value={Number(value.toFixed(2))}
-        step={step ?? 0.5}
-        min={min}
-        onChange={(e) => {
-          const v = parseFloat(e.target.value)
-          if (!Number.isNaN(v)) onChange(v)
-        }}
-      />
+      <NumInput value={value} step={step ?? 0.5} min={min} onCommit={onChange} />
     </label>
   )
 }

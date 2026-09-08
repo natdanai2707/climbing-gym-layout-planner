@@ -226,30 +226,43 @@ function normalizeFile(file: LayoutFile): { building: Building; objects: Placed[
 // items outgrew the stored building opens with the shell at the right size
 // instead of snapping only when an arrow is first touched.
 function growToFit(building: Building, objects: Placed[]): Building {
-  const floors = objects.filter((o) => o.rule === 'floor')
-  if (floors.length === 0) return building
   const b = { ...building }
-  let minX = Infinity
-  let maxX = -Infinity
-  let minZ = Infinity
-  let maxZ = -Infinity
-  for (const o of floors) {
-    const { fw, fd } = fp(o)
-    minX = Math.min(minX, o.x - fw / 2)
-    maxX = Math.max(maxX, o.x + fw / 2)
-    minZ = Math.min(minZ, o.z - fd / 2)
-    maxZ = Math.max(maxZ, o.z + fd / 2)
+  const floors = objects.filter((o) => o.rule === 'floor')
+  if (floors.length > 0) {
+    let minX = Infinity
+    let maxX = -Infinity
+    let minZ = Infinity
+    let maxZ = -Infinity
+    for (const o of floors) {
+      const { fw, fd } = fp(o)
+      minX = Math.min(minX, o.x - fw / 2)
+      maxX = Math.max(maxX, o.x + fw / 2)
+      minZ = Math.min(minZ, o.z - fd / 2)
+      maxZ = Math.max(maxZ, o.z + fd / 2)
+    }
+    // width is centered on x = 0
+    const needW = 2 * Math.max(maxX, -minX, 0)
+    if (b.width < needW) b.width = needW
+    // length bounds must keep containing every item
+    let bMin = b.centerZ - b.length / 2
+    let bMax = b.centerZ + b.length / 2
+    bMin = Math.min(bMin, minZ)
+    bMax = Math.max(bMax, maxZ)
+    b.length = bMax - bMin
+    b.centerZ = (bMin + bMax) / 2
   }
-  // width is centered on x = 0
-  const needW = 2 * Math.max(maxX, -minX, 0)
-  if (b.width < needW) b.width = needW
-  // length bounds must keep containing every item
-  let bMin = b.centerZ - b.length / 2
-  let bMax = b.centerZ + b.length / 2
-  bMin = Math.min(bMin, minZ)
-  bMax = Math.max(bMax, maxZ)
-  b.length = bMax - bMin
-  b.centerZ = (bMin + bMax) / 2
+  // the outdoor apron stretches so garden items placed beyond the original
+  // grid still get ground under them
+  const hw = b.width / 2
+  const zMin = b.centerZ - b.length / 2
+  const zMax = b.centerZ + b.length / 2
+  let needA = b.apron
+  for (const o of objects) {
+    if (o.rule !== 'outdoor') continue
+    const { fw, fd } = fp(o)
+    needA = Math.max(needA, o.x + fw / 2 - hw, -(o.x - fw / 2) - hw, o.z + fd / 2 - zMax, zMin - (o.z - fd / 2))
+  }
+  b.apron = Math.ceil(needA * 4) / 4
   return b
 }
 
@@ -492,9 +505,7 @@ export const useStore = create<GymState>()(
           const minZ = building.centerZ - building.length / 2
           const maxZ = building.centerZ + building.length / 2
           if (next.rule === 'outdoor') {
-            const ow = hw + building.apron
-            next.x = clampInside(next.x, fw, -ow, ow)
-            next.z = clampInside(next.z, fd, minZ - building.apron, maxZ + building.apron)
+            // outdoor items resize freely — the apron grows to reach them
           } else {
             next.x = clampInside(next.x, fw, -hw, hw)
             next.z = clampInside(next.z, fd, minZ, maxZ)
@@ -693,7 +704,8 @@ export const useStore = create<GymState>()(
       set({
         floor: t.floor,
         objects: get().objects.map((o) => {
-          if (THEME_WALL_CATS.has(o.category)) return { ...o, color: t.walls[wi++ % t.walls.length] }
+          // steel railings keep their metal finish through theme changes
+          if (THEME_WALL_CATS.has(o.category) && o.defId !== 'rail') return { ...o, color: t.walls[wi++ % t.walls.length] }
           if (o.category === 'mat') return { ...o, color: t.mat }
           if (o.category === 'zone') return { ...o, color: t.zone, material: t.zoneSurface }
           return o

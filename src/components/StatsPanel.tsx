@@ -3,6 +3,7 @@ import { useStore } from '../store'
 import { CATEGORY_LABELS } from '../catalog'
 import { usedStrip } from '../placement'
 import { ROOF_PITCH } from './WarehouseShell'
+import { NumInput } from './NumInput'
 import type { Category } from '../types'
 
 const fmt = (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 1 })
@@ -123,17 +124,7 @@ export function StatsPanel() {
             <div className="stat-row">
               <span>Ceiling height (eave)</span>
               <span className="stat-input">
-                <input
-                  type="number"
-                  value={eave}
-                  min={3}
-                  max={20}
-                  step={0.5}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value)
-                    if (!Number.isNaN(v)) setEave(v)
-                  }}
-                />
+                <NumInput value={eave} min={3} max={20} step={0.5} onCommit={setEave} />
                 m
               </span>
             </div>
@@ -148,17 +139,7 @@ export function StatsPanel() {
             <div className="stat-row small">
               <span>Cooling factor (BTU/m³)</span>
               <span className="stat-input">
-                <input
-                  type="number"
-                  value={coolFactor}
-                  min={50}
-                  max={1000}
-                  step={10}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value)
-                    if (!Number.isNaN(v)) setCoolFactor(v)
-                  }}
-                />
+                <NumInput value={coolFactor} min={50} max={1000} step={10} onCommit={setCoolFactor} />
               </span>
             </div>
             <div className="stat-row">

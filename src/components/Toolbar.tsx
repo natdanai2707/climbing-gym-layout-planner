@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { exportLayout, useStore } from '../store'
+import { NumInput } from './NumInput'
 import type { ThemeName } from '../store'
 import type { LayoutFile } from '../types'
 import { canvasCapture } from './Scene'
@@ -29,17 +30,7 @@ function NumberField({
   return (
     <label className="tb-field">
       <span>{label}</span>
-      <input
-        type="number"
-        value={value}
-        min={min}
-        max={max}
-        step={step ?? 1}
-        onChange={(e) => {
-          const v = parseFloat(e.target.value)
-          if (!Number.isNaN(v)) onChange(v)
-        }}
-      />
+      <NumInput value={value} min={min} max={max} step={step ?? 1} onCommit={onChange} />
     </label>
   )
 }

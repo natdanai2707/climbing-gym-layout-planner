@@ -29,6 +29,15 @@ export const useThumbStore = create<ThumbState>((set, get) => ({
   },
 }))
 
+// handy for automated UI tests (same spirit as window.__gymStore)
+if (typeof window !== 'undefined') {
+  ;(window as unknown as Record<string, unknown>).__thumbs = () => useThumbStore.getState().thumbs
+  ;(window as unknown as Record<string, unknown>).__thumbCount = () => ({
+    done: Object.keys(useThumbStore.getState().thumbs).length,
+    total: CATALOG.length,
+  })
+}
+
 // items whose H is a MOUNT height — only the fixture itself should fill the frame
 const SUSPENDED = new Set(['duct', 'fcu', 'bigfan', 'highbay', 'tracklight', 'cctv', 'speaker', 'ceiling', 'bulkhead'])
 

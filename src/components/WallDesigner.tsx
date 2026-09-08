@@ -8,6 +8,7 @@ import { WallModel } from '../wall/WallModel'
 import { designDepth, designWidth, vertexPos, type PresetName } from '../wall/profile'
 import { export3MF, exportDAE, exportSTL } from '../wall/exporters'
 import { ArrowHandle } from './gizmo'
+import { NumInput } from './NumInput'
 
 function Num({
   label,
@@ -27,17 +28,7 @@ function Num({
   return (
     <label className="insp-field">
       <span>{label}</span>
-      <input
-        type="number"
-        value={Number(value.toFixed(2))}
-        step={step}
-        min={min}
-        max={max}
-        onChange={(e) => {
-          const v = parseFloat(e.target.value)
-          if (!Number.isNaN(v)) onChange(v)
-        }}
-      />
+      <NumInput value={value} step={step} min={min} max={max} onCommit={onChange} />
     </label>
   )
 }

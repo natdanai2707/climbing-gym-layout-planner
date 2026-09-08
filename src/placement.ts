@@ -37,7 +37,8 @@ export interface DropResult {
  * according to its placement rule:
  *  - floor:   snapped to grid, clamped fully inside the building rectangle
  *  - edge:    snapped onto the nearest perimeter wall, rotation forced to match the wall
- *  - outdoor: snapped to grid in the apron; invalid if it leaves the apron or enters the building
+ *  - outdoor: snapped to grid anywhere on the site (the apron ground grows to
+ *             reach it); only overlapping the building itself is invalid
  */
 export function computeDrop(
   o: { w: number; d: number; rot: number; rule: Placed['rule'] },
@@ -76,18 +77,14 @@ export function computeDrop(
   if (o.rule === 'outdoor') {
     const ow = hw + apron
     const oMinZ = minZ - apron
-    const oMaxZ = maxZ + apron
-    let x = snapCenter(rawX, fw, -ow, cell)
-    let z = snapCenter(rawZ, fd, oMinZ, cell)
-    x = clampInside(x, fw, -ow, ow)
-    z = clampInside(z, fd, oMinZ, oMaxZ)
-    const inside =
-      x - fw / 2 >= -ow - EPS && x + fw / 2 <= ow + EPS && z - fd / 2 >= oMinZ - EPS && z + fd / 2 <= oMaxZ + EPS
-    // Overlap with the building interior makes the drop invalid
+    const x = snapCenter(rawX, fw, -ow, cell)
+    const z = snapCenter(rawZ, fd, oMinZ, cell)
+    // Overlap with the building interior makes the drop invalid; beyond that
+    // an outdoor item may sit anywhere — the apron stretches out to meet it.
     const ox = Math.min(x + fw / 2, hw) - Math.max(x - fw / 2, -hw)
     const oz = Math.min(z + fd / 2, maxZ) - Math.max(z - fd / 2, minZ)
     const hitsBuilding = ox > EPS && oz > EPS
-    return { x, z, rot: o.rot, valid: inside && !hitsBuilding }
+    return { x, z, rot: o.rot, valid: !hitsBuilding }
   }
 
   // floor
