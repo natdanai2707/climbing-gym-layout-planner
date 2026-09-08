@@ -3,6 +3,8 @@ import * as THREE from 'three'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { Html, Line, OrbitControls, OrthographicCamera, PerspectiveCamera, Sky, SoftShadows, Stars } from '@react-three/drei'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
+import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js'
 import { useStore } from '../store'
 import type { ResizeAxis, ResizeState } from '../store'
 import type { Placed } from '../types'
@@ -355,11 +357,102 @@ function WalkRig() {
 
 /* ------------------------- lighting moods & render style ------------------------- */
 
+// Lighting rig per mood. Ambient is kept LOW — form comes from one oblique
+// sun (~45° elevation), a soft hemisphere and the IBL environment map, not
+// from a flat ambient wash. bg = [top, bottom] of the background gradient.
 const MOODS = {
-  day: { bg: '#eceae4', dirColor: '#fff6e6', dirPos: [35, 60, 20], dirInt: 1.4, amb: 0.75, ambColor: '#ffffff', hemi: 0.35, lamps: false },
-  golden: { bg: '#f0d9ba', dirColor: '#ffab55', dirPos: [58, 16, 32], dirInt: 1.7, amb: 0.4, ambColor: '#ffd9b0', hemi: 0.22, lamps: false },
-  night: { bg: '#0f131d', dirColor: '#8aa2d6', dirPos: [-30, 45, -25], dirInt: 0.22, amb: 0.14, ambColor: '#38466a', hemi: 0.06, lamps: true },
+  day: { bg: ['#f2f1ec', '#d3d0c7'], dirColor: '#fff2dd', dirPos: [40, 45, 26], dirInt: 2.4, amb: 0.16, ambColor: '#ffffff', hemi: 0.32, env: 0.5, lamps: false },
+  golden: { bg: ['#f6e3c2', '#dcb987'], dirColor: '#ffab55', dirPos: [58, 16, 32], dirInt: 2.4, amb: 0.1, ambColor: '#ffd9b0', hemi: 0.2, env: 0.32, lamps: false },
+  night: { bg: ['#1a2030', '#0a0d15'], dirColor: '#8aa2d6', dirPos: [-30, 45, -25], dirInt: 0.3, amb: 0.05, ambColor: '#38466a', hemi: 0.06, env: 0.1, lamps: true },
 } as const
+
+// Image-based lighting from three's generated RoomEnvironment — no HDR file
+// to download, one PMREM bake at startup. Gives metals and glass something
+// real to reflect, which flat lights can't.
+function EnvLighting() {
+  const gl = useThree((s) => s.gl)
+  const scene = useThree((s) => s.scene)
+  const mood = useStore((s) => s.lightMood)
+  useEffect(() => {
+    const pmrem = new THREE.PMREMGenerator(gl)
+    const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+    scene.environment = env
+    return () => {
+      scene.environment = null
+      env.dispose()
+      pmrem.dispose()
+    }
+  }, [gl, scene])
+  useEffect(() => {
+    scene.environmentIntensity = MOODS[mood].env
+  }, [scene, mood])
+  return null
+}
+
+// Soft vertical gradient background (never plain white)
+const bgTexCache = new Map<string, THREE.CanvasTexture>()
+function gradientTexture(top: string, bottom: string): THREE.CanvasTexture {
+  const key = `${top}:${bottom}`
+  let t = bgTexCache.get(key)
+  if (!t) {
+    const c = document.createElement('canvas')
+    c.width = 2
+    c.height = 256
+    const g = c.getContext('2d')!
+    const gr = g.createLinearGradient(0, 0, 0, 256)
+    gr.addColorStop(0, top)
+    gr.addColorStop(1, bottom)
+    g.fillStyle = gr
+    g.fillRect(0, 0, 2, 256)
+    t = new THREE.CanvasTexture(c)
+    t.colorSpace = THREE.SRGBColorSpace
+    bgTexCache.set(key, t)
+  }
+  return t
+}
+
+function BackgroundGradient() {
+  const scene = useThree((s) => s.scene)
+  const mood = useStore((s) => s.lightMood)
+  useEffect(() => {
+    scene.background = gradientTexture(MOODS[mood].bg[0], MOODS[mood].bg[1])
+    return () => {
+      scene.background = null
+    }
+  }, [scene, mood])
+  return null
+}
+
+// Rect-area lights standing in for the gym's ceiling luminaires (Med/High)
+let rectAreaInit = false
+function CeilingLights() {
+  const enabled = useStore((s) => s.quality !== 'low')
+  const mood = useStore((s) => s.lightMood)
+  const building = useStore((s) => s.building)
+  const eave = useStore((s) => s.shell.eave)
+  useEffect(() => {
+    if (!rectAreaInit) {
+      RectAreaLightUniformsLib.init()
+      rectAreaInit = true
+    }
+  }, [])
+  if (!enabled) return null
+  const y = Math.max(3.4, eave - 0.6)
+  const intensity = mood === 'night' ? 6 : mood === 'golden' ? 1.6 : 2.2
+  const zs = [building.centerZ - building.length / 4, building.centerZ + building.length / 4]
+  return (
+    <>
+      {zs.map((z, i) => (
+        <rectAreaLight
+          key={i}
+          args={['#fff4e2', intensity, building.width * 0.45, Math.min(6, building.length * 0.3)]}
+          position={[0, y, z]}
+          rotation-x={-Math.PI / 2}
+        />
+      ))}
+    </>
+  )
+}
 
 function MoodLights() {
   const mood = useStore((s) => s.lightMood)
@@ -859,6 +952,9 @@ function SceneContent() {
   return (
     <>
       <MoodLights />
+      <EnvLighting />
+      <BackgroundGradient />
+      <CeilingLights />
       <RealisticExtras />
 
       <BuildingFloor />
@@ -896,7 +992,8 @@ export function Scene() {
   const viewKey = useStore((s) => s.viewKey)
   const walking = useStore((s) => s.viewMode === 'walk')
   const mood = useStore((s) => s.lightMood)
-  const bg = MOODS[mood].bg
+  // CSS fallback while the canvas boots; the scene's gradient takes over
+  const bg = `linear-gradient(${MOODS[mood].bg[0]}, ${MOODS[mood].bg[1]})`
   return (
     // Explicit modern pipeline: sRGB output + ACES Filmic tone mapping +
     // PCF soft shadows; pixel ratio capped at 2. No legacy lighting anywhere.
@@ -911,7 +1008,6 @@ export function Scene() {
       }}
       style={{ background: bg }}
     >
-      <color attach="background" args={[bg]} />
       <ExposureBinder />
       <CaptureBinder />
       <group key={`rig-${viewKey}-${walking ? 'walk' : 'orbit'}`}>{walking ? <WalkRig /> : <CameraRig />}</group>
