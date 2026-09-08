@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import * as THREE from 'three'
-import { Edges } from '@react-three/drei'
+import { Edges, MeshReflectorMaterial } from '@react-three/drei'
 import type { Placed } from '../types'
 import { useWallStore } from '../wall/wallStore'
 import { WallModel } from '../wall/WallModel'
@@ -2879,6 +2879,38 @@ function FaceGate({ o, tint }: { o: Placed; tint: string | null }) {
   )
 }
 
+// Fitness wall mirror: alu-framed panel that really reflects the scene.
+// Place it flush against any partition or room wall (front faces local +z).
+function WallMirror({ o, tint }: { o: Placed; tint: string | null }) {
+  const t = Math.max(0.04, o.d)
+  const ph = Math.max(0.3, o.h - 0.2) // glass panel, bottom lifted off the floor
+  const py = 0.15 + ph / 2
+  return (
+    <group>
+      {/* backing board against the wall */}
+      <Box args={[o.w, o.h - 0.06, t * 0.5]} pos={[0, (o.h - 0.06) / 2 + 0.03, -t * 0.25]} color="#5d646c" />
+      {/* the mirror itself */}
+      <mesh position={[0, py, t / 2 - 0.004]}>
+        <planeGeometry args={[o.w - 0.09, ph]} />
+        <MeshReflectorMaterial
+          blur={[120, 40]}
+          resolution={384}
+          mixBlur={0.4}
+          mixStrength={2.2}
+          roughness={0.06}
+          metalness={0.5}
+          color={tint ?? o.color}
+        />
+      </mesh>
+      {/* slim aluminium frame */}
+      <Alu args={[o.w, 0.055, t]} pos={[0, 0.125, 0]} />
+      <Alu args={[o.w, 0.055, t]} pos={[0, py + ph / 2 + 0.025, 0]} />
+      <Alu args={[0.055, ph + 0.11, t]} pos={[-o.w / 2 + 0.027, py, 0]} />
+      <Alu args={[0.055, ph + 0.11, t]} pos={[o.w / 2 - 0.027, py, 0]} />
+    </group>
+  )
+}
+
 // Open steel railing (1 m) for separating interior areas: round posts and top
 // rail, flat bottom rail, slim vertical balusters — see-through, gym style.
 function Railing({ o, tint }: { o: Placed; tint: string | null }) {
@@ -3192,6 +3224,7 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
     case 'fixture':
       if (o.defId === 'shoes') return <ShoeRack o={o} tint={tint} />
       if (o.defId === 'gate_face') return <FaceGate o={o} tint={tint} />
+      if (o.defId === 'mirror') return <WallMirror o={o} tint={tint} />
       if (o.defId === 'icebath') return <IceBath o={o} tint={tint} />
       return (
         <Box args={[o.w, o.h, o.d]} pos={[0, o.h / 2, 0]} color={tint ?? o.color} />
