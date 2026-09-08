@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import * as THREE from 'three'
 import { useStore } from '../store'
 import type { CanopyDef, FacadePanel, ShellDesign, ShellSegment } from '../types'
-import { surfaceMap, surfaceMapWorld } from '../materials'
+import { surfaceMap, surfaceMapWorld, surfaceNormal, surfaceNormalWorld } from '../materials'
 import { ROOF_PITCH } from './WarehouseShell'
 
 /**
@@ -107,7 +107,7 @@ function Cladding({ seg }: { seg: NormSeg }) {
   return seg.clear ? (
     <meshStandardMaterial {...CLEAR_MAT} />
   ) : (
-    <meshStandardMaterial color={seg.color} map={surfaceMapWorld('metalsheet')} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />
+    <meshStandardMaterial color={seg.color} map={surfaceMapWorld('metalsheet')} normalMap={surfaceNormalWorld('metalsheet')} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />
   )
 }
 
@@ -260,11 +260,11 @@ export function SegmentedShell({ force = false }: { force?: boolean }) {
             {/* side walls: left (-X) and right (+X) have independent heights */}
             <mesh position={[-W / 2 - t / 2, seg.eaveL / 2, zc]} castShadow>
               <boxGeometry args={[t, seg.eaveL, len]} />
-              {seg.clear ? <meshStandardMaterial {...CLEAR_MAT} /> : <meshStandardMaterial color={seg.color} map={surfaceMap('metalsheet', len, seg.eaveL)} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />}
+              {seg.clear ? <meshStandardMaterial {...CLEAR_MAT} /> : <meshStandardMaterial color={seg.color} map={surfaceMap('metalsheet', len, seg.eaveL)} normalMap={surfaceNormal('metalsheet', len, seg.eaveL)} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />}
             </mesh>
             <mesh position={[W / 2 + t / 2, seg.eaveR / 2, zc]} castShadow>
               <boxGeometry args={[t, seg.eaveR, len]} />
-              {seg.clear ? <meshStandardMaterial {...CLEAR_MAT} /> : <meshStandardMaterial color={seg.color} map={surfaceMap('metalsheet', len, seg.eaveR)} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />}
+              {seg.clear ? <meshStandardMaterial {...CLEAR_MAT} /> : <meshStandardMaterial color={seg.color} map={surfaceMap('metalsheet', len, seg.eaveR)} normalMap={surfaceNormal('metalsheet', len, seg.eaveR)} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />}
             </mesh>
             <SegmentRoof seg={seg} W={W} />
             {/* bulkhead face where the next zone has a different profile */}

@@ -1,6 +1,6 @@
 import { MeshReflectorMaterial } from '@react-three/drei'
 import { useStore } from '../store'
-import { surfaceMap } from '../materials'
+import { surfaceMap, surfaceNormal } from '../materials'
 
 // Reflection strength per floor finish (polished concrete shines the most)
 const MIRROR: Record<string, number> = { paint: 0.3, concrete: 0.35, birch: 0.16, epdm: 0.07 }
@@ -31,6 +31,7 @@ export function BuildingFloor() {
           key={floor.material} // map add/remove needs a fresh material
           color={floor.color}
           map={map ?? undefined}
+          normalMap={floor.material === 'paint' ? undefined : surfaceNormal(floor.material, W, L)}
           roughness={{ concrete: 0.35, paint: 0.5, birch: 0.45, epdm: 0.85 }[floor.material] ?? 0.6}
           metalness={0}
         />

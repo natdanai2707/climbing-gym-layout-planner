@@ -6,7 +6,7 @@ import type { ThreeEvent } from '@react-three/fiber'
 import { useThree } from '@react-three/fiber'
 import { useStore } from '../store'
 import { ArrowHandle } from './gizmo'
-import { surfaceMap, surfaceMapWorld } from '../materials'
+import { surfaceMap, surfaceMapWorld, surfaceNormal, surfaceNormalWorld } from '../materials'
 
 // Roof pitch of the gable (rise over half-width). ~15°.
 export const ROOF_PITCH = Math.tan((15 * Math.PI) / 180)
@@ -109,6 +109,7 @@ export function WarehouseShell() {
     : {
         color: '#ffffff',
         map: surfaceMap('metalsheet', L, eave),
+        normalMap: surfaceNormal('metalsheet', L, eave),
         roughness: 0.45,
         metalness: 0.35,
         side: THREE.DoubleSide,
@@ -118,6 +119,7 @@ export function WarehouseShell() {
     : {
         color: '#ffffff',
         map: surfaceMapWorld('metalsheet'),
+        normalMap: surfaceNormalWorld('metalsheet'),
         roughness: 0.45,
         metalness: 0.35,
         side: THREE.DoubleSide,

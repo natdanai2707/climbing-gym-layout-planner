@@ -5,6 +5,9 @@ import type { ThreeEvent } from '@react-three/fiber'
 import { Html, Line, OrbitControls, OrthographicCamera, PerspectiveCamera, Sky, SoftShadows, Stars } from '@react-three/drei'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js'
+import { EffectComposer } from '@react-three/postprocessing'
+import { N8AOPostPass } from 'n8ao'
+import { ContactShadows } from '@react-three/drei'
 import { useStore } from '../store'
 import type { ResizeAxis, ResizeState } from '../store'
 import type { Placed } from '../types'
@@ -628,6 +631,58 @@ function RealisticExtras() {
   )
 }
 
+// Screen-space ambient occlusion (N8AO) — the single biggest step away from
+// the "cartoon" look: contact darkening grounds every object. Enabled on
+// Medium (half-res) and High; skipped on Low and in the flat 2D plan view.
+function AOEffects() {
+  const quality = useStore((s) => s.quality)
+  const plan = useStore((s) => s.planMode && s.viewMode === 'iso')
+  const scene = useThree((s) => s.scene)
+  const camera = useThree((s) => s.camera)
+  const size = useThree((s) => s.size)
+  const enabled = quality !== 'low' && !plan
+  const pass = useMemo(() => {
+    if (!enabled) return null
+    const p = new N8AOPostPass(scene, camera, size.width, size.height)
+    p.configuration.aoRadius = 1.4
+    p.configuration.distanceFalloff = 3.5
+    p.configuration.intensity = 2.6
+    p.configuration.halfRes = quality !== 'high'
+    p.setQualityMode(quality === 'high' ? 'Medium' : 'Performance')
+    return p
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, quality, scene, camera, size.width, size.height])
+  if (!pass) return null
+  return (
+    <EffectComposer multisampling={4}>
+      <primitive object={pass} />
+    </EffectComposer>
+  )
+}
+
+// Soft baked contact shadow under everything near the ground — re-baked only
+// when the layout changes, so it costs nothing per frame.
+function GroundContactShadows() {
+  const enabled = useStore((s) => s.quality !== 'low' && !(s.planMode && s.viewMode === 'iso'))
+  const building = useStore((s) => s.building)
+  const objCount = useStore((s) => s.objects.length)
+  const draggingId = useStore((s) => s.draggingId)
+  if (!enabled) return null
+  return (
+    <ContactShadows
+      key={`${objCount}-${building.width}-${building.length}-${building.apron}-${draggingId ?? ''}`}
+      position={[0, 0.012, building.centerZ]}
+      width={building.width + building.apron * 2}
+      height={building.length + building.apron * 2}
+      far={2.4}
+      blur={2.2}
+      opacity={0.32}
+      frames={1}
+      resolution={512}
+    />
+  )
+}
+
 const snapDim = (v: number) => Math.max(0.25, Math.round(v / 0.25) * 0.25)
 
 // Height at which the side resize arrows sit. Suspended/elevated items
@@ -956,6 +1011,8 @@ function SceneContent() {
       <BackgroundGradient />
       <CeilingLights />
       <RealisticExtras />
+      <AOEffects />
+      <GroundContactShadows />
 
       <BuildingFloor />
       {!walking && <GridOverlay />}

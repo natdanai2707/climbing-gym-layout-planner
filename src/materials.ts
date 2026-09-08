@@ -262,3 +262,95 @@ export function surfaceMap(kind: SurfaceKind, w: number, d: number): THREE.Canva
   }
   return t
 }
+
+
+/* ---- procedural normal + roughness detail ---- */
+
+// per-kind bump strength for the derived normal map
+const NORMAL_STRENGTH: Record<SurfaceKind, number> = {
+  epdm: 1.2,
+  concrete: 0.7,
+  birch: 0.5,
+  metalsheet: 2.4,
+  grass: 1.5,
+  gravel: 2.2,
+  plywood: 0.6,
+}
+
+const normalCanvases = new Map<SurfaceKind, HTMLCanvasElement>()
+
+// Sobel over the color canvas's luminance → tangent-space normal map, so
+// every procedural surface gets real relief without downloading textures.
+function drawNormalCanvas(kind: SurfaceKind): HTMLCanvasElement {
+  let src = canvases.get(kind)
+  if (!src) {
+    src = drawCanvas(kind)
+    canvases.set(kind, src)
+  }
+  const N = 256
+  const sg = src.getContext('2d')!.getImageData(0, 0, N, N)
+  const lum = new Float32Array(N * N)
+  for (let i = 0; i < N * N; i++) {
+    lum[i] = (sg.data[i * 4] * 0.299 + sg.data[i * 4 + 1] * 0.587 + sg.data[i * 4 + 2] * 0.114) / 255
+  }
+  const out = document.createElement('canvas')
+  out.width = out.height = N
+  const og = out.getContext('2d')!
+  const img = og.createImageData(N, N)
+  const k = NORMAL_STRENGTH[kind]
+  const at = (x: number, y: number) => lum[((y + N) % N) * N + ((x + N) % N)]
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const dx = (at(x + 1, y) - at(x - 1, y)) * k
+      const dy = (at(x, y + 1) - at(x, y - 1)) * k
+      const inv = 1 / Math.hypot(dx, dy, 1)
+      const i = (y * N + x) * 4
+      img.data[i] = (-dx * inv * 0.5 + 0.5) * 255
+      img.data[i + 1] = (dy * inv * 0.5 + 0.5) * 255
+      img.data[i + 2] = (inv * 0.5 + 0.5) * 255
+      img.data[i + 3] = 255
+    }
+  }
+  og.putImageData(img, 0, 0)
+  return out
+}
+
+// normal map tiled to match surfaceMap(kind, w, d)
+export function surfaceNormal(kind: SurfaceKind, w: number, d: number): THREE.CanvasTexture {
+  const rw = Math.max(1, Math.round(w / 1.5))
+  const rd = Math.max(1, Math.round(d / 1.5))
+  const key = `n:${kind}:${rw}x${rd}`
+  let t = texCache.get(key)
+  if (!t) {
+    let c = normalCanvases.get(kind)
+    if (!c) {
+      c = drawNormalCanvas(kind)
+      normalCanvases.set(kind, c)
+    }
+    t = new THREE.CanvasTexture(c)
+    t.wrapS = t.wrapT = THREE.RepeatWrapping
+    t.repeat.set(rw, rd)
+    t.anisotropy = 4
+    texCache.set(key, t)
+  }
+  return t
+}
+
+// world-locked variant matching surfaceMapWorld
+export function surfaceNormalWorld(kind: SurfaceKind): THREE.CanvasTexture {
+  const key = `n:${kind}:world`
+  let t = texCache.get(key)
+  if (!t) {
+    let c = normalCanvases.get(kind)
+    if (!c) {
+      c = drawNormalCanvas(kind)
+      normalCanvases.set(kind, c)
+    }
+    t = new THREE.CanvasTexture(c)
+    t.wrapS = t.wrapT = THREE.RepeatWrapping
+    t.repeat.set(1 / 1.5, 1 / 1.5)
+    t.anisotropy = 4
+    texCache.set(key, t)
+  }
+  return t
+}

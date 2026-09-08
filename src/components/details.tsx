@@ -6,7 +6,8 @@ import type { Placed } from '../types'
 import { useWallStore } from '../wall/wallStore'
 import { WallModel } from '../wall/WallModel'
 import { designDepth, designWidth } from '../wall/profile'
-import { ROUTE_COLORS, SURFACE_TINTED, surfaceMap } from '../materials'
+import { ROUTE_COLORS, SURFACE_TINTED, surfaceMap, surfaceNormal } from '../materials'
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { wallOpenings } from '../placement'
 import type { Opening } from '../placement'
 import { useStore } from '../store'
@@ -36,6 +37,22 @@ function spread(n: number, size: number): number[] {
   return Array.from({ length: n }, (_, i) => ((i + 0.5) / n - 0.5) * size)
 }
 
+// Cached rounded-box geometries (quantized to cm) — real objects never have
+// razor-sharp corners, and the bevel catches highlights. Low quality keeps
+// plain boxes for speed.
+const roundedCache = new Map<string, THREE.BufferGeometry>()
+function roundedGeo(w: number, h: number, d: number): THREE.BufferGeometry {
+  const q = (v: number) => Math.max(0.01, Math.round(v * 100) / 100)
+  const key = `${q(w)}x${q(h)}x${q(d)}`
+  let g = roundedCache.get(key)
+  if (!g) {
+    const r = Math.min(0.02, Math.min(q(w), q(h), q(d)) * 0.2)
+    g = new RoundedBoxGeometry(q(w), q(h), q(d), 2, Math.max(0.004, r))
+    roundedCache.set(key, g)
+  }
+  return g
+}
+
 function Box({
   args,
   pos,
@@ -49,9 +66,10 @@ function Box({
   rot?: [number, number, number]
   opacity?: number
 }) {
+  const rounded = useStore((s) => s.quality !== 'low')
   return (
-    <mesh position={pos} rotation={rot} castShadow receiveShadow>
-      <boxGeometry args={args} />
+    <mesh position={pos} rotation={rot} castShadow receiveShadow geometry={rounded ? roundedGeo(...args) : undefined}>
+      {!rounded && <boxGeometry args={args} />}
       <meshStandardMaterial color={color} {...MAT} transparent={opacity !== undefined} opacity={opacity} />
     </mesh>
   )
@@ -339,7 +357,7 @@ function ProfiledFace({
           >
             <mesh castShadow receiveShadow>
               <boxGeometry args={[w, len, t]} />
-              <meshStandardMaterial color={color} map={surfaceMap('plywood', w, len)} roughness={0.75} />
+              <meshStandardMaterial color={color} map={surfaceMap('plywood', w, len)} normalMap={surfaceNormal('plywood', w, len)} roughness={0.75} />
             </mesh>
             {len > 0.7 && (
               <group position={[0, 0, t / 2 + 0.03]}>
@@ -457,7 +475,7 @@ function IslandBoulder({ o, tint }: { o: Placed; tint: string | null }) {
             <group key={i} position={[0, (a.y + b.y) / 2, half - 0.11 + (a.off + b.off) / 2]} rotation-x={ang}>
               <mesh castShadow receiveShadow>
                 <boxGeometry args={[width, len, 0.22]} />
-                <meshStandardMaterial color={color} map={surfaceMap('plywood', width, len)} roughness={0.75} />
+                <meshStandardMaterial color={color} map={surfaceMap('plywood', width, len)} normalMap={surfaceNormal('plywood', width, len)} roughness={0.75} />
               </mesh>
               <group position={[0, 0, 0.14]}>
                 <Holds w={width} len={len} seed={seed * 5 + i} />
@@ -1759,9 +1777,10 @@ function Alu({
   color?: string
   rot?: [number, number, number]
 }) {
+  const rounded = useStore((s) => s.quality !== 'low')
   return (
-    <mesh position={pos} rotation={rot} castShadow>
-      <boxGeometry args={args} />
+    <mesh position={pos} rotation={rot} castShadow geometry={rounded ? roundedGeo(...args) : undefined}>
+      {!rounded && <boxGeometry args={args} />}
       <meshStandardMaterial color={color} roughness={0.35} metalness={0.85} />
     </mesh>
   )
@@ -2952,7 +2971,7 @@ function GroundPatch({ o, tint, kind }: { o: Placed; tint: string | null; kind: 
     <group>
       <mesh position={[0, h / 2, 0]} receiveShadow>
         <boxGeometry args={[o.w, h, o.d]} />
-        <meshStandardMaterial color={tint ?? '#ffffff'} map={surfaceMap(kind, o.w, o.d)} roughness={1} />
+        <meshStandardMaterial color={tint ?? '#ffffff'} map={surfaceMap(kind, o.w, o.d)} normalMap={surfaceNormal(kind, o.w, o.d)} roughness={1} />
       </mesh>
     </group>
   )
