@@ -78,9 +78,12 @@ function Box({
 /* ------------------------------ people ------------------------------ */
 
 const HOLD_COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#a855f7', '#eab308', '#ec4899', '#14b8a6']
-const SKIN_COLORS = ['#f2c9a0', '#e0ac7e', '#b98058', '#8d5f3d']
-const HAIR_COLORS = ['#2c2320', '#171717', '#4a382a', '#5b4632', '#3a3a3e']
-const PANTS_COLORS = ['#374151', '#23272e', '#4a5568', '#5b5348', '#2f3a4a']
+// Arch-viz figures: one desaturated grey family, slightly translucent, so
+// people give scale without stealing attention from the architecture.
+const FIG_ALPHA = 0.85
+const SKIN_COLORS = ['#c6cad0', '#bfc3c9', '#b7bbc2', '#c9ccd2']
+const HAIR_COLORS = ['#9298a0', '#878d95', '#9ba1a8', '#8d939b', '#959ba2']
+const PANTS_COLORS = ['#9aa0a8', '#93999f', '#a2a7ae', '#8f959d', '#9da2aa']
 
 export type Pose = 'stand' | 'walk' | 'sit' | 'climb' | 'push' | 'hang'
 
@@ -104,7 +107,7 @@ function Limb({
     <group position={pos} rotation={rot}>
       <mesh position={[0, -len / 2, 0]} castShadow>
         <capsuleGeometry args={[r, len, 3, 8]} />
-        <meshStandardMaterial color={color} roughness={0.8} />
+        <meshStandardMaterial color={color} roughness={0.8} transparent opacity={FIG_ALPHA} />
       </mesh>
       {children}
     </group>
@@ -139,42 +142,43 @@ export function Figure({
   idx?: number
   scale?: number
 }) {
-  const cShirt = shirt
+  void shirt // arch-viz figures stay monochrome; callers' colors are ignored
+  const cShirt = ['#b3b8bf', '#adb2b9', '#b9bdc4'][idx % 3]
   const cSkin = SKIN_COLORS[idx % SKIN_COLORS.length]
   const cPants = PANTS_COLORS[(idx * 5 + 2) % PANTS_COLORS.length]
   const cHair = HAIR_COLORS[(idx * 3 + 1) % HAIR_COLORS.length]
-  const cShoe = idx % 3 === 0 ? '#2b2f35' : idx % 3 === 1 ? '#e8e6e1' : '#7a4a35'
+  const cShoe = '#868c94'
   const P = POSES[pose]
   const rot3 = (a: number[]) => a as [number, number, number]
   const hand = (
     <mesh position={[0, -0.5, 0]} castShadow>
       <sphereGeometry args={[0.042, 8, 6]} />
-      <meshStandardMaterial color={cSkin} roughness={0.7} />
+      <meshStandardMaterial color={cSkin} roughness={0.7} transparent opacity={FIG_ALPHA} />
     </mesh>
   )
   return (
-    <group position={pos} rotation-y={ry} scale={scale}>
+    <group position={pos} rotation-y={ry} scale={scale * (1.7 / 1.45)}>
       {/* shirt torso (broader shoulders, flatter chest) over pants hips */}
       <mesh position={[0, 0.8, 0]} scale={[1.12, 1, 0.76]} castShadow>
         <capsuleGeometry args={[0.125, 0.28, 4, 10]} />
-        <meshStandardMaterial color={cShirt} roughness={0.85} />
+        <meshStandardMaterial color={cShirt} roughness={0.85} transparent opacity={FIG_ALPHA} />
       </mesh>
       <mesh position={[0, 0.58, 0]} scale={[1.02, 1, 0.82]} castShadow>
         <capsuleGeometry args={[0.108, 0.1, 3, 10]} />
-        <meshStandardMaterial color={cPants} roughness={0.85} />
+        <meshStandardMaterial color={cPants} roughness={0.85} transparent opacity={FIG_ALPHA} />
       </mesh>
       {/* neck and a slightly oval head with a hair cap */}
       <mesh position={[0, 1.05, 0]}>
         <cylinderGeometry args={[0.042, 0.05, 0.09, 8]} />
-        <meshStandardMaterial color={cSkin} roughness={0.7} />
+        <meshStandardMaterial color={cSkin} roughness={0.7} transparent opacity={FIG_ALPHA} />
       </mesh>
       <mesh position={[0, 1.17, 0]} scale={[0.94, 1.08, 0.96]} castShadow>
         <sphereGeometry args={[0.103, 14, 12]} />
-        <meshStandardMaterial color={cSkin} roughness={0.7} />
+        <meshStandardMaterial color={cSkin} roughness={0.7} transparent opacity={FIG_ALPHA} />
       </mesh>
       <mesh position={[0, 1.2, -0.018]} scale={[1.05, 0.85, 1.05]} castShadow>
         <sphereGeometry args={[0.106, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
-        <meshStandardMaterial color={cHair} roughness={0.95} />
+        <meshStandardMaterial color={cHair} roughness={0.95} transparent opacity={FIG_ALPHA} />
       </mesh>
       {/* arms from the shoulders, with hands */}
       <Limb r={0.037} len={0.48} pos={[0.18, 0.94, 0]} rot={rot3(P.aL)} color={cShirt}>
@@ -3304,7 +3308,7 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
     case 'person':
       // placeable person; height H scales the figure, color = shirt
       return (
-        <group scale={o.h / 1.45}>
+        <group scale={o.h / 1.7}>
           <Figure pose="walk" shirt={tint ?? o.color} idx={o.id.length} />
         </group>
       )
