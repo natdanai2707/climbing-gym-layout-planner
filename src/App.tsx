@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Scene, canvasCapture, walkInput, walkLook } from './components/Scene'
+import { ThumbnailFactory } from './components/Thumbnails'
 import { Toolbar } from './components/Toolbar'
 import { Palette } from './components/Palette'
 import { Inspector } from './components/Inspector'
@@ -199,6 +200,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <ThumbnailFactory />
       <Toolbar />
       <div className="main">
         <Palette />

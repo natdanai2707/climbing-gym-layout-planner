@@ -3,10 +3,12 @@ import type { ObjectDef } from '../types'
 import { useStore } from '../store'
 import { useWallStore } from '../wall/wallStore'
 import { designDepth, designWidth } from '../wall/profile'
+import { useThumbStore } from './Thumbnails'
 
 function PaletteCard({ def }: { def: ObjectDef }) {
   const startPlacing = useStore((s) => s.startPlacing)
   const active = useStore((s) => s.placingDef?.id === def.id)
+  const thumb = useThumbStore((s) => s.thumbs[def.id])
   return (
     <div
       className={`palette-card${active ? ' active' : ''}`}
@@ -20,7 +22,11 @@ function PaletteCard({ def }: { def: ObjectDef }) {
       onClick={() => startPlacing(def)}
       title="Drag onto the floor, or tap then tap the scene to place (Esc cancels)"
     >
-      <span className="swatch" style={{ background: def.color }} />
+      {thumb ? (
+        <img className="thumb" src={thumb} alt="" draggable={false} />
+      ) : (
+        <span className="swatch" style={{ background: def.color }} />
+      )}
       <div className="pc-text">
         <div className="pc-label">{def.label}</div>
         <div className="pc-dims">

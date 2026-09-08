@@ -165,6 +165,17 @@ button:disabled {
   border: 1px solid rgba(0, 0, 0, 0.12);
 }
 
+.thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  border: 1px solid #e0dbd0;
+  background: #f6f4ee;
+  object-fit: cover;
+  user-select: none;
+}
+
 .pc-label {
   font-weight: 600;
   line-height: 1.25;

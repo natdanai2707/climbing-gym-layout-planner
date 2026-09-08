@@ -434,9 +434,64 @@ function Mats({ o, tint }: { o: Placed; tint: string | null }) {
 // Elevated platform: floating slab with a railing around the top edge.
 // Support columns are intentionally NOT included — place Column items freely
 // underneath to plan the real structural grid.
+// A stair landing on this mezzanine cuts an OPENING in the deck: the hole
+// rect (in the mezzanine's local frame) plus which side stays open (where
+// the stair arrives). Only stairs aligned with the mezzanine (relative
+// rotation a multiple of 90°) and reaching its height count.
+function stairHole(
+  o: Placed,
+  objects: Placed[],
+): { x0: number; x1: number; z0: number; z1: number; open: 'x+' | 'x-' | 'z+' | 'z-' } | null {
+  for (const s of objects) {
+    if (s.category !== 'stairs' || Math.abs(s.h - o.h) > 0.7) continue
+    const dRot = (((s.rot - o.rot) % 8) + 8) % 8
+    if (dRot % 2 !== 0) continue
+    // stair top strip (local -d/2 end) center in world
+    const th = (s.rot * Math.PI) / 4
+    const topLen = Math.min(1.7, Math.max(1.1, s.d * 0.35))
+    const lzTop = -(s.d - topLen) / 2
+    const wx = s.x + lzTop * Math.sin(th)
+    const wz = s.z + lzTop * Math.cos(th)
+    // into mezzanine local frame
+    const mth = (o.rot * Math.PI) / 4
+    const dx = wx - o.x
+    const dz = wz - o.z
+    const lx = dx * Math.cos(mth) - dz * Math.sin(mth)
+    const lz = dx * Math.sin(mth) + dz * Math.cos(mth)
+    const hw = (dRot % 4 === 0 ? s.w : topLen) + 0.15
+    const hd = (dRot % 4 === 0 ? topLen : s.w) + (dRot % 4 === 0 ? 0 : 0.15)
+    if (Math.abs(lx) > o.w / 2 + hw / 2 - 0.1 || Math.abs(lz) > o.d / 2 + hd / 2 - 0.1) continue
+    const x0 = Math.max(-o.w / 2, lx - hw / 2)
+    const x1 = Math.min(o.w / 2, lx + hw / 2)
+    const z0 = Math.max(-o.d / 2, lz - hd / 2)
+    const z1 = Math.min(o.d / 2, lz + hd / 2)
+    const open = (['z+', 'x+', 'z-', 'x-'] as const)[dRot / 2] // stair runs down toward this side
+    if (x1 - x0 >= 0.4 && z1 - z0 >= 0.4) return { x0, x1, z0, z1, open }
+    // stair top flush with the deck edge: cut a shallow landing notch there
+    // so the perimeter rail opens over the stair width
+    const notch = 0.5
+    if (x1 - x0 >= 0.4) {
+      if (open === 'z+' && Math.abs(lz - o.d / 2) < hd) return { x0, x1, z0: o.d / 2 - notch, z1: o.d / 2, open }
+      if (open === 'z-' && Math.abs(lz + o.d / 2) < hd) return { x0, x1, z0: -o.d / 2, z1: -o.d / 2 + notch, open }
+    }
+    if (z1 - z0 >= 0.4) {
+      if (open === 'x+' && Math.abs(lx - o.w / 2) < hw) return { x0: o.w / 2 - notch, x1: o.w / 2, z0, z1, open }
+      if (open === 'x-' && Math.abs(lx + o.w / 2) < hw) return { x0: -o.w / 2, x1: -o.w / 2 + notch, z0, z1, open }
+    }
+    continue
+  }
+  return null
+}
+
 function Mezzanine({ o, tint }: { o: Placed; tint: string | null }) {
   const slabT = 0.25
   const railH = 1.0
+  const objects = useStore((s) => s.objects)
+  const hole = useMemo(() => stairHole(o, objects), [o, objects])
+
+  const inHole = (x: number, z: number) =>
+    hole !== null && x > hole.x0 - 0.09 && x < hole.x1 + 0.09 && z > hole.z0 - 0.09 && z < hole.z1 + 0.09
+
   const posts = useMemo(() => {
     const res: Array<[number, number]> = []
     const nx = Math.max(2, Math.round(o.w / 1.5))
@@ -453,32 +508,107 @@ function Mezzanine({ o, tint }: { o: Placed; tint: string | null }) {
       res.push([-o.w / 2 + 0.05, z], [o.w / 2 - 0.05, z])
     return res
   }, [o.w, o.d])
+
+  // deck pieces around the opening (whole deck when there is no hole)
+  const pieces = useMemo(() => {
+    if (!hole) return [{ cx: 0, cz: 0, w: o.w, d: o.d }]
+    const res: Array<{ cx: number; cz: number; w: number; d: number }> = []
+    if (hole.z0 > -o.d / 2 + 0.03) res.push({ cx: 0, cz: (-o.d / 2 + hole.z0) / 2, w: o.w, d: hole.z0 + o.d / 2 })
+    if (hole.z1 < o.d / 2 - 0.03) res.push({ cx: 0, cz: (hole.z1 + o.d / 2) / 2, w: o.w, d: o.d / 2 - hole.z1 })
+    const midD = hole.z1 - hole.z0
+    if (hole.x0 > -o.w / 2 + 0.03) res.push({ cx: (-o.w / 2 + hole.x0) / 2, cz: (hole.z0 + hole.z1) / 2, w: hole.x0 + o.w / 2, d: midD })
+    if (hole.x1 < o.w / 2 - 0.03) res.push({ cx: (hole.x1 + o.w / 2) / 2, cz: (hole.z0 + hole.z1) / 2, w: o.w / 2 - hole.x1, d: midD })
+    return res
+  }, [hole, o.w, o.d])
+
+  // perimeter rails, split around the opening when it touches that edge
+  const edgeSegs = (a0: number, a1: number, touches: boolean, g0: number, g1: number) => {
+    if (!touches) return [[a0, a1]] as Array<[number, number]>
+    const segs: Array<[number, number]> = []
+    if (g0 - a0 > 0.18) segs.push([a0, g0])
+    if (a1 - g1 > 0.18) segs.push([g1, a1])
+    return segs
+  }
+  const northSegs = edgeSegs(-o.w / 2, o.w / 2, hole !== null && hole.z0 < -o.d / 2 + 0.2, hole?.x0 ?? 0, hole?.x1 ?? 0)
+  const southSegs = edgeSegs(-o.w / 2, o.w / 2, hole !== null && hole.z1 > o.d / 2 - 0.2, hole?.x0 ?? 0, hole?.x1 ?? 0)
+  const westSegs = edgeSegs(-o.d / 2, o.d / 2, hole !== null && hole.x0 < -o.w / 2 + 0.2, hole?.z0 ?? 0, hole?.z1 ?? 0)
+  const eastSegs = edgeSegs(-o.d / 2, o.d / 2, hole !== null && hole.x1 > o.w / 2 - 0.2, hole?.z0 ?? 0, hole?.z1 ?? 0)
+
+  // safety rails around the interior sides of the opening (the stair side stays open)
+  const holeGuards = useMemo(() => {
+    if (!hole) return []
+    const res: Array<{ cx: number; cz: number; len: number; dir: 'x' | 'z' }> = []
+    const near = (v: number, edge: number) => Math.abs(v - edge) < 0.2
+    if (hole.open !== 'z-' && !near(hole.z0, -o.d / 2)) res.push({ cx: (hole.x0 + hole.x1) / 2, cz: hole.z0, len: hole.x1 - hole.x0, dir: 'x' })
+    if (hole.open !== 'z+' && !near(hole.z1, o.d / 2)) res.push({ cx: (hole.x0 + hole.x1) / 2, cz: hole.z1, len: hole.x1 - hole.x0, dir: 'x' })
+    if (hole.open !== 'x-' && !near(hole.x0, -o.w / 2)) res.push({ cx: hole.x0, cz: (hole.z0 + hole.z1) / 2, len: hole.z1 - hole.z0, dir: 'z' })
+    if (hole.open !== 'x+' && !near(hole.x1, o.w / 2)) res.push({ cx: hole.x1, cz: (hole.z0 + hole.z1) / 2, len: hole.z1 - hole.z0, dir: 'z' })
+    return res
+  }, [hole, o.w, o.d])
+
   return (
     <group>
-      {/* deck: birch floor over a steel edge beam */}
-      <mesh position={[0, o.h - 0.03, 0]} castShadow receiveShadow>
-        <boxGeometry args={[o.w, 0.06, o.d]} />
-        <meshStandardMaterial color={tint ?? '#ffffff'} map={surfaceMap('birch', o.w, o.d)} roughness={0.8} />
-      </mesh>
-      <mesh position={[0, o.h - 0.06 - (slabT - 0.06) / 2, 0]} castShadow>
-        <boxGeometry args={[o.w, slabT - 0.06, o.d]} />
-        <meshStandardMaterial color={tint ?? '#5b6472'} roughness={0.5} metalness={0.4} />
-      </mesh>
-      {/* guardrail: posts, thin balusters, kick plate, round-ish handrail */}
-      {posts.map(([x, z], i) => (
-        <Box key={`p${i}`} args={[0.045, railH, 0.045]} pos={[x, o.h + railH / 2, z]} color="#3a3f45" />
+      {/* deck: birch floor over a steel edge beam, with the stair opening cut out */}
+      {pieces.map((p, i) => (
+        <group key={`s${i}`} position={[p.cx, 0, p.cz]}>
+          <mesh position={[0, o.h - 0.03, 0]} castShadow receiveShadow>
+            <boxGeometry args={[p.w, 0.06, p.d]} />
+            <meshStandardMaterial color={tint ?? '#ffffff'} map={surfaceMap('birch', p.w, p.d)} roughness={0.8} />
+          </mesh>
+          <mesh position={[0, o.h - 0.06 - (slabT - 0.06) / 2, 0]} castShadow>
+            <boxGeometry args={[p.w, slabT - 0.06, p.d]} />
+            <meshStandardMaterial color={tint ?? '#5b6472'} roughness={0.5} metalness={0.4} />
+          </mesh>
+        </group>
       ))}
-      {balusters.map(([x, z], i) => (
-        <Box key={`b${i}`} args={[0.015, railH - 0.14, 0.015]} pos={[x, o.h + (railH - 0.14) / 2 + 0.02, z]} color="#4b5563" />
+      {/* guardrail: posts, thin balusters, kick plates, timber handrail */}
+      {posts
+        .filter(([x, z]) => !inHole(x, z))
+        .map(([x, z], i) => (
+          <Box key={`p${i}`} args={[0.045, railH, 0.045]} pos={[x, o.h + railH / 2, z]} color="#3a3f45" />
+        ))}
+      {balusters
+        .filter(([x, z]) => !inHole(x, z))
+        .map(([x, z], i) => (
+          <Box key={`b${i}`} args={[0.015, railH - 0.14, 0.015]} pos={[x, o.h + (railH - 0.14) / 2 + 0.02, z]} color="#4b5563" />
+        ))}
+      {northSegs.map(([a, b], i) => (
+        <group key={`n${i}`}>
+          <Box args={[b - a, 0.1, 0.02]} pos={[(a + b) / 2, o.h + 0.05, -o.d / 2 + 0.03]} color="#3a3f45" />
+          <Alu args={[b - a, 0.055, 0.055]} pos={[(a + b) / 2, o.h + railH, -o.d / 2 + 0.05]} color="#c9a06c" />
+        </group>
       ))}
-      <Box args={[o.w, 0.1, 0.02]} pos={[0, o.h + 0.05, -o.d / 2 + 0.03]} color="#3a3f45" />
-      <Box args={[o.w, 0.1, 0.02]} pos={[0, o.h + 0.05, o.d / 2 - 0.03]} color="#3a3f45" />
-      <Box args={[0.02, 0.1, o.d]} pos={[-o.w / 2 + 0.03, o.h + 0.05, 0]} color="#3a3f45" />
-      <Box args={[0.02, 0.1, o.d]} pos={[o.w / 2 - 0.03, o.h + 0.05, 0]} color="#3a3f45" />
-      <Alu args={[o.w, 0.055, 0.055]} pos={[0, o.h + railH, -o.d / 2 + 0.05]} color="#c9a06c" />
-      <Alu args={[o.w, 0.055, 0.055]} pos={[0, o.h + railH, o.d / 2 - 0.05]} color="#c9a06c" />
-      <Alu args={[0.055, 0.055, o.d]} pos={[-o.w / 2 + 0.05, o.h + railH, 0]} color="#c9a06c" />
-      <Alu args={[0.055, 0.055, o.d]} pos={[o.w / 2 - 0.05, o.h + railH, 0]} color="#c9a06c" />
+      {southSegs.map(([a, b], i) => (
+        <group key={`so${i}`}>
+          <Box args={[b - a, 0.1, 0.02]} pos={[(a + b) / 2, o.h + 0.05, o.d / 2 - 0.03]} color="#3a3f45" />
+          <Alu args={[b - a, 0.055, 0.055]} pos={[(a + b) / 2, o.h + railH, o.d / 2 - 0.05]} color="#c9a06c" />
+        </group>
+      ))}
+      {westSegs.map(([a, b], i) => (
+        <group key={`w${i}`}>
+          <Box args={[0.02, 0.1, b - a]} pos={[-o.w / 2 + 0.03, o.h + 0.05, (a + b) / 2]} color="#3a3f45" />
+          <Alu args={[0.055, 0.055, b - a]} pos={[-o.w / 2 + 0.05, o.h + railH, (a + b) / 2]} color="#c9a06c" />
+        </group>
+      ))}
+      {eastSegs.map(([a, b], i) => (
+        <group key={`e${i}`}>
+          <Box args={[0.02, 0.1, b - a]} pos={[o.w / 2 - 0.03, o.h + 0.05, (a + b) / 2]} color="#3a3f45" />
+          <Alu args={[0.055, 0.055, b - a]} pos={[o.w / 2 - 0.05, o.h + railH, (a + b) / 2]} color="#c9a06c" />
+        </group>
+      ))}
+      {/* railing around the stair opening (open on the arrival side) */}
+      {holeGuards.map((g, i) => (
+        <group key={`g${i}`}>
+          <Box
+            args={g.dir === 'x' ? [g.len, 0.1, 0.02] : [0.02, 0.1, g.len]}
+            pos={[g.cx, o.h + 0.05, g.cz]}
+            color="#3a3f45"
+          />
+          <Alu args={g.dir === 'x' ? [g.len, 0.05, 0.05] : [0.05, 0.05, g.len]} pos={[g.cx, o.h + railH, g.cz]} color="#c9a06c" />
+          <Box args={[0.045, railH, 0.045]} pos={g.dir === 'x' ? [g.cx - g.len / 2, o.h + railH / 2, g.cz] : [g.cx, o.h + railH / 2, g.cz - g.len / 2]} color="#3a3f45" />
+          <Box args={[0.045, railH, 0.045]} pos={g.dir === 'x' ? [g.cx + g.len / 2, o.h + railH / 2, g.cz] : [g.cx, o.h + railH / 2, g.cz + g.len / 2]} color="#3a3f45" />
+        </group>
+      ))}
     </group>
   )
 }
