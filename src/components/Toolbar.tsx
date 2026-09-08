@@ -65,6 +65,8 @@ export function Toolbar() {
   const setViewMode = useStore((s) => s.setViewMode)
   const viewPreset = useStore((s) => s.viewPreset)
   const setViewPreset = useStore((s) => s.setViewPreset)
+  const planMode = useStore((s) => s.planMode)
+  const enterPlan = useStore((s) => s.enterPlan)
   const lightMood = useStore((s) => s.lightMood)
   const setLightMood = useStore((s) => s.setLightMood)
   const clayMode = useStore((s) => s.clayMode)
@@ -132,6 +134,13 @@ export function Toolbar() {
           ↷ Redo
         </button>
         <div className="view-seg" role="group" title="Camera views — zoom follows the cursor / finger">
+          <button
+            className={planMode ? 'on' : ''}
+            onClick={enterPlan}
+            title="2D architectural plan: flat symbols, pan and zoom only"
+          >
+            2D
+          </button>
           {(
             [
               ['iso', '3D'],
@@ -142,7 +151,7 @@ export function Toolbar() {
           ).map(([v, label]) => (
             <button
               key={v}
-              className={viewMode === 'iso' && viewPreset === v ? 'on' : ''}
+              className={!planMode && viewMode === 'iso' && viewPreset === v ? 'on' : ''}
               onClick={() => setViewPreset(v)}
             >
               {label}

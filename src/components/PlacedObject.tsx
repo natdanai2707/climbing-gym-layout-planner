@@ -6,6 +6,7 @@ import type { Placed } from '../types'
 import { useStore } from '../store'
 import { fp } from '../placement'
 import { ObjectMesh } from './details'
+import { PlanSymbol } from './PlanSymbols'
 
 // Height at which the floating label hovers, per category
 function labelY(o: Placed): number {
@@ -26,6 +27,7 @@ export function PlacedObject({ o, warning, elev }: { o: Placed; warning: boolean
   const selected = useStore((s) => s.selectedId === o.id)
   const showLabels = useStore((s) => s.showLabels)
   const beginMove = useStore((s) => s.beginMove)
+  const plan = useStore((s) => s.planMode && s.viewMode === 'iso')
   const controls = useThree((s) => s.controls) as { enabled?: boolean } | null
 
   const tint = warning ? '#e05252' : null
@@ -59,7 +61,7 @@ export function PlacedObject({ o, warning, elev }: { o: Placed; warning: boolean
   return (
     <group position={[o.x, baseY, o.z]}>
       <group rotation-y={(o.rot * Math.PI) / 4} onPointerDown={onPointerDown}>
-        <ObjectMesh o={o} tint={tint} />
+        {plan ? <PlanSymbol o={o} tint={tint} /> : <ObjectMesh o={o} tint={tint} />}
       </group>
       {selected && (
         <mesh position={[0, 0.02, 0]} rotation-x={-Math.PI / 2}>

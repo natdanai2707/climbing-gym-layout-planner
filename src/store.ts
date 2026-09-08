@@ -129,6 +129,8 @@ export interface GymState {
   setViewMode: (v: 'iso' | 'walk') => void
   viewPreset: 'iso' | 'top' | 'front' | 'side'
   setViewPreset: (v: 'iso' | 'top' | 'front' | 'side') => void
+  planMode: boolean // 2D architectural plan view: items draw as flat symbols
+  enterPlan: () => void
   lightMood: 'day' | 'golden' | 'night'
   setLightMood: (m: 'day' | 'golden' | 'night') => void
   clayMode: boolean
@@ -631,16 +633,18 @@ export const useStore = create<GymState>()(
 
     toggleGrid: () => set({ showGrid: !get().showGrid }),
     toggleLabels: () => set({ showLabels: !get().showLabels }),
-    resetView: () => set({ viewKey: get().viewKey + 1, viewPreset: 'iso' }),
+    resetView: () => set({ viewKey: get().viewKey + 1, viewPreset: 'iso', planMode: false }),
 
     viewMode: 'iso',
     setViewMode: (v) => {
       if (v === 'walk')
-        set({ viewMode: v, selectedId: null, moveArmed: false, placingDef: null, ghost: null })
+        set({ viewMode: v, selectedId: null, moveArmed: false, placingDef: null, ghost: null, planMode: false })
       else set({ viewMode: v, viewKey: get().viewKey + 1 })
     },
     viewPreset: 'iso',
-    setViewPreset: (v) => set({ viewPreset: v, viewMode: 'iso', viewKey: get().viewKey + 1 }),
+    setViewPreset: (v) => set({ viewPreset: v, viewMode: 'iso', planMode: false, viewKey: get().viewKey + 1 }),
+    planMode: false,
+    enterPlan: () => set({ planMode: true, viewPreset: 'top', viewMode: 'iso', viewKey: get().viewKey + 1 }),
     lightMood: 'day',
     setLightMood: (m) => set({ lightMood: m }),
     clayMode: false,

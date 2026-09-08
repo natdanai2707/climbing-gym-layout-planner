@@ -8,6 +8,7 @@ import type { ResizeAxis, ResizeState } from '../store'
 import type { Placed } from '../types'
 import { BuildingFloor } from './BuildingFloor'
 import { GridOverlay } from './GridOverlay'
+import { PlanBuildingOutline } from './PlanSymbols'
 import { PlacedObject } from './PlacedObject'
 import { WarehouseShell, ROOF_PITCH } from './WarehouseShell'
 import { ArrowHandle } from './gizmo'
@@ -33,6 +34,7 @@ function CaptureBinder() {
 function CameraRig() {
   const size = useThree((s) => s.size)
   const preset = useStore((s) => s.viewPreset)
+  const plan = useStore((s) => s.planMode)
   const cfg = useMemo(() => {
     const s = useStore.getState()
     const { width, length, apron, centerZ } = s.building
@@ -70,7 +72,15 @@ function CameraRig() {
   return (
     <>
       <OrthographicCamera makeDefault position={cfg.pos} zoom={cfg.zoom} near={-500} far={1000} />
-      <OrbitControls makeDefault target={cfg.target} maxPolarAngle={Math.PI / 2.05} zoomToCursor />
+      {/* 2D plan mode locks rotation: pan + zoom-to-cursor only */}
+      <OrbitControls
+        makeDefault
+        target={cfg.target}
+        maxPolarAngle={Math.PI / 2.05}
+        zoomToCursor
+        enableRotate={!plan}
+        screenSpacePanning={plan}
+      />
     </>
   )
 }
@@ -763,6 +773,7 @@ function SceneContent() {
   const moveArmed = useStore((s) => s.moveArmed)
   const walking = useStore((s) => s.viewMode === 'walk')
   const clay = useStore((s) => s.clayMode)
+  const plan = useStore((s) => s.planMode)
   const warnings = useMemo(() => getWarningIds(objects, building), [objects, building])
   // hide the resize arrows while Move mode is armed — moving and resizing are
   // separate gestures, and the arrows would only get in the way of the drag
@@ -781,7 +792,11 @@ function SceneContent() {
       ))}
       {selected && <ResizeGizmo o={selected} elev={elevationFor(selected, objects)} />}
       <Ghost />
-      <WarehouseShell />
+      {plan ? (
+        <PlanBuildingOutline width={building.width} length={building.length} apron={building.apron} centerZ={building.centerZ} />
+      ) : (
+        <WarehouseShell />
+      )}
       <MeasureGraphics />
 
       {/* invisible catcher: click empty ground to deselect */}
