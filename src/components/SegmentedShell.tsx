@@ -6,43 +6,104 @@ import { surfaceMap, surfaceMapWorld } from '../materials'
 import { ROOF_PITCH } from './WarehouseShell'
 
 /**
- * Freeform designed building shell: the building is a run of ZONES along its
- * length, each with its own eave height, roof shape/slope and cladding
- * (colored metal sheet or translucent daylight sheet); plus canopies on any
- * side (posts or hung) and free-shape glazing panels drawn per facade.
- * Segment lengths are scaled proportionally so the shell always spans the
- * building footprint exactly.
+ * Freeform designed building shell. The building is a run of ZONES along its
+ * length, and each zone's CROSS-SECTION is shaped across the width too:
+ * independent left/right wall heights, a gable ridge that can sit anywhere
+ * across the width, or a shed roof whose slope comes from the height
+ * difference — so one side can be a 14 m climbing bay while the other stays
+ * low. Plus canopies (posts or hung) and free-shape glazing per facade.
  */
 
 const GLASS_MAT = { color: '#9fc8e0', transparent: true, opacity: 0.45, roughness: 0.12, metalness: 0.2, side: THREE.DoubleSide, depthWrite: false }
 const CLEAR_MAT = { color: '#f2f7fa', transparent: true, opacity: 0.5, roughness: 0.3, emissive: '#dfeaf2', emissiveIntensity: 0.2, side: THREE.DoubleSide, depthWrite: false }
 
-export interface SegSpan extends ShellSegment {
+// fully-resolved zone: legacy fields (eave / slopeL / slopeR / flat) migrated
+export interface NormSeg {
+  len: number
+  eaveL: number
+  eaveR: number
+  roof: 'gable' | 'shed'
+  ridgeX: number
+  rise: number
+  color: string
+  clear?: boolean
+}
+
+export interface SegSpan extends NormSeg {
   z0: number
   z1: number
 }
 
+export function normalizeSegment(s: ShellSegment): NormSeg {
+  let eaveL = s.eaveL
+  let eaveR = s.eaveR
+  if (eaveL === undefined || eaveR === undefined) {
+    const e = s.eave ?? 6
+    if (s.roof === 'slopeL') {
+      eaveL = e + s.rise
+      eaveR = e
+    } else if (s.roof === 'slopeR') {
+      eaveL = e
+      eaveR = e + s.rise
+    } else {
+      eaveL = e
+      eaveR = e
+    }
+  }
+  const roof: NormSeg['roof'] = s.roof === 'gable' ? 'gable' : 'shed'
+  return {
+    len: Math.max(0.5, s.len),
+    eaveL,
+    eaveR,
+    roof,
+    ridgeX: Math.min(0.95, Math.max(0.05, s.ridgeX ?? 0.5)),
+    rise: Math.max(0, s.rise),
+    color: s.color,
+    clear: s.clear,
+  }
+}
+
 // segment z-ranges in shell-local coords (z measured from -L/2), scaled to fit L
 export function segmentSpans(design: ShellDesign, L: number): SegSpan[] {
-  const total = design.segments.reduce((a, s) => a + Math.max(0.5, s.len), 0) || 1
+  const norm = design.segments.map(normalizeSegment)
+  const total = norm.reduce((a, s) => a + s.len, 0) || 1
   const k = L / total
   let z = -L / 2
-  return design.segments.map((s) => {
+  return norm.map((s) => {
     const z0 = z
-    z += Math.max(0.5, s.len) * k
+    z += s.len * k
     return { ...s, z0, z1: z }
   })
 }
 
+// roof profile across the width: list of (x, y) from the left eave to the right
+export function roofProfile(seg: NormSeg, W: number): Array<[number, number]> {
+  const pts: Array<[number, number]> = [[-W / 2, seg.eaveL]]
+  if (seg.roof === 'gable')
+    pts.push([seg.ridgeX * W - W / 2, Math.max(seg.eaveL, seg.eaveR) + Math.max(0.05, seg.rise)])
+  pts.push([W / 2, seg.eaveR])
+  return pts
+}
+
+const segTop = (seg: NormSeg): number =>
+  seg.roof === 'gable' ? Math.max(seg.eaveL, seg.eaveR) + Math.max(0.05, seg.rise) : Math.max(seg.eaveL, seg.eaveR)
+
 export function designVolume(design: ShellDesign, W: number, L: number): number {
-  return segmentSpans(design, L).reduce((a, s) => a + (s.z1 - s.z0) * W * (s.eave + s.rise / 2), 0)
+  return segmentSpans(design, L).reduce((a, s) => {
+    let area = (W * (s.eaveL + s.eaveR)) / 2
+    if (s.roof === 'gable') {
+      const chordY = s.eaveL + (s.eaveR - s.eaveL) * s.ridgeX
+      area += 0.5 * W * Math.max(0, segTop(s) - chordY)
+    }
+    return a + (s.z1 - s.z0) * area
+  }, 0)
 }
 
 export function designMaxHeight(design: ShellDesign): number {
-  return Math.max(...design.segments.map((s) => s.eave + s.rise), 3)
+  return Math.max(...design.segments.map((s) => segTop(normalizeSegment(s))), 3)
 }
 
-function Cladding({ seg }: { seg: ShellSegment }) {
+function Cladding({ seg }: { seg: NormSeg }) {
   return seg.clear ? (
     <meshStandardMaterial {...CLEAR_MAT} />
   ) : (
@@ -50,25 +111,13 @@ function Cladding({ seg }: { seg: ShellSegment }) {
   )
 }
 
-// end-wall profile (rect + roof triangle/wedge) for a segment
-function endShape(seg: ShellSegment, W: number): THREE.Shape {
+// end-wall cross-section: floor, both eaves and the roof profile between them
+function endShape(seg: NormSeg, W: number): THREE.Shape {
   const s = new THREE.Shape()
   s.moveTo(-W / 2, 0)
   s.lineTo(W / 2, 0)
-  if (seg.roof === 'gable') {
-    s.lineTo(W / 2, seg.eave)
-    s.lineTo(0, seg.eave + seg.rise)
-    s.lineTo(-W / 2, seg.eave)
-  } else if (seg.roof === 'slopeL') {
-    s.lineTo(W / 2, seg.eave)
-    s.lineTo(-W / 2, seg.eave + seg.rise)
-  } else if (seg.roof === 'slopeR') {
-    s.lineTo(W / 2, seg.eave + seg.rise)
-    s.lineTo(-W / 2, seg.eave)
-  } else {
-    s.lineTo(W / 2, seg.eave)
-    s.lineTo(-W / 2, seg.eave)
-  }
+  const prof = roofProfile(seg, W)
+  for (let i = prof.length - 1; i >= 0; i--) s.lineTo(prof[i][0], prof[i][1])
   s.closePath()
   return s
 }
@@ -76,48 +125,26 @@ function endShape(seg: ShellSegment, W: number): THREE.Shape {
 function SegmentRoof({ seg, W }: { seg: SegSpan; W: number }) {
   const len = seg.z1 - seg.z0
   const zc = (seg.z0 + seg.z1) / 2
-  const roofMat = <meshStandardMaterial color="#cfd6dd" roughness={0.5} metalness={0.3} side={THREE.DoubleSide} />
-  if (seg.roof === 'flat' || seg.rise < 0.05)
-    return (
-      <mesh position={[0, seg.eave + 0.05, zc]}>
-        <boxGeometry args={[W + 0.4, 0.12, len + 0.1]} />
-        {roofMat}
-      </mesh>
-    )
-  if (seg.roof === 'gable') {
-    const slope = Math.atan2(seg.rise, W / 2)
-    const roofLen = Math.hypot(W / 2, seg.rise) + 0.3
-    return (
-      <group position={[0, 0, zc]}>
-        <group position={[-W / 4, seg.eave + seg.rise / 2, 0]} rotation-z={slope}>
-          <mesh>
-            <boxGeometry args={[roofLen, 0.12, len + 0.1]} />
-            {roofMat}
+  const prof = roofProfile(seg, W)
+  return (
+    <group position={[0, 0, zc]}>
+      {prof.slice(0, -1).map(([x0, y0], i) => {
+        const [x1, y1] = prof[i + 1]
+        const planeLen = Math.hypot(x1 - x0, y1 - y0) + 0.3
+        const ang = Math.atan2(y1 - y0, x1 - x0)
+        return (
+          <mesh key={i} position={[(x0 + x1) / 2, (y0 + y1) / 2 + 0.05, 0]} rotation-z={ang} castShadow>
+            <boxGeometry args={[planeLen, 0.12, len + 0.1]} />
+            <meshStandardMaterial color="#cfd6dd" roughness={0.5} metalness={0.3} side={THREE.DoubleSide} />
           </mesh>
-        </group>
-        <group position={[W / 4, seg.eave + seg.rise / 2, 0]} rotation-z={-slope}>
-          <mesh>
-            <boxGeometry args={[roofLen, 0.12, len + 0.1]} />
-            {roofMat}
-          </mesh>
-        </group>
-        <mesh position={[0, seg.eave + seg.rise + 0.05, 0]}>
+        )
+      })}
+      {seg.roof === 'gable' && (
+        <mesh position={[seg.ridgeX * W - W / 2, segTop(seg) + 0.1, 0]}>
           <boxGeometry args={[0.3, 0.14, len + 0.1]} />
           <meshStandardMaterial color="#aab3bc" />
         </mesh>
-      </group>
-    )
-  }
-  // mono-slope: high side at -x (slopeL) or +x (slopeR)
-  const dir = seg.roof === 'slopeL' ? 1 : -1
-  const slope = Math.atan2(seg.rise, W) * dir
-  const roofLen = Math.hypot(W, seg.rise) + 0.4
-  return (
-    <group position={[0, seg.eave + seg.rise / 2 + 0.03, zc]} rotation-z={slope}>
-      <mesh>
-        <boxGeometry args={[roofLen, 0.12, len + 0.1]} />
-        {roofMat}
-      </mesh>
+      )}
     </group>
   )
 }
@@ -230,27 +257,30 @@ export function SegmentedShell({ force = false }: { force?: boolean }) {
         const zc = (seg.z0 + seg.z1) / 2
         return (
           <group key={i}>
-            {/* side walls for this zone */}
-            <mesh position={[-W / 2 - t / 2, seg.eave / 2, zc]} castShadow>
-              <boxGeometry args={[t, seg.eave, len]} />
-              {seg.clear ? <meshStandardMaterial {...CLEAR_MAT} /> : <meshStandardMaterial color={seg.color} map={surfaceMap('metalsheet', len, seg.eave)} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />}
+            {/* side walls: left (-X) and right (+X) have independent heights */}
+            <mesh position={[-W / 2 - t / 2, seg.eaveL / 2, zc]} castShadow>
+              <boxGeometry args={[t, seg.eaveL, len]} />
+              {seg.clear ? <meshStandardMaterial {...CLEAR_MAT} /> : <meshStandardMaterial color={seg.color} map={surfaceMap('metalsheet', len, seg.eaveL)} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />}
             </mesh>
-            <mesh position={[W / 2 + t / 2, seg.eave / 2, zc]} castShadow>
-              <boxGeometry args={[t, seg.eave, len]} />
-              {seg.clear ? <meshStandardMaterial {...CLEAR_MAT} /> : <meshStandardMaterial color={seg.color} map={surfaceMap('metalsheet', len, seg.eave)} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />}
+            <mesh position={[W / 2 + t / 2, seg.eaveR / 2, zc]} castShadow>
+              <boxGeometry args={[t, seg.eaveR, len]} />
+              {seg.clear ? <meshStandardMaterial {...CLEAR_MAT} /> : <meshStandardMaterial color={seg.color} map={surfaceMap('metalsheet', len, seg.eaveR)} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />}
             </mesh>
             <SegmentRoof seg={seg} W={W} />
-            {/* step face where the next zone is a different height (clerestory wall) */}
-            {i < spans.length - 1 && Math.abs(spans[i + 1].eave + spans[i + 1].rise - (seg.eave + seg.rise)) > 0.1 && (
-              <mesh position={[0, (Math.min(seg.eave, spans[i + 1].eave) + Math.max(seg.eave + seg.rise, spans[i + 1].eave + spans[i + 1].rise)) / 2, seg.z1]}>
-                <boxGeometry args={[W + t * 2, Math.abs(Math.max(seg.eave + seg.rise, spans[i + 1].eave + spans[i + 1].rise) - Math.min(seg.eave, spans[i + 1].eave)), t]} />
-                <Cladding seg={seg.eave > spans[i + 1].eave ? seg : spans[i + 1]} />
-              </mesh>
-            )}
+            {/* bulkhead face where the next zone has a different profile */}
+            {i < spans.length - 1 &&
+              (Math.abs(segTop(spans[i + 1]) - segTop(seg)) > 0.1 ||
+                Math.abs(spans[i + 1].eaveL - seg.eaveL) > 0.1 ||
+                Math.abs(spans[i + 1].eaveR - seg.eaveR) > 0.1) && (
+                <mesh position={[0, 0, seg.z1]}>
+                  <shapeGeometry args={[endShape(segTop(seg) >= segTop(spans[i + 1]) ? seg : spans[i + 1], W)]} />
+                  <Cladding seg={segTop(seg) >= segTop(spans[i + 1]) ? seg : spans[i + 1]} />
+                </mesh>
+              )}
           </group>
         )
       })}
-      {/* end walls follow the first/last zone profile */}
+      {/* end walls follow the first/last zone cross-section */}
       {spans.length > 0 && (
         <>
           <mesh position={[0, 0, -L / 2 - t / 2]}>
@@ -329,7 +359,17 @@ export function SegmentedShell({ force = false }: { force?: boolean }) {
 // starting design derived from the current simple shell
 export function defaultShellDesign(length: number, eave: number, width: number): ShellDesign {
   return {
-    segments: [{ len: Math.max(6, Math.round(length)), eave, roof: 'gable', rise: Math.round(((width / 2) * ROOF_PITCH) * 10) / 10, color: '#dfe3e7' }],
+    segments: [
+      {
+        len: Math.max(6, Math.round(length)),
+        eaveL: eave,
+        eaveR: eave,
+        roof: 'gable',
+        ridgeX: 0.5,
+        rise: Math.round((width / 2) * ROOF_PITCH * 10) / 10,
+        color: '#dfe3e7',
+      },
+    ],
     panels: [],
     canopies: [],
   }

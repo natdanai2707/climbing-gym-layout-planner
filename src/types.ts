@@ -96,14 +96,23 @@ export interface WallDesign {
 
 /* ---- freeform building designer ---- */
 
-export type ShellRoof = 'gable' | 'slopeL' | 'slopeR' | 'flat'
+// 'shed' = single plane between the two eave heights (slope comes from the
+// height difference). 'slopeL' / 'slopeR' / 'flat' are legacy values that
+// normalize into 'shed'.
+export type ShellRoof = 'gable' | 'shed' | 'slopeL' | 'slopeR' | 'flat'
 
-// One zone of the building along its length, with its own height, roof and skin
+// One zone of the building along its length. The cross-section is shaped in
+// the OTHER dimension too: left and right wall heights are independent, and
+// a gable's ridge can sit anywhere across the width — so one side can be a
+// 14 m climbing bay while the other stays low.
 export interface ShellSegment {
   len: number // meters along the building length (scaled to fit the footprint)
-  eave: number // wall height of this zone
+  eave?: number // legacy symmetric wall height (migrated to eaveL/eaveR)
+  eaveL?: number // wall height on the -X (west/left) side
+  eaveR?: number // wall height on the +X (east/right) side
   roof: ShellRoof
-  rise: number // roof rise above the eave (slope amount)
+  ridgeX?: number // gable ridge position across the width, 0..1 (0.5 = centered)
+  rise: number // roof rise above the taller eave (gable)
   color: string // cladding tint for this zone's metal sheet
   clear?: boolean // translucent daylight sheeting instead of metal
 }

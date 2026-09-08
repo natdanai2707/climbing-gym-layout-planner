@@ -3,7 +3,7 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { useStore } from '../store'
 import type { CanopyDef, FacadePanel, FacadeSide, ShellDesign, ShellSegment } from '../types'
-import { SegmentedShell, defaultShellDesign, segmentSpans } from './SegmentedShell'
+import { SegmentedShell, defaultShellDesign, designMaxHeight, normalizeSegment, roofProfile, segmentSpans } from './SegmentedShell'
 import { NumInput } from './NumInput'
 
 /**
@@ -48,15 +48,16 @@ export function BuildingDesigner() {
   const svgRef = useRef<SVGSVGElement>(null)
 
   const patch = (p: Partial<ShellDesign>) => setShellDesign({ ...design, ...p })
+  // editing a zone migrates it to the full left/right-height format first
   const setSeg = (i: number, p: Partial<ShellSegment>) =>
-    patch({ segments: design.segments.map((s, k) => (k === i ? { ...s, ...p } : s)) })
+    patch({ segments: design.segments.map((s, k) => (k === i ? { ...normalizeSegment(s), ...p } : s)) })
   const setCan = (i: number, p: Partial<CanopyDef>) =>
     patch({ canopies: design.canopies.map((c, k) => (k === i ? { ...c, ...p } : c)) })
 
   // ---- facade editor geometry ----
   const wallLen = side === 'E' || side === 'W' ? building.length : building.width
   const spans = useMemo(() => segmentSpans(design, building.length), [design, building.length])
-  const maxH = Math.max(...design.segments.map((s) => s.eave + s.rise), 4)
+  const maxH = Math.max(designMaxHeight(design), 4)
   const PPM = Math.min(560 / (wallLen + 1), 200 / (maxH + 1)) // px per meter
   const svgW = (wallLen + 1) * PPM
   const svgH = (maxH + 1) * PPM
@@ -70,14 +71,15 @@ export function BuildingDesigner() {
     return [Math.max(0, Math.min(wallLen, snap(u))), Math.max(0, Math.min(maxH, snap(y)))]
   }
 
-  // wall silhouette for the selected side
+  // wall silhouette for the selected side (E wall top = right eaves, W = left)
   const silhouette = useMemo(() => {
     if (side === 'E' || side === 'W') {
       const pts: Array<[number, number]> = [[0, 0]]
       for (const s of spans) {
+        const e = side === 'E' ? s.eaveR : s.eaveL
         const u0 = s.z0 + building.length / 2
         const u1 = s.z1 + building.length / 2
-        pts.push([u0, s.eave], [u1, s.eave])
+        pts.push([u0, e], [u1, e])
       }
       pts.push([wallLen, 0])
       return pts
@@ -85,11 +87,9 @@ export function BuildingDesigner() {
     const seg = side === 'N' ? spans[0] : spans[spans.length - 1]
     if (!seg) return []
     const W = building.width
-    if (seg.roof === 'gable')
-      return [[0, 0], [0, seg.eave], [W / 2, seg.eave + seg.rise], [W, seg.eave], [W, 0]] as Array<[number, number]>
-    if (seg.roof === 'slopeL') return [[0, 0], [0, seg.eave + seg.rise], [W, seg.eave], [W, 0]] as Array<[number, number]>
-    if (seg.roof === 'slopeR') return [[0, 0], [0, seg.eave], [W, seg.eave + seg.rise], [W, 0]] as Array<[number, number]>
-    return [[0, 0], [0, seg.eave], [W, seg.eave], [W, 0]] as Array<[number, number]>
+    // full cross-section: both eaves + the roof profile (ridge can be off-center)
+    const prof = roofProfile(seg, W).map(([x, y]) => [x + W / 2, y] as [number, number])
+    return [[0, 0] as [number, number], ...prof, [W, 0] as [number, number]]
   }, [side, spans, building.length, building.width, wallLen])
 
   const sidePanels = design.panels.map((p, i) => ({ p, i })).filter(({ p }) => p.side === side)
@@ -147,30 +147,41 @@ export function BuildingDesigner() {
         </div>
         <div className="bd-panel">
           <h3>1 · Building zones (front → back)</h3>
-          <p className="muted small">Each zone has its own height, roof shape, slope and skin. Zone lengths scale to fill the building ({building.length} m).</p>
-          {design.segments.map((s, i) => (
-            <div key={i} className="bd-row">
-              <label>Len <NumInput value={s.len} min={1} step={1} onCommit={(v) => setSeg(i, { len: Math.max(1, v) })} /></label>
-              <label>H <NumInput value={s.eave} min={2.5} max={20} step={0.5} onCommit={(v) => setSeg(i, { eave: v })} /></label>
-              <select value={s.roof} onChange={(e) => setSeg(i, { roof: e.target.value as ShellSegment['roof'] })}>
-                <option value="gable">⌂ Gable</option>
-                <option value="slopeL">◺ Slope ←high</option>
-                <option value="slopeR">◿ Slope high→</option>
-                <option value="flat">▭ Flat</option>
-              </select>
-              <label>Rise <NumInput value={s.rise} min={0} max={8} step={0.25} onCommit={(v) => setSeg(i, { rise: v })} /></label>
-              <label className="bd-check">
-                <input type="checkbox" checked={!!s.clear} onChange={(e) => setSeg(i, { clear: e.target.checked })} /> clear
-              </label>
-              <ColorDots value={s.color} onPick={(c) => setSeg(i, { color: c })} />
-              {design.segments.length > 1 && (
-                <button className="danger" onClick={() => patch({ segments: design.segments.filter((_, k) => k !== i) })}>✕</button>
-              )}
-            </div>
-          ))}
+          <p className="muted small">
+            Each zone has its own LEFT and RIGHT wall heights (e.g. a 14 m climbing bay on one side), roof shape and skin.
+            Gable ridge can sit anywhere across the width; a Shed roof slopes between the two heights. Zone lengths scale to
+            fill the building ({building.length} m).
+          </p>
+          {design.segments.map((raw, i) => {
+            const s = normalizeSegment(raw)
+            return (
+              <div key={i} className="bd-row">
+                <label>Len <NumInput value={s.len} min={1} step={1} onCommit={(v) => setSeg(i, { len: Math.max(1, v) })} /></label>
+                <label>H◀ <NumInput value={s.eaveL} min={2.5} max={22} step={0.5} onCommit={(v) => setSeg(i, { eaveL: v })} /></label>
+                <label>H▶ <NumInput value={s.eaveR} min={2.5} max={22} step={0.5} onCommit={(v) => setSeg(i, { eaveR: v })} /></label>
+                <select value={s.roof} onChange={(e) => setSeg(i, { roof: e.target.value as ShellSegment['roof'] })}>
+                  <option value="gable">⌂ Gable</option>
+                  <option value="shed">⟋ Shed (slope L↔R)</option>
+                </select>
+                {s.roof === 'gable' && (
+                  <>
+                    <label>Ridge% <NumInput value={Math.round(s.ridgeX * 100)} min={5} max={95} step={5} onCommit={(v) => setSeg(i, { ridgeX: v / 100 })} /></label>
+                    <label>Rise <NumInput value={s.rise} min={0} max={8} step={0.25} onCommit={(v) => setSeg(i, { rise: v })} /></label>
+                  </>
+                )}
+                <label className="bd-check">
+                  <input type="checkbox" checked={!!s.clear} onChange={(e) => setSeg(i, { clear: e.target.checked })} /> clear
+                </label>
+                <ColorDots value={s.color} onPick={(c) => setSeg(i, { color: c })} />
+                {design.segments.length > 1 && (
+                  <button className="danger" onClick={() => patch({ segments: design.segments.filter((_, k) => k !== i) })}>✕</button>
+                )}
+              </div>
+            )
+          })}
           <button
             onClick={() =>
-              patch({ segments: [...design.segments, { ...design.segments[design.segments.length - 1], len: 8 }] })
+              patch({ segments: [...design.segments, { ...normalizeSegment(design.segments[design.segments.length - 1]), len: 8 }] })
             }
           >
             + Add zone
