@@ -11,6 +11,8 @@ export const CATALOG: ObjectDef[] = [
   { id: 'reception', label: 'Reception Counter', category: 'reception', w: 3.0, d: 1.5, h: 1.1, color: '#d9995f', rule: 'floor' },
   { id: 'storage', label: 'Storage Room', category: 'room', w: 4.0, d: 3.0, h: 2.6, color: '#b9b2a6', rule: 'floor' },
   { id: 'shoes', label: 'Shoe Rack', category: 'fixture', w: 2.0, d: 1.0, h: 1.6, color: '#b59b7c', rule: 'floor' },
+  // access-control speed gate with face-recognition scanners (2 lanes at 2.4 m)
+  { id: 'gate_face', label: 'Face-Scan Entry Gate', category: 'fixture', w: 2.4, d: 0.4, h: 1.1, color: '#c9ced4', rule: 'floor' },
   { id: 'toilet', label: 'Restrooms', category: 'room', w: 4.0, d: 3.0, h: 2.6, color: '#7dd3fc', rule: 'floor' },
   { id: 'cowork', label: 'Co-working Space', category: 'zone', w: 6.0, d: 5.0, h: 0.1, color: '#86efac', rule: 'floor' },
   { id: 'boulder', label: 'Boulder Wall (4.5 m)', category: 'wall_low', w: 15.0, d: 2.5, h: 4.5, color: '#60a5fa', rule: 'floor' },

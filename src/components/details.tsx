@@ -1162,26 +1162,165 @@ function HyroxZone({ o, tint }: { o: Placed; tint: string | null }) {
 // Open-top thin-wall shell (dollhouse cutaway), shared by all room types
 // Room walls with a real doorway opening in the front wall (offset right),
 // a header above it, and a dark baseboard line around the outside.
+/* --------------------- automatic door openings in walls --------------------- */
+
+interface Opening {
+  c: number // center along the wall (wall-local x)
+  w: number
+  h: number
+}
+
+// Doors (room / glass doors) placed on a wall cut an opening automatically.
+// The wall is described in the HOST's local frame: center (cx,cz), running
+// along local 'x' or 'z', length len, thickness t.
+function wallOpenings(
+  doors: Placed[],
+  host: Placed,
+  wall: { cx: number; cz: number; along: 'x' | 'z'; len: number; t: number },
+): Opening[] {
+  const a = (host.rot * Math.PI) / 4
+  const cos = Math.cos(a)
+  const sin = Math.sin(a)
+  const res: Opening[] = []
+  for (const d of doors) {
+    if ((d.level ?? 'ground') !== (host.level ?? 'ground')) continue
+    // door must run parallel to the wall (45° doors don't cut)
+    const rel = (((d.rot - host.rot) % 8) + 8) % 8
+    if (wall.along === 'x' ? rel % 4 !== 0 : rel % 4 !== 2) continue
+    // door center in host-local coordinates (inverse of rotation-y = a)
+    const wx = d.x - host.x
+    const wz = d.z - host.z
+    const lx = wx * cos - wz * sin
+    const lz = wx * sin + wz * cos
+    const u = wall.along === 'x' ? lx - wall.cx : lz - wall.cz
+    const v = wall.along === 'x' ? lz - wall.cz : lx - wall.cx
+    if (Math.abs(v) > wall.t / 2 + d.d / 2 + 0.15) continue // not on this wall
+    if (Math.abs(u) > wall.len / 2 + d.w / 2 - 0.08) continue
+    res.push({ c: u, w: d.w + 0.02, h: Math.min(d.h, host.h - 0.02) })
+  }
+  return res
+}
+
+// A wall slab running along local x with door openings cut out of it: full-
+// height segments between the openings plus a header above each doorway.
+function CutWall({
+  len,
+  h,
+  t,
+  openings,
+  color,
+  pos = [0, 0, 0],
+  rotY = 0,
+  glass = false,
+  tint = null,
+}: {
+  len: number
+  h: number
+  t: number
+  openings: Opening[]
+  color: string
+  pos?: [number, number, number]
+  rotY?: number
+  glass?: boolean
+  tint?: string | null
+}) {
+  // merge overlapping cut intervals
+  const cuts = openings
+    .map((o) => [Math.max(-len / 2, o.c - o.w / 2), Math.min(len / 2, o.c + o.w / 2), o.h] as [number, number, number])
+    .sort((p, q) => p[0] - q[0])
+  const merged: Array<[number, number, number]> = []
+  for (const c of cuts) {
+    const last = merged[merged.length - 1]
+    if (last && c[0] <= last[1] + 0.01) {
+      last[1] = Math.max(last[1], c[1])
+      last[2] = Math.max(last[2], c[2])
+    } else merged.push([...c])
+  }
+  const segs: Array<[number, number]> = []
+  let cursor = -len / 2
+  for (const [x0, x1] of merged) {
+    if (x0 - cursor > 0.04) segs.push([cursor, x0])
+    cursor = Math.max(cursor, x1)
+  }
+  if (len / 2 - cursor > 0.04) segs.push([cursor, len / 2])
+  const piece = (x0: number, x1: number, y0: number, y1: number, k: string) =>
+    glass ? (
+      <group key={k} position={[(x0 + x1) / 2, (y0 + y1) / 2, 0]}>
+        <GlassPanel w={x1 - x0} h={y1 - y0} t={t} tint={tint} />
+      </group>
+    ) : (
+      <Box key={k} args={[x1 - x0, y1 - y0, t]} pos={[(x0 + x1) / 2, (y0 + y1) / 2, 0]} color={color} />
+    )
+  return (
+    <group position={pos} rotation-y={rotY}>
+      {segs.map(([x0, x1], i) => piece(x0, x1, 0, h, `s${i}`))}
+      {merged.map(([x0, x1, oh], i) => (oh < h - 0.04 ? piece(x0, x1, oh, h, `h${i}`) : null))}
+    </group>
+  )
+}
+
+// doors that can sit in interior walls (edge doors live on the building shell)
+function useWallDoors(hostId: string): Placed[] {
+  const objects = useStore((s) => s.objects)
+  return useMemo(
+    () => objects.filter((d) => d.category === 'door' && d.rule === 'floor' && d.id !== hostId),
+    [objects, hostId],
+  )
+}
+
+// Interior partition (solid or glass) that opens up around doors placed on it
+function PartitionWall({ o, tint }: { o: Placed; tint: string | null }) {
+  const doors = useWallDoors(o.id)
+  const t = Math.max(0.08, o.d)
+  const openings = wallOpenings(doors, o, { cx: 0, cz: 0, along: 'x', len: o.w, t })
+  if (o.material === 'glass')
+    return <CutWall len={o.w} h={o.h} t={t} openings={openings} color="" glass tint={tint} />
+  if (openings.length === 0)
+    return (
+      <mesh position={[0, o.h / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[o.w, o.h, t]} />
+        <meshStandardMaterial color={tint ?? o.color} {...MAT} />
+        <Edges color="#c9c2b4" />
+      </mesh>
+    )
+  return <CutWall len={o.w} h={o.h} t={t} openings={openings} color={tint ?? o.color} />
+}
+
 function RoomShell({ o, tint, wallColor = WHITE, floorColor }: { o: Placed; tint: string | null; wallColor?: string; floorColor?: string }) {
   const t = 0.12
   const wc = tint ?? wallColor
+  const doors = useWallDoors(o.id)
+  // door items placed on any of the four walls cut real openings there
+  const backCuts = wallOpenings(doors, o, { cx: 0, cz: -o.d / 2 + t / 2, along: 'x', len: o.w, t })
+  const frontCuts = wallOpenings(doors, o, { cx: 0, cz: o.d / 2 - t / 2, along: 'x', len: o.w, t })
+  const leftCuts = wallOpenings(doors, o, { cx: -o.w / 2 + t / 2, cz: 0, along: 'z', len: o.d, t })
+  const rightCuts = wallOpenings(doors, o, { cx: o.w / 2 - t / 2, cz: 0, along: 'z', len: o.d, t })
+  const sideLen = Math.max(0.05, o.d - t * 2)
   const doorW = Math.min(0.95, o.w * 0.4)
   const doorH = Math.min(2.05, o.h - 0.2)
-  const doorX = o.w / 2 - 0.35 - doorW / 2 // opening near the right corner
+  const doorX = o.w / 2 - 0.35 - doorW / 2 // built-in opening near the right corner
   const leftW = doorX - doorW / 2 + o.w / 2
   const rightW = o.w / 2 - (doorX + doorW / 2)
   return (
     <group>
       <Box args={[o.w, 0.06, o.d]} pos={[0, 0.03, 0]} color={tint ?? floorColor ?? o.color} />
-      <Box args={[o.w, o.h, t]} pos={[0, o.h / 2, -o.d / 2 + t / 2]} color={wc} />
-      {/* front wall split around the doorway + header */}
-      {leftW > 0.05 && <Box args={[leftW, o.h, t]} pos={[-o.w / 2 + leftW / 2, o.h / 2, o.d / 2 - t / 2]} color={wc} />}
-      {rightW > 0.05 && <Box args={[rightW, o.h, t]} pos={[o.w / 2 - rightW / 2, o.h / 2, o.d / 2 - t / 2]} color={wc} />}
-      <Box args={[doorW, Math.max(0.08, o.h - doorH), t]} pos={[doorX, doorH + (o.h - doorH) / 2, o.d / 2 - t / 2]} color={wc} />
-      <Alu args={[0.05, doorH, t + 0.02]} pos={[doorX - doorW / 2, doorH / 2, o.d / 2 - t / 2]} color="#8a9099" />
-      <Alu args={[0.05, doorH, t + 0.02]} pos={[doorX + doorW / 2, doorH / 2, o.d / 2 - t / 2]} color="#8a9099" />
-      <Box args={[t, o.h, Math.max(0.05, o.d - t * 2)]} pos={[-o.w / 2 + t / 2, o.h / 2, 0]} color={wc} />
-      <Box args={[t, o.h, Math.max(0.05, o.d - t * 2)]} pos={[o.w / 2 - t / 2, o.h / 2, 0]} color={wc} />
+      <CutWall len={o.w} h={o.h} t={t} openings={backCuts} color={wc} pos={[0, 0, -o.d / 2 + t / 2]} />
+      {frontCuts.length > 0 ? (
+        // a real door placed on the front wall replaces the built-in doorway
+        <CutWall len={o.w} h={o.h} t={t} openings={frontCuts} color={wc} pos={[0, 0, o.d / 2 - t / 2]} />
+      ) : (
+        <>
+          {/* front wall split around the built-in doorway + header */}
+          {leftW > 0.05 && <Box args={[leftW, o.h, t]} pos={[-o.w / 2 + leftW / 2, o.h / 2, o.d / 2 - t / 2]} color={wc} />}
+          {rightW > 0.05 && <Box args={[rightW, o.h, t]} pos={[o.w / 2 - rightW / 2, o.h / 2, o.d / 2 - t / 2]} color={wc} />}
+          <Box args={[doorW, Math.max(0.08, o.h - doorH), t]} pos={[doorX, doorH + (o.h - doorH) / 2, o.d / 2 - t / 2]} color={wc} />
+          <Alu args={[0.05, doorH, t + 0.02]} pos={[doorX - doorW / 2, doorH / 2, o.d / 2 - t / 2]} color="#8a9099" />
+          <Alu args={[0.05, doorH, t + 0.02]} pos={[doorX + doorW / 2, doorH / 2, o.d / 2 - t / 2]} color="#8a9099" />
+        </>
+      )}
+      {/* side walls run along local z: rotY -90° maps CutWall's x onto z */}
+      <CutWall len={sideLen} h={o.h} t={t} openings={leftCuts} color={wc} pos={[-o.w / 2 + t / 2, 0, 0]} rotY={-Math.PI / 2} />
+      <CutWall len={sideLen} h={o.h} t={t} openings={rightCuts} color={wc} pos={[o.w / 2 - t / 2, 0, 0]} rotY={-Math.PI / 2} />
       {/* baseboard */}
       <Box args={[o.w + 0.02, 0.09, o.d + 0.02]} pos={[0, 0.045, 0]} color="#57534e" />
     </group>
@@ -2637,6 +2776,109 @@ function WashRoom({ o, tint }: { o: Placed; tint: string | null }) {
 
 /* ------------------------------- dispatcher ------------------------------- */
 
+// Face-scan UI shown on the gate's scanner screens (drawn once, shared)
+let faceScanTexCache: THREE.CanvasTexture | null = null
+function faceScanTexture(): THREE.CanvasTexture {
+  if (faceScanTexCache) return faceScanTexCache
+  const c = document.createElement('canvas')
+  c.width = 96
+  c.height = 128
+  const g = c.getContext('2d')!
+  g.fillStyle = '#0c1626'
+  g.fillRect(0, 0, 96, 128)
+  g.strokeStyle = '#38e0c8'
+  g.lineWidth = 3
+  g.beginPath()
+  g.ellipse(48, 54, 22, 28, 0, 0, Math.PI * 2)
+  g.stroke()
+  // scan-frame corner brackets
+  g.lineWidth = 4
+  const br = (x: number, y: number, dx: number, dy: number) => {
+    g.beginPath()
+    g.moveTo(x + dx * 14, y)
+    g.lineTo(x, y)
+    g.lineTo(x, y + dy * 14)
+    g.stroke()
+  }
+  br(10, 12, 1, 1)
+  br(86, 12, -1, 1)
+  br(10, 96, 1, -1)
+  br(86, 96, -1, -1)
+  g.fillStyle = '#38e0c8'
+  g.fillRect(16, 110, 64, 6)
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  faceScanTexCache = tex
+  return tex
+}
+
+// Face-scan entry gate: brushed speed-gate pedestals, clear acrylic swing
+// flaps per lane, and a tilted face-recognition scanner at each lane entry.
+// Walk mode treats it as passable — people walk through it.
+function FaceGate({ o, tint }: { o: Placed; tint: string | null }) {
+  const c = tint ?? o.color
+  const h = o.h
+  const n = Math.round(clampN(Math.round(o.w / 1.2) + 1, 2, 5))
+  const xs = spread(n, o.w - 0.1)
+  const tex = useMemo(() => faceScanTexture(), [])
+  const pedW = 0.18
+  const pedH = h * 0.86
+  return (
+    <group>
+      {xs.map((x, i) => (
+        <group key={i} position={[x, 0, 0]}>
+          {/* pedestal cabinet with a dark glass top strip and a go-light */}
+          <Alu args={[pedW, pedH, o.d]} pos={[0, pedH / 2, 0]} color={c} />
+          <Box args={[pedW + 0.012, 0.03, o.d - 0.03]} pos={[0, pedH + 0.015, 0]} color="#1c1f24" />
+          <mesh position={[0, pedH + 0.034, o.d * 0.26]} rotation-x={-Math.PI / 2}>
+            <circleGeometry args={[0.032, 12]} />
+            <meshStandardMaterial color="#22c55e" emissive="#22c55e" emissiveIntensity={0.8} />
+          </mesh>
+          {/* face scanner on a short mast at the lane entry (one per lane) */}
+          {i < xs.length - 1 && (
+            <group position={[0, pedH + 0.03, o.d / 2 - 0.05]}>
+              <Alu args={[0.03, 0.36, 0.03]} pos={[0, 0.18, 0]} color="#4b5563" />
+              <group position={[0, 0.42, 0]} rotation-x={-0.35}>
+                <Box args={[0.13, 0.19, 0.028]} pos={[0, 0, 0]} color="#14171b" />
+                <mesh position={[0, 0, 0.016]}>
+                  <planeGeometry args={[0.105, 0.16]} />
+                  <meshStandardMaterial map={tex} emissive="#ffffff" emissiveMap={tex} emissiveIntensity={0.9} roughness={0.4} />
+                </mesh>
+              </group>
+            </group>
+          )}
+        </group>
+      ))}
+      {/* clear swing flaps, slightly open */}
+      {xs.slice(0, -1).map((x, i) => {
+        const lane = xs[i + 1] - x - pedW
+        const wingW = Math.max(0.1, lane / 2 - 0.02)
+        return (
+          <group key={`w${i}`}>
+            {[0, 1].map((s) => (
+              <group
+                key={s}
+                position={[s === 0 ? x + pedW / 2 : xs[i + 1] - pedW / 2, 0, 0]}
+                rotation-y={s === 0 ? -0.5 : 0.5}
+              >
+                <mesh position={[((s === 0 ? 1 : -1) * wingW) / 2, h * 0.52, 0]} castShadow>
+                  <boxGeometry args={[wingW, h * 0.56, 0.02]} />
+                  <meshStandardMaterial color="#bfe0ea" transparent opacity={0.35} roughness={0.05} depthWrite={false} />
+                </mesh>
+                <Alu
+                  args={[0.02, h * 0.56, 0.03]}
+                  pos={[(s === 0 ? 1 : -1) * wingW, h * 0.52, 0]}
+                  color="#8f959c"
+                />
+              </group>
+            ))}
+          </group>
+        )
+      })}
+    </group>
+  )
+}
+
 // Open steel railing (1 m) for separating interior areas: round posts and top
 // rail, flat bottom rail, slim vertical balusters — see-through, gym style.
 function Railing({ o, tint }: { o: Placed; tint: string | null }) {
@@ -2784,6 +3026,8 @@ function TennisSimRoom({ o, tint }: { o: Placed; tint: string | null }) {
   const t = 0.12
   const wc = tint ?? '#3a4550'
   const tex = useMemo(() => tennisScreenTexture(), [])
+  const doors = useWallDoors(o.id)
+  const endCuts = wallOpenings(doors, o, { cx: o.w / 2 - t / 2, cz: 0, along: 'z', len: o.d, t })
   // door opening on the end wall opposite the screen
   const doorW = Math.min(1.0, o.d * 0.35)
   const doorH = Math.min(2.05, o.h - 0.3)
@@ -2797,14 +3041,34 @@ function TennisSimRoom({ o, tint }: { o: Placed; tint: string | null }) {
       <Box args={[o.w * 0.66, 0.06, Math.min(o.d - 1.2, 3.4)]} pos={[-o.w * 0.08, 0.03, 0]} color="#2f5f9e" />
       <Box args={[0.05, 0.065, Math.min(o.d - 1.2, 3.4)]} pos={[o.w * 0.22, 0.032, 0]} color="#eef2f5" />
       <Box args={[o.w * 0.4, 0.065, 0.05]} pos={[-o.w * 0.12, 0.032, 0]} color="#eef2f5" />
-      {/* perimeter walls; screen end at -x */}
+      {/* perimeter walls; screen end at -x. Doors placed on a wall cut openings. */}
       <Box args={[t, o.h, o.d]} pos={[-o.w / 2 + t / 2, o.h / 2, 0]} color={wc} />
-      <Box args={[o.w, o.h, t]} pos={[0, o.h / 2, -o.d / 2 + t / 2]} color={wc} />
-      <Box args={[o.w, o.h, t]} pos={[0, o.h / 2, o.d / 2 - t / 2]} color={wc} />
-      {/* end wall with the doorway */}
-      {farW > 0.05 && <Box args={[t, o.h, farW]} pos={[o.w / 2 - t / 2, o.h / 2, -o.d / 2 + farW / 2]} color={wc} />}
-      {nearW > 0.05 && <Box args={[t, o.h, nearW]} pos={[o.w / 2 - t / 2, o.h / 2, o.d / 2 - nearW / 2]} color={wc} />}
-      <Box args={[t, Math.max(0.08, o.h - doorH), doorW]} pos={[o.w / 2 - t / 2, doorH + (o.h - doorH) / 2, doorZ]} color={wc} />
+      <CutWall
+        len={o.w}
+        h={o.h}
+        t={t}
+        openings={wallOpenings(doors, o, { cx: 0, cz: -o.d / 2 + t / 2, along: 'x', len: o.w, t })}
+        color={wc}
+        pos={[0, 0, -o.d / 2 + t / 2]}
+      />
+      <CutWall
+        len={o.w}
+        h={o.h}
+        t={t}
+        openings={wallOpenings(doors, o, { cx: 0, cz: o.d / 2 - t / 2, along: 'x', len: o.w, t })}
+        color={wc}
+        pos={[0, 0, o.d / 2 - t / 2]}
+      />
+      {/* end wall with the doorway (a placed door replaces the built-in one) */}
+      {endCuts.length > 0 ? (
+        <CutWall len={o.d} h={o.h} t={t} openings={endCuts} color={wc} pos={[o.w / 2 - t / 2, 0, 0]} rotY={-Math.PI / 2} />
+      ) : (
+        <>
+          {farW > 0.05 && <Box args={[t, o.h, farW]} pos={[o.w / 2 - t / 2, o.h / 2, -o.d / 2 + farW / 2]} color={wc} />}
+          {nearW > 0.05 && <Box args={[t, o.h, nearW]} pos={[o.w / 2 - t / 2, o.h / 2, o.d / 2 - nearW / 2]} color={wc} />}
+          <Box args={[t, Math.max(0.08, o.h - doorH), doorW]} pos={[o.w / 2 - t / 2, doorH + (o.h - doorH) / 2, doorZ]} color={wc} />
+        </>
+      )}
       {/* black screen frame + glowing projected court */}
       <Box args={[0.06, o.h - 0.44, o.d - 0.3]} pos={[-o.w / 2 + t + 0.05, o.h * 0.52, 0]} color="#14171b" />
       <mesh position={[-o.w / 2 + t + 0.1, o.h * 0.52, 0]} rotation-y={Math.PI / 2}>
@@ -2903,20 +3167,8 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
       return <Column o={o} tint={tint} />
     case 'partition':
       if (o.defId === 'rail') return <Railing o={o} tint={tint} />
-      // interior partition wall: solid slab, or a framed clear-glass panel
-      if (o.material === 'glass')
-        return (
-          <group position={[0, o.h / 2, 0]}>
-            <GlassPanel w={o.w} h={o.h} t={Math.max(0.08, o.d)} tint={tint} />
-          </group>
-        )
-      return (
-        <mesh position={[0, o.h / 2, 0]} castShadow receiveShadow>
-          <boxGeometry args={[o.w, o.h, Math.max(0.08, o.d)]} />
-          <meshStandardMaterial color={tint ?? o.color} {...MAT} />
-          <Edges color="#c9c2b4" />
-        </mesh>
-      )
+      // interior partition wall (solid or glass); doors placed on it cut openings
+      return <PartitionWall o={o} tint={tint} />
     case 'person':
       // placeable person; height H scales the figure, color = shirt
       return (
@@ -2939,6 +3191,7 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
       return <Reception o={o} tint={tint} />
     case 'fixture':
       if (o.defId === 'shoes') return <ShoeRack o={o} tint={tint} />
+      if (o.defId === 'gate_face') return <FaceGate o={o} tint={tint} />
       if (o.defId === 'icebath') return <IceBath o={o} tint={tint} />
       return (
         <Box args={[o.w, o.h, o.d]} pos={[0, o.h / 2, 0]} color={tint ?? o.color} />

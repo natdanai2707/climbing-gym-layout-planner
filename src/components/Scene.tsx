@@ -99,8 +99,9 @@ export const walkLook = { x: 0, y: 0 }
 // Solid things a walker bumps into; flat zones/mats and doors stay passable,
 // mezzanines are open underneath, and ceilings/ducts/fans hang overhead.
 const WALK_PASSABLE = new Set(['zone', 'mat', 'door', 'person', 'parking', 'mezzanine', 'ceiling', 'hvac', 'tech'])
-// site items that are roofs/canopies on posts — walk (and park) beneath them
-const WALK_PASSABLE_DEFS = new Set(['carport', 'awning', 'umbrella'])
+// site items that are roofs/canopies on posts — walk (and park) beneath them —
+// plus the entry gate, which people walk through
+const WALK_PASSABLE_DEFS = new Set(['carport', 'awning', 'umbrella', 'gate_face'])
 
 function WalkRig() {
   const gl = useThree((s) => s.gl)

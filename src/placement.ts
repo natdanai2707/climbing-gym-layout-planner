@@ -45,6 +45,7 @@ export function computeDrop(
   rawX: number,
   rawZ: number,
   b: Building,
+  snap = true, // grid-snap is for dragging; typed coordinates keep their exact value
 ): DropResult {
   const { width: W, length: L, cell, apron } = b
   const hw = W / 2
@@ -61,12 +62,12 @@ export function computeDrop(
     const m = Math.min(dN, dS, dW, dE)
     if (m === dN || m === dS) {
       const z = m === dN ? minZ : maxZ
-      let x = snapCenter(rawX, o.w, -hw, cell)
+      let x = snap ? snapCenter(rawX, o.w, -hw, cell) : rawX
       x = clampInside(x, o.w, -hw, hw)
       return { x, z, rot: m === dN ? 0 : 4, valid: true }
     } else {
       const x = m === dW ? -hw : hw
-      let z = snapCenter(rawZ, o.w, minZ, cell)
+      let z = snap ? snapCenter(rawZ, o.w, minZ, cell) : rawZ
       z = clampInside(z, o.w, minZ, maxZ)
       return { x, z, rot: m === dW ? 2 : 6, valid: true }
     }
@@ -77,8 +78,8 @@ export function computeDrop(
   if (o.rule === 'outdoor') {
     const ow = hw + apron
     const oMinZ = minZ - apron
-    const x = snapCenter(rawX, fw, -ow, cell)
-    const z = snapCenter(rawZ, fd, oMinZ, cell)
+    const x = snap ? snapCenter(rawX, fw, -ow, cell) : rawX
+    const z = snap ? snapCenter(rawZ, fd, oMinZ, cell) : rawZ
     // Overlap with the building interior makes the drop invalid; beyond that
     // an outdoor item may sit anywhere — the apron stretches out to meet it.
     const ox = Math.min(x + fw / 2, hw) - Math.max(x - fw / 2, -hw)
@@ -88,8 +89,8 @@ export function computeDrop(
   }
 
   // floor
-  let x = snapCenter(rawX, fw, -hw, cell)
-  let z = snapCenter(rawZ, fd, minZ, cell)
+  let x = snap ? snapCenter(rawX, fw, -hw, cell) : rawX
+  let z = snap ? snapCenter(rawZ, fd, minZ, cell) : rawZ
   x = clampInside(x, fw, -hw, hw)
   z = clampInside(z, fd, minZ, maxZ)
   return { x, z, rot: o.rot, valid: true }
@@ -98,7 +99,7 @@ export function computeDrop(
 // After a building resize, try to keep an outdoor object in the apron by pushing it
 // out of the building along the shortest axis.
 export function resolveAfterResize(o: Placed, b: Building): { x: number; z: number; rot: number } {
-  const r = computeDrop(o, o.x, o.z, b)
+  const r = computeDrop(o, o.x, o.z, b, false)
   if (r.valid || o.rule !== 'outdoor') return { x: r.x, z: r.z, rot: r.rot }
   const { fw, fd } = fp(o)
   const hw = b.width / 2
@@ -128,7 +129,7 @@ export function resolveAfterResize(o: Placed, b: Building): { x: number; z: numb
 export function getWarningIds(objects: Placed[], b: Building): Set<string> {
   const warn = new Set<string>()
   for (const o of objects) {
-    if (o.rule === 'outdoor' && !computeDrop(o, o.x, o.z, b).valid) warn.add(o.id)
+    if (o.rule === 'outdoor' && !computeDrop(o, o.x, o.z, b, false).valid) warn.add(o.id)
   }
   return warn
 }

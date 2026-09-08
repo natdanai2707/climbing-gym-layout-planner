@@ -619,7 +619,9 @@ export const useStore = create<GymState>()(
           next.w = Math.max(0.1, next.w)
           next.d = Math.max(0.1, next.d)
           next.h = Math.max(0.05, next.h)
-          const r = computeDrop(next, next.x, next.z, building)
+          // typed inspector values are exact: clamp to the legal area but do
+          // NOT grid-snap, so entered positions don't bounce back
+          const r = computeDrop(next, next.x, next.z, building, false)
           return { ...next, x: r.x, z: r.z, rot: r.rot }
         }),
       })
