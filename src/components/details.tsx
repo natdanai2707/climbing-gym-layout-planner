@@ -1768,59 +1768,22 @@ function FloorFan({ o, tint }: { o: Placed; tint: string | null }) {
 // Trees with real foliage: hundreds of instanced leaf clumps in varied
 // greens scattered around branch tips, over a trunk with a few branches —
 // reads like an archviz tree instead of a cartoon blob.
-function Tree({ o, tint }: { o: Placed; tint: string | null }) {
-  const big = o.defId === 'tree_big'
+// Deterministic per-instance randomness so vegetation doesn't shimmer on rerender
+function seededRnd(id: string) {
+  let s = 7
+  for (let i = 0; i < id.length; i++) s = (s * 31 + id.charCodeAt(i)) & 0x7fffffff
+  return () => {
+    s = (s * 1103515245 + 12345) & 0x7fffffff
+    return s / 0x7fffffff
+  }
+}
+
+type Clump = { p: [number, number, number]; s: number; e: [number, number, number]; c: THREE.Color }
+
+// Instanced flat-shaded leaf tufts: squashed, randomly rotated low-poly blobs
+// with per-instance shading read as foliage rather than clay balls.
+function LeafClumps({ list }: { list: Clump[] }) {
   const ref = useRef<THREE.InstancedMesh>(null)
-  const h = o.h
-  const trunkH = big ? h * 0.4 : h * 0.34
-  const r = Math.min(o.w, o.d) / 2
-
-  const { leaves, branches } = useMemo(() => {
-    // deterministic per-instance randomness so trees don't shimmer on rerender
-    let s = 7
-    for (let i = 0; i < o.id.length; i++) s = (s * 31 + o.id.charCodeAt(i)) & 0x7fffffff
-    const rnd = () => {
-      s = (s * 1103515245 + 12345) & 0x7fffffff
-      return s / 0x7fffffff
-    }
-    const centers: Array<[number, number, number, number]> = [] // x,y,z,radius
-    const nC = big ? 5 : 3
-    for (let i = 0; i < nC; i++) {
-      const a = (i / nC) * Math.PI * 2 + rnd()
-      const rr = i === 0 ? 0 : r * (0.25 + rnd() * 0.3)
-      centers.push([
-        Math.cos(a) * rr,
-        trunkH + (h - trunkH) * (0.35 + rnd() * 0.45),
-        Math.sin(a) * rr,
-        r * (i === 0 ? 0.55 : 0.34 + rnd() * 0.2),
-      ])
-    }
-    const base = new THREE.Color(tint ?? o.color)
-    const shades = [
-      base.clone().offsetHSL(0.015, 0.05, -0.07),
-      base.clone(),
-      base.clone().offsetHSL(-0.02, 0.02, 0.07),
-      base.clone().offsetHSL(0.03, -0.05, 0.12),
-    ]
-    const n = big ? 230 : 120
-    const list: Array<{ p: [number, number, number]; s: number; ry: number; c: THREE.Color }> = []
-    for (let i = 0; i < n; i++) {
-      const c = centers[Math.floor(rnd() * centers.length)]
-      // bias leaf clumps toward the shell of each cluster
-      const th = rnd() * Math.PI * 2
-      const ph = Math.acos(2 * rnd() - 1)
-      const rad = c[3] * (0.55 + 0.45 * Math.sqrt(rnd()))
-      list.push({
-        p: [c[0] + rad * Math.sin(ph) * Math.cos(th), c[1] + rad * Math.cos(ph) * 0.8, c[2] + rad * Math.sin(ph) * Math.sin(th)],
-        s: r * (0.1 + rnd() * 0.1),
-        ry: rnd() * Math.PI,
-        c: shades[Math.floor(rnd() * shades.length)],
-      })
-    }
-    const br = centers.slice(1).map((c) => c)
-    return { leaves: list, branches: br }
-  }, [o.id, o.color, tint, big, h, trunkH, r])
-
   useLayoutEffect(() => {
     const m = ref.current
     if (!m) return
@@ -1829,18 +1792,74 @@ function Tree({ o, tint }: { o: Placed; tint: string | null }) {
     const Q = new THREE.Quaternion()
     const S = new THREE.Vector3()
     const E = new THREE.Euler()
-    leaves.forEach((l, i) => {
+    list.forEach((l, i) => {
       P.set(...l.p)
-      E.set(0, l.ry, 0)
+      E.set(...l.e)
       Q.setFromEuler(E)
-      S.setScalar(l.s)
+      S.set(l.s, l.s * 0.62, l.s)
       M.compose(P, Q, S)
       m.setMatrixAt(i, M)
       m.setColorAt(i, l.c)
     })
     m.instanceMatrix.needsUpdate = true
     if (m.instanceColor) m.instanceColor.needsUpdate = true
-  }, [leaves])
+  }, [list])
+  return (
+    <instancedMesh key={list.length} ref={ref} args={[undefined, undefined, list.length]} castShadow>
+      <icosahedronGeometry args={[1, 1]} />
+      <meshStandardMaterial color="#ffffff" roughness={0.92} flatShading />
+    </instancedMesh>
+  )
+}
+
+function Tree({ o, tint }: { o: Placed; tint: string | null }) {
+  const big = o.defId === 'tree_big'
+  const h = o.h
+  const trunkH = big ? h * 0.4 : h * 0.34
+  const r = Math.min(o.w, o.d) / 2
+
+  const { leaves, branches } = useMemo(() => {
+    const rnd = seededRnd(o.id)
+    const centers: Array<[number, number, number, number]> = [] // x,y,z,radius
+    const nC = big ? 6 : 4
+    for (let i = 0; i < nC; i++) {
+      const a = (i / nC) * Math.PI * 2 + rnd()
+      const rr = i === 0 ? 0 : r * (0.28 + rnd() * 0.34)
+      centers.push([
+        Math.cos(a) * rr,
+        trunkH + (h - trunkH) * (0.3 + rnd() * 0.5),
+        Math.sin(a) * rr,
+        r * (i === 0 ? 0.52 : 0.3 + rnd() * 0.2),
+      ])
+    }
+    const base = new THREE.Color(tint ?? o.color)
+    const canopyTop = Math.max(...centers.map((c) => c[1] + c[3]))
+    const canopyBot = Math.min(...centers.map((c) => c[1] - c[3]))
+    const n = big ? 340 : 190
+    const list: Clump[] = []
+    for (let i = 0; i < n; i++) {
+      const c = centers[Math.floor(rnd() * centers.length)]
+      // bias leaf tufts toward the shell of each cluster
+      const th = rnd() * Math.PI * 2
+      const ph = Math.acos(2 * rnd() - 1)
+      const rad = c[3] * (0.6 + 0.4 * Math.sqrt(rnd()))
+      const p: [number, number, number] = [
+        c[0] + rad * Math.sin(ph) * Math.cos(th),
+        c[1] + rad * Math.cos(ph) * 0.78,
+        c[2] + rad * Math.sin(ph) * Math.sin(th),
+      ]
+      // sun-lit gradient: tufts higher in the canopy are lighter, low/inner ones darker
+      const t = Math.min(1, Math.max(0, (p[1] - canopyBot) / (canopyTop - canopyBot)))
+      list.push({
+        p,
+        s: r * (0.09 + rnd() * 0.08),
+        e: [rnd() * 0.9 - 0.45, rnd() * Math.PI * 2, rnd() * 0.9 - 0.45],
+        c: base.clone().offsetHSL((rnd() - 0.5) * 0.035, -0.06 + rnd() * 0.08, -0.16 + t * 0.2 + rnd() * 0.07),
+      })
+    }
+    const br = centers.slice(1).map((c) => c)
+    return { leaves: list, branches: br }
+  }, [o.id, o.color, tint, big, h, trunkH, r])
 
   return (
     <group>
@@ -1867,10 +1886,7 @@ function Tree({ o, tint }: { o: Placed; tint: string | null }) {
           </group>
         )
       })}
-      <instancedMesh ref={ref} args={[undefined, undefined, leaves.length]} castShadow>
-        <icosahedronGeometry args={[1, 0]} />
-        <meshStandardMaterial color="#ffffff" roughness={0.95} />
-      </instancedMesh>
+      <LeafClumps list={leaves} />
     </group>
   )
 }
@@ -1943,65 +1959,110 @@ function Wheel({ pos, r }: { pos: [number, number, number]; r: number }) {
   )
 }
 
-// Parked car — rotate in 45° steps to angle-park it.
-function Car({ o, tint }: { o: Placed; tint: string | null }) {
-  const body = tint ?? o.color
-  const L = o.w
-  const W = o.d
+// Realistic parking-lot paints. Cars that still carry the old default blue get
+// a stable per-instance paint from this palette (a lot of identical bright-blue
+// cars reads as toys); a color chosen in the inspector is respected.
+const CAR_PAINTS = ['#d8dadd', '#c4c8cd', '#22262b', '#3a4552', '#711f26', '#20344d', '#e9e7e1', '#8b939c']
+const CAR_DEFAULT_COLORS = new Set(['#5b7fb4', '#60a5fa'])
+
+function CarWheel({ pos }: { pos: [number, number, number] }) {
   return (
-    <group>
-      {/* body with hood and trunk steps */}
-      <mesh position={[0, 0.52, 0]} castShadow>
-        <boxGeometry args={[L, 0.42, W]} />
-        <meshStandardMaterial color={body} roughness={0.25} metalness={0.35} />
+    <group position={pos} rotation-x={Math.PI / 2}>
+      <mesh castShadow>
+        <cylinderGeometry args={[0.3, 0.3, 0.23, 20]} />
+        <meshStandardMaterial color="#17191c" roughness={0.95} />
       </mesh>
-      <mesh position={[L * 0.36, 0.71, 0]} rotation-z={-0.06} castShadow>
-        <boxGeometry args={[L * 0.3, 0.1, W - 0.06]} />
-        <meshStandardMaterial color={body} roughness={0.25} metalness={0.35} />
-      </mesh>
-      {/* cabin with slanted windscreens */}
-      <mesh position={[-L * 0.08, 0.96, 0]} castShadow>
-        <boxGeometry args={[L * 0.42, 0.36, W - 0.3]} />
-        <meshStandardMaterial color={body} roughness={0.25} metalness={0.35} />
-      </mesh>
-      <mesh position={[L * 0.16, 0.9, 0]} rotation-z={0.62}>
-        <boxGeometry args={[0.34, 0.03, W - 0.34]} />
-        <meshStandardMaterial color="#42566a" roughness={0.08} metalness={0.4} />
-      </mesh>
-      <mesh position={[-L * 0.32, 0.9, 0]} rotation-z={-0.7}>
-        <boxGeometry args={[0.3, 0.03, W - 0.34]} />
-        <meshStandardMaterial color="#42566a" roughness={0.08} metalness={0.4} />
-      </mesh>
-      {/* side glass */}
-      <Box args={[L * 0.4, 0.24, W - 0.26]} pos={[-L * 0.08, 0.96, 0]} color="#42566a" />
-      {/* bumpers, sills, mirrors */}
-      <Box args={[0.1, 0.14, W - 0.05]} pos={[L / 2 - 0.03, 0.4, 0]} color="#2b2f35" />
-      <Box args={[0.1, 0.14, W - 0.05]} pos={[-L / 2 + 0.03, 0.4, 0]} color="#2b2f35" />
-      <Box args={[L - 0.5, 0.07, 0.04]} pos={[0, 0.34, W / 2 - 0.01]} color="#2b2f35" />
-      <Box args={[L - 0.5, 0.07, 0.04]} pos={[0, 0.34, -W / 2 + 0.01]} color="#2b2f35" />
-      <Box args={[0.1, 0.06, 0.16]} pos={[L * 0.12, 0.88, W / 2 + 0.05]} color={body} />
-      <Box args={[0.1, 0.06, 0.16]} pos={[L * 0.12, 0.88, -W / 2 - 0.05]} color={body} />
-      <Wheel pos={[L * 0.32, 0.3, W / 2 - 0.08]} r={0.3} />
-      <Wheel pos={[L * 0.32, 0.3, -W / 2 + 0.08]} r={0.3} />
-      <Wheel pos={[-L * 0.32, 0.3, W / 2 - 0.08]} r={0.3} />
-      <Wheel pos={[-L * 0.32, 0.3, -W / 2 + 0.08]} r={0.3} />
-      {/* hubcaps */}
-      {[
-        [L * 0.32, W / 2 + 0.04],
-        [L * 0.32, -W / 2 - 0.04],
-        [-L * 0.32, W / 2 + 0.04],
-        [-L * 0.32, -W / 2 - 0.04],
-      ].map(([x, z], i) => (
-        <mesh key={i} position={[x, 0.3, z]} rotation-x={Math.PI / 2}>
-          <cylinderGeometry args={[0.13, 0.13, 0.02, 12]} />
-          <meshStandardMaterial color="#c9ced4" roughness={0.3} metalness={0.7} />
+      {[0.1, -0.1].map((y, i) => (
+        <mesh key={i} position={[0, y, 0]}>
+          <cylinderGeometry args={[0.17, 0.17, 0.05, 16]} />
+          <meshStandardMaterial color="#b7bdc4" metalness={0.75} roughness={0.35} />
         </mesh>
       ))}
-      {/* lights */}
-      <Box args={[0.05, 0.09, 0.3]} pos={[L / 2 - 0.01, 0.6, W / 4]} color="#fff3cf" />
-      <Box args={[0.05, 0.09, 0.3]} pos={[L / 2 - 0.01, 0.6, -W / 4]} color="#fff3cf" />
-      <Box args={[0.05, 0.09, 0.26]} pos={[-L / 2 + 0.01, 0.6, W / 4]} color="#b3372c" />
-      <Box args={[0.05, 0.09, 0.26]} pos={[-L / 2 + 0.01, 0.6, -W / 4]} color="#b3372c" />
+    </group>
+  )
+}
+
+// Parked car — rotate in 45° steps to angle-park it. The body is a rounded
+// extrusion of a real side silhouette (bumpers, hood, belt line, wheel arches)
+// with an inset dark glasshouse on top, instead of stacked boxes.
+function Car({ o, tint }: { o: Placed; tint: string | null }) {
+  let body = tint ?? o.color
+  if (!tint && CAR_DEFAULT_COLORS.has(o.color)) {
+    let hsh = 0
+    for (let i = 0; i < o.id.length; i++) hsh = (hsh * 31 + o.id.charCodeAt(i)) & 0x7fffffff
+    body = CAR_PAINTS[hsh % CAR_PAINTS.length]
+  }
+  const L = o.w
+  const W = o.d
+  const wx = L * 0.3 // wheel positions along the length
+  const { bodyGeo, glassGeo } = useMemo(() => {
+    const archR = 0.35
+    const belt = 0.88
+    // side profile: x = along the car (front at +x), y = up
+    const b = new THREE.Shape()
+    b.moveTo(-L * 0.44, 0.26)
+    b.lineTo(-wx - archR, 0.26)
+    b.absarc(-wx, 0.26, archR, Math.PI, 0, true)
+    b.lineTo(wx - archR, 0.26)
+    b.absarc(wx, 0.26, archR, Math.PI, 0, true)
+    b.lineTo(L * 0.46, 0.26)
+    b.quadraticCurveTo(L * 0.5, 0.28, L * 0.5, 0.44) // front bumper
+    b.lineTo(L * 0.5, 0.6)
+    b.quadraticCurveTo(L * 0.5, 0.72, L * 0.43, 0.76) // nose
+    b.lineTo(L * 0.14, belt) // hood rising to the cowl
+    b.lineTo(-L * 0.42, belt) // belt line
+    b.quadraticCurveTo(-L * 0.5, belt, -L * 0.5, 0.74) // trunk edge
+    b.lineTo(-L * 0.5, 0.42)
+    b.quadraticCurveTo(-L * 0.5, 0.3, -L * 0.44, 0.26)
+    b.closePath()
+    // glasshouse: windscreen → roof → rear window, inset from the body sides
+    const g = new THREE.Shape()
+    g.moveTo(L * 0.13, belt - 0.03)
+    g.lineTo(-L * 0.02, 1.24)
+    g.lineTo(-L * 0.27, 1.24)
+    g.lineTo(-L * 0.41, belt - 0.03)
+    g.closePath()
+    const opts = (depth: number, bev: number) => ({
+      depth,
+      bevelEnabled: true,
+      bevelThickness: bev,
+      bevelSize: bev,
+      bevelSegments: 3,
+      curveSegments: 10,
+    })
+    const bg = new THREE.ExtrudeGeometry(b, opts(W - 0.34, 0.09))
+    bg.translate(0, 0, -(W - 0.34) / 2)
+    const gg = new THREE.ExtrudeGeometry(g, opts(W - 0.62, 0.06))
+    gg.translate(0, 0, -(W - 0.62) / 2)
+    return { bodyGeo: bg, glassGeo: gg }
+  }, [L, W, wx])
+  return (
+    <group>
+      <mesh geometry={bodyGeo} castShadow>
+        <meshPhysicalMaterial color={body} roughness={0.32} metalness={0.25} clearcoat={0.9} clearcoatRoughness={0.15} />
+      </mesh>
+      <mesh geometry={glassGeo} castShadow>
+        <meshStandardMaterial color="#141d26" roughness={0.06} metalness={0.35} />
+      </mesh>
+      {/* painted roof panel on top of the glasshouse */}
+      <Box args={[L * 0.26, 0.04, W - 0.52]} pos={[-L * 0.145, 1.31, 0]} color={body} />
+      <CarWheel pos={[wx, 0.3, W / 2 - 0.2]} />
+      <CarWheel pos={[wx, 0.3, -W / 2 + 0.2]} />
+      <CarWheel pos={[-wx, 0.3, W / 2 - 0.2]} />
+      <CarWheel pos={[-wx, 0.3, -W / 2 + 0.2]} />
+      {/* grille, plates, lights, mirrors, door handles */}
+      <Box args={[0.04, 0.13, W * 0.42]} pos={[L / 2 + 0.05, 0.5, 0]} color="#1c1f24" />
+      <Box args={[0.02, 0.11, 0.32]} pos={[L / 2 + 0.08, 0.35, 0]} color="#e7e9ec" />
+      <Box args={[0.02, 0.11, 0.32]} pos={[-L / 2 - 0.08, 0.35, 0]} color="#e7e9ec" />
+      {[1, -1].map((s) => (
+        <group key={s}>
+          <Box args={[0.06, 0.09, 0.36]} pos={[L / 2 + 0.05, 0.66, s * W * 0.27]} color="#eef3f7" />
+          <Box args={[0.06, 0.08, 0.3]} pos={[-L / 2 - 0.06, 0.7, s * W * 0.27]} color="#8f1f1a" />
+          <Box args={[0.1, 0.06, 0.16]} pos={[L * 0.11, 0.92, s * (W / 2 + 0.03)]} color={body} />
+          <Box args={[0.15, 0.03, 0.03]} pos={[0, 0.76, s * (W / 2 - 0.035)]} color="#33383e" />
+          <Box args={[0.15, 0.03, 0.03]} pos={[-L * 0.24, 0.76, s * (W / 2 - 0.035)]} color="#33383e" />
+        </group>
+      ))}
     </group>
   )
 }
@@ -2172,48 +2233,52 @@ function SpeakerBox({ o, tint }: { o: Placed; tint: string | null }) {
 /* ------------------------------ garden items ------------------------------ */
 
 // Conifer (stacked cones) and columnar cypress tree shapes.
+// Conifer + columnar cypress: dense leaf tufts hugging a cone / teardrop
+// envelope instead of smooth solids, so the needle mass reads as foliage.
 function Conifer({ o, tint }: { o: Placed; tint: string | null }) {
   const slim = o.defId === 'tree_slim'
-  const c = tint ?? o.color
   const r = Math.min(o.w, o.d) / 2
   const h = o.h
-  if (slim) {
-    return (
-      <group>
-        <mesh position={[0, 0.15, 0]} castShadow>
-          <cylinderGeometry args={[r * 0.12, r * 0.16, 0.3, 8]} />
-          <meshStandardMaterial color="#6e5335" roughness={0.9} />
-        </mesh>
-        {/* tall teardrop column of foliage */}
-        <mesh position={[0, 0.3 + (h - 0.3) * 0.48, 0]} scale={[r * 0.85, (h - 0.3) / 2, r * 0.85]} castShadow>
-          <icosahedronGeometry args={[1, 1]} />
-          <meshStandardMaterial color={c} roughness={0.95} flatShading />
-        </mesh>
-        <mesh position={[0, h - 0.25, 0]} scale={[r * 0.45, 0.35, r * 0.45]} castShadow>
-          <icosahedronGeometry args={[1, 1]} />
-          <meshStandardMaterial color={c} roughness={0.95} flatShading />
-        </mesh>
-      </group>
-    )
-  }
-  const tiers = [
-    [0.34, 1.0],
-    [0.55, 0.8],
-    [0.74, 0.58],
-    [0.9, 0.36],
-  ] as const
+
+  const list = useMemo(() => {
+    const rnd = seededRnd(o.id)
+    const base = new THREE.Color(tint ?? o.color)
+    const y0 = slim ? 0.22 : h * 0.14
+    const n = slim ? 160 : 240
+    const out: Clump[] = []
+    for (let i = 0; i < n; i++) {
+      // conifers are denser at the bottom; the cypress fills its column evenly
+      const t = slim ? rnd() : Math.pow(rnd(), 0.72)
+      const y = y0 + (h - y0 - 0.08) * t
+      const tt = (y - y0) / (h - y0)
+      // envelope radius at this height
+      const R = slim ? r * 0.82 * Math.pow(Math.sin(Math.PI * (0.12 + tt * 0.86)), 0.6) : r * (1 - tt * 0.92)
+      const a = rnd() * Math.PI * 2
+      const rr = R * (0.45 + 0.55 * rnd())
+      out.push({
+        p: [Math.cos(a) * rr, y, Math.sin(a) * rr],
+        s: (slim ? r * 0.34 : r * 0.2) * (0.65 + rnd() * 0.55),
+        e: [rnd() * 0.9 - 0.45, rnd() * Math.PI * 2, rnd() * 0.9 - 0.45],
+        c: base.clone().offsetHSL((rnd() - 0.5) * 0.025, -0.04 + rnd() * 0.06, -0.14 + tt * 0.16 + rnd() * 0.06),
+      })
+    }
+    // tip tuft so the silhouette ends in a point
+    out.push({
+      p: [0, h - 0.06, 0],
+      s: slim ? r * 0.22 : r * 0.12,
+      e: [0, rnd() * Math.PI, 0],
+      c: base.clone().offsetHSL(0, 0, 0.05),
+    })
+    return out
+  }, [o.id, o.color, tint, slim, h, r])
+
   return (
     <group>
-      <mesh position={[0, h * 0.14, 0]} castShadow>
-        <cylinderGeometry args={[r * 0.1, r * 0.16, h * 0.3, 8]} />
+      <mesh position={[0, (slim ? 0.3 : h * 0.3) / 2, 0]} castShadow>
+        <cylinderGeometry args={[r * (slim ? 0.12 : 0.1), r * 0.16, slim ? 0.3 : h * 0.3, 8]} />
         <meshStandardMaterial color="#6e5335" roughness={0.9} />
       </mesh>
-      {tiers.map(([ty, tr], i) => (
-        <mesh key={i} position={[0, h * ty, 0]} castShadow>
-          <coneGeometry args={[r * tr, h * 0.34, 9]} />
-          <meshStandardMaterial color={i % 2 ? c : '#356031'} roughness={0.95} flatShading />
-        </mesh>
-      ))}
+      <LeafClumps list={list} />
     </group>
   )
 }

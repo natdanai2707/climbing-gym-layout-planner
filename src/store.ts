@@ -3,6 +3,10 @@ import { subscribeWithSelector } from 'zustand/middleware'
 import type { Building, FloorFinish, LayoutFile, ObjectDef, Placed, ShellConfig } from './types'
 import { clampInside, computeDrop, elevationFor, fp, resolveAfterResize } from './placement'
 import { useWallStore } from './wall/wallStore'
+import defaultLayoutJson from './defaultLayout.json'
+
+// Example gym shipped with the app — shown on the very first visit
+const DEFAULT_LAYOUT_FILE = defaultLayoutJson as unknown as LayoutFile
 
 interface Snapshot {
   building: Building
@@ -189,6 +193,13 @@ const THEMES: Record<
 
 const THEME_WALL_CATS = new Set(['wall_low', 'wall_high', 'wall_island', 'wall_custom', 'partition'])
 
+// Items whose catalog color was later replaced with a realistic one: saved
+// layouts store the color per instance, so old placements are migrated on load.
+const LEGACY_COLORS: Record<string, Record<string, string>> = {
+  shoes: { '#a78bfa': '#b59b7c' },
+  hyrox: { '#fdba74': '#33363b' },
+}
+
 // v1 files stored rot in 90° steps; v2 uses 45° steps. Older files kept an
 // independent shell length/offset — those now fold into the building itself.
 function normalizeFile(file: LayoutFile): { building: Building; objects: Placed[] } {
@@ -196,12 +207,15 @@ function normalizeFile(file: LayoutFile): { building: Building; objects: Placed[
   const objects = (file.objects ?? []).map((o) => ({
     ...o,
     rot: version < 2 ? (o.rot * 2) % 8 : o.rot % 8,
+    color: LEGACY_COLORS[o.defId]?.[o.color] ?? o.color,
   }))
   const building = { ...DEFAULT_BUILDING, ...file.building }
-  const legacyShell = file.shell as (ShellConfig & { length?: number | null; offset?: number }) | undefined
-  if (legacyShell) {
-    if (typeof legacyShell.length === 'number') building.length = legacyShell.length
-    if (typeof legacyShell.offset === 'number' && building.centerZ === 0) building.centerZ = legacyShell.offset
+  if (version < 2) {
+    const legacyShell = file.shell as (ShellConfig & { length?: number | null; offset?: number }) | undefined
+    if (legacyShell) {
+      if (typeof legacyShell.length === 'number') building.length = legacyShell.length
+      if (typeof legacyShell.offset === 'number' && building.centerZ === 0) building.centerZ = legacyShell.offset
+    }
   }
   // open at the right size: the shell must already cover every placed item
   return { building: growToFit(building, objects), objects }
@@ -241,6 +255,12 @@ function growToFit(building: Building, objects: Placed[]): Building {
 
 const DEFAULT_SHELL: ShellConfig = { mode: 0, eave: 6 }
 
+// Old saves smuggled legacy shell keys (length/offset) along via object spread;
+// picking the fields explicitly keeps exports clean.
+function cleanShell(s?: ShellConfig): ShellConfig {
+  return { mode: s?.mode ?? DEFAULT_SHELL.mode, eave: s?.eave ?? DEFAULT_SHELL.eave }
+}
+
 const DEFAULT_COOL_FACTOR = 220 // ~600 BTU/m² at a 2.7 m ceiling, volume-based
 const DEFAULT_FLOOR: FloorFinish = { material: 'paint', color: '#e4c9a3' }
 
@@ -258,7 +278,7 @@ function loadSaved(): {
       if (data && data.building && Array.isArray(data.objects)) {
         return {
           ...normalizeFile(data),
-          shell: { ...DEFAULT_SHELL, ...data.shell },
+          shell: cleanShell(data.shell),
           coolFactor: typeof data.coolFactor === 'number' ? data.coolFactor : DEFAULT_COOL_FACTOR,
           floor: { ...DEFAULT_FLOOR, ...data.floor },
         }
@@ -267,7 +287,14 @@ function loadSaved(): {
   } catch {
     // ignore corrupt saves
   }
-  return { building: DEFAULT_BUILDING, objects: [], shell: DEFAULT_SHELL, coolFactor: DEFAULT_COOL_FACTOR, floor: DEFAULT_FLOOR }
+  // first visit: open with the bundled example gym instead of an empty hall
+  const demo = DEFAULT_LAYOUT_FILE
+  return {
+    ...normalizeFile(demo),
+    shell: cleanShell(demo.shell),
+    coolFactor: typeof demo.coolFactor === 'number' ? demo.coolFactor : DEFAULT_COOL_FACTOR,
+    floor: { ...DEFAULT_FLOOR, ...demo.floor },
+  }
 }
 
 export const useStore = create<GymState>()(
@@ -621,7 +648,7 @@ export const useStore = create<GymState>()(
       if (file.wallDesigns) useWallStore.getState().mergeDesigns(file.wallDesigns)
       set({
         ...normalizeFile(file),
-        shell: { ...DEFAULT_SHELL, ...file.shell },
+        shell: cleanShell(file.shell),
         coolFactor: typeof file.coolFactor === 'number' ? file.coolFactor : get().coolFactor,
         floor: { ...DEFAULT_FLOOR, ...file.floor },
         selectedId: null,

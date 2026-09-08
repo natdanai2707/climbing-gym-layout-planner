@@ -80,6 +80,8 @@ function CameraRig() {
         zoomToCursor
         enableRotate={!plan}
         screenSpacePanning={plan}
+        // Fusion-style: drag with the scroll wheel pressed (or right button) to pan
+        mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN }}
       />
     </>
   )
