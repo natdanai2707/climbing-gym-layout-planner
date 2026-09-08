@@ -639,8 +639,85 @@ function CoworkZone({ o, tint }: { o: Placed; tint: string | null }) {
 }
 
 // Training: pull-up rig, bench and a dumbbell rack
+// Recognizable treadmill: deck with belt, side rails, slanted console mast.
+function Treadmill({ pos, ry = 0 }: { pos: [number, number, number]; ry?: number }) {
+  return (
+    <group position={pos} rotation-y={ry}>
+      <Box args={[0.78, 0.14, 1.8]} pos={[0, 0.1, 0.12]} color="#23262b" />
+      <Box args={[0.5, 0.03, 1.5]} pos={[0, 0.185, 0.16]} color="#111318" />
+      <Alu args={[0.06, 0.03, 1.6]} pos={[-0.32, 0.19, 0.14]} />
+      <Alu args={[0.06, 0.03, 1.6]} pos={[0.32, 0.19, 0.14]} />
+      {/* console mast + handles */}
+      <Alu args={[0.05, 1.15, 0.05]} pos={[-0.3, 0.72, -0.68]} rot={[0.28, 0, 0]} />
+      <Alu args={[0.05, 1.15, 0.05]} pos={[0.3, 0.72, -0.68]} rot={[0.28, 0, 0]} />
+      <Box args={[0.72, 0.34, 0.07]} pos={[0, 1.32, -0.84]} rot={[0.5, 0, 0]} color="#2b2f35" />
+      <mesh position={[0, 1.34, -0.8]} rotation-x={0.5}>
+        <boxGeometry args={[0.42, 0.2, 0.005]} />
+        <meshStandardMaterial color="#274156" emissive="#3d6a8f" emissiveIntensity={0.55} roughness={0.3} />
+      </mesh>
+      <Alu args={[0.68, 0.045, 0.045]} pos={[0, 1.06, -0.62]} color="#8f959c" />
+    </group>
+  )
+}
+
+// Elliptical cross-trainer: rear drive housing, pedal arms, moving handles.
+function Elliptical({ pos, ry = 0 }: { pos: [number, number, number]; ry?: number }) {
+  return (
+    <group position={pos} rotation-y={ry}>
+      <Box args={[0.55, 0.09, 1.5]} pos={[0, 0.07, 0]} color="#23262b" />
+      {/* rear flywheel housing */}
+      <mesh position={[0, 0.52, 0.55]} rotation-z={Math.PI / 2} castShadow>
+        <cylinderGeometry args={[0.34, 0.34, 0.18, 18]} />
+        <meshStandardMaterial color="#2b2f35" roughness={0.5} />
+      </mesh>
+      {/* pedal arms + pedals at opposite phases */}
+      <Alu args={[0.045, 0.045, 0.95]} pos={[-0.16, 0.42, 0.12]} rot={[-0.22, 0, 0]} color="#8f959c" />
+      <Alu args={[0.045, 0.045, 0.95]} pos={[0.16, 0.52, 0.1]} rot={[0.14, 0, 0]} color="#8f959c" />
+      <Box args={[0.16, 0.035, 0.34]} pos={[-0.16, 0.33, -0.28]} color="#111318" />
+      <Box args={[0.16, 0.035, 0.34]} pos={[0.16, 0.6, -0.26]} color="#111318" />
+      {/* front mast, console, moving handlebars */}
+      <Alu args={[0.06, 1.05, 0.06]} pos={[0, 0.62, -0.6]} rot={[0.12, 0, 0]} />
+      <Box args={[0.4, 0.24, 0.06]} pos={[0, 1.28, -0.66]} rot={[0.4, 0, 0]} color="#2b2f35" />
+      <Alu args={[0.04, 0.85, 0.04]} pos={[-0.2, 0.98, -0.42]} rot={[0.3, 0, 0]} color="#8f959c" />
+      <Alu args={[0.04, 0.85, 0.04]} pos={[0.2, 1.08, -0.46]} rot={[-0.05, 0, 0]} color="#8f959c" />
+    </group>
+  )
+}
+
+// A-frame dumbbell rack with two tiers of round-headed dumbbells.
+function DumbbellRack({ pos, ry = 0 }: { pos: [number, number, number]; ry?: number }) {
+  const bell = (x: number, y: number) => (
+    <group key={`${x}${y}`} position={[x, y, 0]}>
+      <mesh rotation-z={Math.PI / 2} castShadow>
+        <cylinderGeometry args={[0.02, 0.02, 0.3, 8]} />
+        <meshStandardMaterial color="#9aa2ab" roughness={0.35} metalness={0.6} />
+      </mesh>
+      {[-0.12, 0.12].map((dx) => (
+        <mesh key={dx} position={[dx, 0, 0]} rotation-z={Math.PI / 2} castShadow>
+          <cylinderGeometry args={[0.07, 0.07, 0.09, 12]} />
+          <meshStandardMaterial color="#2b2f35" roughness={0.6} />
+        </mesh>
+      ))}
+    </group>
+  )
+  return (
+    <group position={pos} rotation-y={ry}>
+      {[-0.8, 0.8].map((x) => (
+        <Alu key={x} args={[0.07, 0.85, 0.6]} pos={[x, 0.42, 0]} color="#3a3f45" />
+      ))}
+      <Box args={[1.7, 0.06, 0.5]} pos={[0, 0.42, 0.1]} rot={[0.35, 0, 0]} color="#3a3f45" />
+      <Box args={[1.7, 0.06, 0.5]} pos={[0, 0.78, -0.08]} rot={[0.35, 0, 0]} color="#3a3f45" />
+      {[-0.55, -0.15, 0.25, 0.6].map((x) => bell(x, 0.56))}
+      {[-0.5, -0.05, 0.4].map((x) => bell(x, 0.92))}
+    </group>
+  )
+}
+
 function TrainingZone({ o, tint }: { o: Placed; tint: string | null }) {
   const rigW = Math.min(o.w - 1, 4)
+  // cardio row along the front edge: alternating treadmills and ellipticals
+  const nCardio = Math.max(2, Math.min(6, Math.floor((o.w - 0.8) / 1.05)))
+  const cardioX = spread(nCardio, o.w - 1)
   return (
     <group>
       <ZonePatch o={o} tint={tint} />
@@ -655,21 +732,24 @@ function TrainingZone({ o, tint }: { o: Placed; tint: string | null }) {
         <Box args={[rigW + 0.1, 0.07, 0.07]} pos={[0, 2.6, 0]} color={tint ?? '#f59e0b'} />
         <Box args={[rigW + 0.1, 0.07, 0.07]} pos={[0, 2.6, 0.9]} color={tint ?? '#f59e0b'} />
       </group>
+      {/* cardio row facing out */}
+      {cardioX.map((x, i) =>
+        i % 2 === 0 ? (
+          <Treadmill key={i} pos={[x, 0.08, o.d / 2 - 1.1]} ry={Math.PI} />
+        ) : (
+          <Elliptical key={i} pos={[x, 0.08, o.d / 2 - 1.1]} ry={Math.PI} />
+        ),
+      )}
       {/* bench */}
-      <group position={[Math.min(o.w / 4, 2), 0.08, o.d / 8]}>
+      <group position={[Math.min(o.w / 4, 2), 0.08, -o.d / 8]}>
         <Box args={[0.4, 0.12, 1.3]} pos={[0, 0.45, 0]} color="#374151" />
         <Box args={[0.3, 0.42, 0.12]} pos={[0, 0.21, -0.5]} color={STEEL} />
         <Box args={[0.3, 0.42, 0.12]} pos={[0, 0.21, 0.5]} color={STEEL} />
       </group>
-      {/* dumbbell rack */}
-      <group position={[-Math.min(o.w / 4, 2), 0.08, o.d / 4]}>
-        <Box args={[1.6, 0.5, 0.5]} pos={[0, 0.25, 0]} color={STEEL} />
-        {[-0.55, -0.15, 0.25, 0.65].map((x, i) => (
-          <Box key={i} args={[0.28, 0.14, 0.14]} pos={[x, 0.58, 0]} color={HOLD_COLORS[i % HOLD_COLORS.length]} />
-        ))}
-      </group>
-      {/* athlete hanging from the rig bar */}
+      <DumbbellRack pos={[-Math.min(o.w / 4, 2), 0.08, -o.d / 8]} />
+      {/* athletes: one hanging, one mid-run */}
       <Figure pose="hang" pos={[Math.min(o.w / 5, 1.2), 1.15, -o.d / 2 + 0.8]} ry={Math.PI} shirt="#22c55e" idx={2} />
+      <Figure pose="walk" pos={[cardioX[0], 0.28, o.d / 2 - 0.9]} ry={Math.PI} shirt="#3b82f6" idx={4} />
     </group>
   )
 }
@@ -1014,12 +1094,76 @@ function Door({ o, tint }: { o: Placed; tint: string | null }) {
       </group>
     )
   }
-  // Perimeter door: colored marker embedded in the shell wall
+  // Fire exit: steel leaf in a steel frame with a panic push bar
+  if (o.defId === 'door_fire') {
+    const t = Math.max(0.16, Math.min(o.d, 0.3))
+    return (
+      <group>
+        <Alu args={[0.09, o.h, t]} pos={[-o.w / 2 + 0.045, o.h / 2, 0]} color="#7c828a" />
+        <Alu args={[0.09, o.h, t]} pos={[o.w / 2 - 0.045, o.h / 2, 0]} color="#7c828a" />
+        <Alu args={[o.w, 0.1, t]} pos={[0, o.h - 0.05, 0]} color="#7c828a" />
+        <Box args={[o.w - 0.2, o.h - 0.14, 0.06]} pos={[0, (o.h - 0.14) / 2, 0]} color={tint ?? '#9aa2ab'} />
+        {/* panic bar */}
+        <Alu args={[o.w - 0.34, 0.07, 0.09]} pos={[0, o.h * 0.42, 0.08]} color={tint ?? '#c0392b'} />
+        <Box args={[o.w - 0.3, 0.16, 0.02]} pos={[0, o.h * 0.86, 0.045]} color="#2f9e44" />
+      </group>
+    )
+  }
+  // Main entrance: aluminium-framed glass storefront door (double leaf when
+  // wide enough), with full-height pull handles and kick plates.
+  const t = Math.max(0.12, Math.min(o.d, 0.3))
+  const leaves = o.w > 1.6 ? 2 : 1
+  const leafW = (o.w - 0.14 - (leaves - 1) * 0.03) / leaves
+  const leafH = o.h - 0.12
   return (
-    <mesh position={[0, o.h / 2, 0]} castShadow>
-      <boxGeometry args={[o.w, o.h, Math.max(0.28, o.d)]} />
-      <meshStandardMaterial color={tint ?? o.color} {...MAT} />
-      <Edges color="#ffffff" />
+    <group>
+      {/* outer frame */}
+      <Alu args={[0.07, o.h, t]} pos={[-o.w / 2 + 0.035, o.h / 2, 0]} />
+      <Alu args={[0.07, o.h, t]} pos={[o.w / 2 - 0.035, o.h / 2, 0]} />
+      <Alu args={[o.w, 0.09, t]} pos={[0, o.h - 0.045, 0]} />
+      {Array.from({ length: leaves }, (_, i) => {
+        const cx = -o.w / 2 + 0.07 + leafW * (i + 0.5) + i * 0.03
+        const handleX = leaves === 2 ? (i === 0 ? leafW / 2 - 0.12 : -leafW / 2 + 0.12) : leafW / 2 - 0.14
+        return (
+          <group key={i} position={[cx, 0, 0]}>
+            {/* glass pane */}
+            <mesh position={[0, leafH / 2 + 0.02, 0]} castShadow>
+              <boxGeometry args={[leafW - 0.08, leafH - 0.3, 0.025]} />
+              <meshStandardMaterial color="#bfe0ea" transparent opacity={0.3} roughness={0.06} metalness={0.1} depthWrite={false} />
+            </mesh>
+            {/* leaf stiles + rails */}
+            <Alu args={[0.05, leafH, 0.05]} pos={[-leafW / 2 + 0.025, leafH / 2 + 0.02, 0]} />
+            <Alu args={[0.05, leafH, 0.05]} pos={[leafW / 2 - 0.025, leafH / 2 + 0.02, 0]} />
+            <Alu args={[leafW, 0.05, 0.05]} pos={[0, leafH - 0.005, 0]} />
+            {/* kick plate */}
+            <Alu args={[leafW, 0.26, 0.055]} pos={[0, 0.15, 0]} />
+            {/* vertical pull handles, both faces */}
+            <Alu args={[0.03, 0.75, 0.03]} pos={[handleX, o.h * 0.48, 0.09]} color="#8f959c" />
+            <Alu args={[0.03, 0.75, 0.03]} pos={[handleX, o.h * 0.48, -0.09]} color="#8f959c" />
+          </group>
+        )
+      })}
+      {tint && <Box args={[o.w, 0.06, t + 0.02]} pos={[0, 0.03, 0]} color={tint} />}
+    </group>
+  )
+}
+
+// brushed-aluminium box, the framing material for storefront doors etc.
+function Alu({
+  args,
+  pos,
+  color = '#c9ced4',
+  rot,
+}: {
+  args: [number, number, number]
+  pos: [number, number, number]
+  color?: string
+  rot?: [number, number, number]
+}) {
+  return (
+    <mesh position={pos} rotation={rot} castShadow>
+      <boxGeometry args={args} />
+      <meshStandardMaterial color={color} roughness={0.35} metalness={0.6} />
     </mesh>
   )
 }
@@ -1256,32 +1400,112 @@ function FloorFan({ o, tint }: { o: Placed; tint: string | null }) {
 
 /* ------------------------------ site & outdoors ------------------------------ */
 
+// Trees with real foliage: hundreds of instanced leaf clumps in varied
+// greens scattered around branch tips, over a trunk with a few branches —
+// reads like an archviz tree instead of a cartoon blob.
 function Tree({ o, tint }: { o: Placed; tint: string | null }) {
   const big = o.defId === 'tree_big'
+  const ref = useRef<THREE.InstancedMesh>(null)
   const h = o.h
-  const trunkH = big ? h * 0.42 : h * 0.35
-  const leaf = tint ?? o.color
+  const trunkH = big ? h * 0.4 : h * 0.34
   const r = Math.min(o.w, o.d) / 2
+
+  const { leaves, branches } = useMemo(() => {
+    // deterministic per-instance randomness so trees don't shimmer on rerender
+    let s = 7
+    for (let i = 0; i < o.id.length; i++) s = (s * 31 + o.id.charCodeAt(i)) & 0x7fffffff
+    const rnd = () => {
+      s = (s * 1103515245 + 12345) & 0x7fffffff
+      return s / 0x7fffffff
+    }
+    const centers: Array<[number, number, number, number]> = [] // x,y,z,radius
+    const nC = big ? 5 : 3
+    for (let i = 0; i < nC; i++) {
+      const a = (i / nC) * Math.PI * 2 + rnd()
+      const rr = i === 0 ? 0 : r * (0.25 + rnd() * 0.3)
+      centers.push([
+        Math.cos(a) * rr,
+        trunkH + (h - trunkH) * (0.35 + rnd() * 0.45),
+        Math.sin(a) * rr,
+        r * (i === 0 ? 0.55 : 0.34 + rnd() * 0.2),
+      ])
+    }
+    const base = new THREE.Color(tint ?? o.color)
+    const shades = [
+      base.clone().offsetHSL(0.015, 0.05, -0.07),
+      base.clone(),
+      base.clone().offsetHSL(-0.02, 0.02, 0.07),
+      base.clone().offsetHSL(0.03, -0.05, 0.12),
+    ]
+    const n = big ? 230 : 120
+    const list: Array<{ p: [number, number, number]; s: number; ry: number; c: THREE.Color }> = []
+    for (let i = 0; i < n; i++) {
+      const c = centers[Math.floor(rnd() * centers.length)]
+      // bias leaf clumps toward the shell of each cluster
+      const th = rnd() * Math.PI * 2
+      const ph = Math.acos(2 * rnd() - 1)
+      const rad = c[3] * (0.55 + 0.45 * Math.sqrt(rnd()))
+      list.push({
+        p: [c[0] + rad * Math.sin(ph) * Math.cos(th), c[1] + rad * Math.cos(ph) * 0.8, c[2] + rad * Math.sin(ph) * Math.sin(th)],
+        s: r * (0.1 + rnd() * 0.1),
+        ry: rnd() * Math.PI,
+        c: shades[Math.floor(rnd() * shades.length)],
+      })
+    }
+    const br = centers.slice(1).map((c) => c)
+    return { leaves: list, branches: br }
+  }, [o.id, o.color, tint, big, h, trunkH, r])
+
+  useLayoutEffect(() => {
+    const m = ref.current
+    if (!m) return
+    const M = new THREE.Matrix4()
+    const P = new THREE.Vector3()
+    const Q = new THREE.Quaternion()
+    const S = new THREE.Vector3()
+    const E = new THREE.Euler()
+    leaves.forEach((l, i) => {
+      P.set(...l.p)
+      E.set(0, l.ry, 0)
+      Q.setFromEuler(E)
+      S.setScalar(l.s)
+      M.compose(P, Q, S)
+      m.setMatrixAt(i, M)
+      m.setColorAt(i, l.c)
+    })
+    m.instanceMatrix.needsUpdate = true
+    if (m.instanceColor) m.instanceColor.needsUpdate = true
+  }, [leaves])
+
   return (
     <group>
       <mesh position={[0, trunkH / 2, 0]} castShadow>
-        <cylinderGeometry args={[r * 0.09, r * 0.14, trunkH, 8]} />
-        <meshStandardMaterial color="#7a5b3a" roughness={0.9} />
+        <cylinderGeometry args={[r * 0.08, r * 0.13, trunkH, 8]} />
+        <meshStandardMaterial color="#6e5335" roughness={0.9} />
       </mesh>
-      <mesh position={[0, trunkH + (h - trunkH) * 0.45, 0]} castShadow>
-        <icosahedronGeometry args={[r * 0.92, 1]} />
-        <meshStandardMaterial color={leaf} roughness={0.9} flatShading />
-      </mesh>
-      <mesh position={[r * 0.35, trunkH + (h - trunkH) * 0.72, r * 0.15]} castShadow>
-        <icosahedronGeometry args={[r * 0.55, 1]} />
-        <meshStandardMaterial color={leaf} roughness={0.9} flatShading />
-      </mesh>
-      {big && (
-        <mesh position={[-r * 0.4, trunkH + (h - trunkH) * 0.6, -r * 0.25]} castShadow>
-          <icosahedronGeometry args={[r * 0.6, 1]} />
-          <meshStandardMaterial color="#5d8f4a" roughness={0.9} flatShading />
-        </mesh>
-      )}
+      {/* branches reaching toward the foliage clusters */}
+      {branches.map((c, i) => {
+        const len = Math.hypot(c[0], c[1] - trunkH * 0.9, c[2])
+        return (
+          <group key={i} position={[0, trunkH * 0.9, 0]}>
+            <mesh
+              position={[c[0] / 2, (c[1] - trunkH * 0.9) / 2, c[2] / 2]}
+              quaternion={new THREE.Quaternion().setFromUnitVectors(
+                new THREE.Vector3(0, 1, 0),
+                new THREE.Vector3(c[0], c[1] - trunkH * 0.9, c[2]).normalize(),
+              )}
+              castShadow
+            >
+              <cylinderGeometry args={[r * 0.025, r * 0.05, len, 6]} />
+              <meshStandardMaterial color="#6e5335" roughness={0.9} />
+            </mesh>
+          </group>
+        )
+      })}
+      <instancedMesh ref={ref} args={[undefined, undefined, leaves.length]} castShadow>
+        <icosahedronGeometry args={[1, 0]} />
+        <meshStandardMaterial color="#ffffff" roughness={0.95} />
+      </instancedMesh>
     </group>
   )
 }
