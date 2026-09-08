@@ -1937,6 +1937,423 @@ function Carport({ o, tint }: { o: Placed; tint: string | null }) {
   )
 }
 
+/* --------------------------- lighting & AV (tech) --------------------------- */
+
+// UFO high-bay LED: drop rod, finned disc housing, glowing lens. Lights the
+// hall for real in the Night mood.
+function HighBay({ o, tint }: { o: Placed; tint: string | null }) {
+  const night = useStore((s) => s.lightMood === 'night')
+  const y = Math.max(2, o.h)
+  const r = Math.max(0.16, Math.min(o.w, o.d) / 2)
+  return (
+    <group position={[0, y, 0]}>
+      <Alu args={[0.035, 0.6, 0.035]} pos={[0, 0.42, 0]} color="#4b5563" />
+      <mesh castShadow>
+        <cylinderGeometry args={[r, r * 0.82, 0.16, 18]} />
+        <meshStandardMaterial color={tint ?? o.color} roughness={0.4} metalness={0.5} />
+      </mesh>
+      <mesh position={[0, -0.09, 0]}>
+        <cylinderGeometry args={[r * 0.72, r * 0.72, 0.03, 18]} />
+        <meshStandardMaterial color="#fffbe8" emissive={night ? '#ffedb8' : '#f2ecd8'} emissiveIntensity={night ? 2 : 0.5} roughness={0.3} />
+      </mesh>
+      {night && <pointLight position={[0, -0.3, 0]} color="#ffe9bb" intensity={40} distance={18} decay={1.9} />}
+    </group>
+  )
+}
+
+// Track light: rail with angled cylindrical spot heads.
+function TrackLight({ o, tint }: { o: Placed; tint: string | null }) {
+  const night = useStore((s) => s.lightMood === 'night')
+  const y = Math.max(1.5, o.h)
+  const heads = useMemo(() => spread(Math.max(2, Math.round(o.w / 0.65)), o.w - 0.3), [o.w])
+  return (
+    <group position={[0, y, 0]}>
+      <Box args={[o.w, 0.05, 0.06]} pos={[0, 0, 0]} color={tint ?? o.color} />
+      <Alu args={[0.03, 0.35, 0.03]} pos={[-o.w / 2 + 0.1, 0.19, 0]} color="#4b5563" />
+      <Alu args={[0.03, 0.35, 0.03]} pos={[o.w / 2 - 0.1, 0.19, 0]} color="#4b5563" />
+      {heads.map((x, i) => (
+        <group key={i} position={[x, -0.1, 0]} rotation-x={i % 2 ? 0.5 : -0.4} rotation-z={i % 3 === 0 ? 0.25 : 0}>
+          <mesh castShadow>
+            <cylinderGeometry args={[0.05, 0.06, 0.16, 12]} />
+            <meshStandardMaterial color={tint ?? o.color} roughness={0.45} metalness={0.4} />
+          </mesh>
+          <mesh position={[0, -0.085, 0]}>
+            <cylinderGeometry args={[0.045, 0.045, 0.012, 12]} />
+            <meshStandardMaterial color="#fff6d8" emissive={night ? '#ffe9b0' : '#efe7cf'} emissiveIntensity={night ? 1.8 : 0.4} />
+          </mesh>
+        </group>
+      ))}
+      {night && <pointLight position={[0, -0.5, 0.4]} color="#ffe9bb" intensity={16} distance={10} decay={1.9} />}
+    </group>
+  )
+}
+
+// CCTV dome/bullet camera on a mount arm, angled down.
+function Cctv({ o, tint }: { o: Placed; tint: string | null }) {
+  const y = Math.max(1.5, o.h)
+  const c = tint ?? o.color
+  return (
+    <group position={[0, y, 0]}>
+      <Alu args={[0.05, 0.3, 0.05]} pos={[0, 0.15, 0]} color="#9aa2ab" />
+      <Alu args={[0.05, 0.05, 0.22]} pos={[0, 0.02, 0.09]} color="#9aa2ab" />
+      <group position={[0, -0.04, 0.2]} rotation-x={0.5}>
+        <mesh castShadow>
+          <boxGeometry args={[0.11, 0.11, 0.3]} />
+          <meshStandardMaterial color={c} roughness={0.4} />
+        </mesh>
+        <mesh position={[0, 0, 0.16]} rotation-x={Math.PI / 2}>
+          <cylinderGeometry args={[0.045, 0.05, 0.05, 12]} />
+          <meshStandardMaterial color="#16181c" roughness={0.2} />
+        </mesh>
+        <Box args={[0.02, 0.02, 0.02]} pos={[0.035, 0.045, 0.12]} color="#dc2626" />
+        {/* sun hood */}
+        <Box args={[0.13, 0.02, 0.32]} pos={[0, 0.065, 0.01]} color={c} />
+      </group>
+    </group>
+  )
+}
+
+// PA speaker cabinet on a wall bracket, angled down toward the floor.
+function SpeakerBox({ o, tint }: { o: Placed; tint: string | null }) {
+  const y = Math.max(1.2, o.h)
+  const c = tint ?? o.color
+  return (
+    <group position={[0, y, 0]}>
+      <Alu args={[0.04, 0.26, 0.04]} pos={[0, 0.1, -0.08]} color="#4b5563" />
+      <group rotation-x={0.35}>
+        <mesh castShadow>
+          <boxGeometry args={[0.34, 0.5, 0.28]} />
+          <meshStandardMaterial color={c} roughness={0.7} />
+        </mesh>
+        {/* woofer + tweeter behind a grille face */}
+        <mesh position={[0, -0.06, 0.145]} rotation-x={Math.PI / 2}>
+          <cylinderGeometry args={[0.11, 0.11, 0.01, 16]} />
+          <meshStandardMaterial color="#16181c" roughness={0.9} />
+        </mesh>
+        <mesh position={[0, 0.15, 0.145]} rotation-x={Math.PI / 2}>
+          <cylinderGeometry args={[0.05, 0.05, 0.01, 12]} />
+          <meshStandardMaterial color="#16181c" roughness={0.9} />
+        </mesh>
+      </group>
+    </group>
+  )
+}
+
+/* ------------------------------ garden items ------------------------------ */
+
+// Conifer (stacked cones) and columnar cypress tree shapes.
+function Conifer({ o, tint }: { o: Placed; tint: string | null }) {
+  const slim = o.defId === 'tree_slim'
+  const c = tint ?? o.color
+  const r = Math.min(o.w, o.d) / 2
+  const h = o.h
+  if (slim) {
+    return (
+      <group>
+        <mesh position={[0, 0.15, 0]} castShadow>
+          <cylinderGeometry args={[r * 0.12, r * 0.16, 0.3, 8]} />
+          <meshStandardMaterial color="#6e5335" roughness={0.9} />
+        </mesh>
+        {/* tall teardrop column of foliage */}
+        <mesh position={[0, 0.3 + (h - 0.3) * 0.48, 0]} scale={[r * 0.85, (h - 0.3) / 2, r * 0.85]} castShadow>
+          <icosahedronGeometry args={[1, 1]} />
+          <meshStandardMaterial color={c} roughness={0.95} flatShading />
+        </mesh>
+        <mesh position={[0, h - 0.25, 0]} scale={[r * 0.45, 0.35, r * 0.45]} castShadow>
+          <icosahedronGeometry args={[1, 1]} />
+          <meshStandardMaterial color={c} roughness={0.95} flatShading />
+        </mesh>
+      </group>
+    )
+  }
+  const tiers = [
+    [0.34, 1.0],
+    [0.55, 0.8],
+    [0.74, 0.58],
+    [0.9, 0.36],
+  ] as const
+  return (
+    <group>
+      <mesh position={[0, h * 0.14, 0]} castShadow>
+        <cylinderGeometry args={[r * 0.1, r * 0.16, h * 0.3, 8]} />
+        <meshStandardMaterial color="#6e5335" roughness={0.9} />
+      </mesh>
+      {tiers.map(([ty, tr], i) => (
+        <mesh key={i} position={[0, h * ty, 0]} castShadow>
+          <coneGeometry args={[r * tr, h * 0.34, 9]} />
+          <meshStandardMaterial color={i % 2 ? c : '#356031'} roughness={0.95} flatShading />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+// Garden pond: stone ring around still water.
+function Pond({ o, tint }: { o: Placed; tint: string | null }) {
+  const stones = useMemo(() => {
+    const n = Math.max(10, Math.round((o.w + o.d) * 2.2))
+    return Array.from({ length: n }, (_, i) => {
+      const a = (i / n) * Math.PI * 2
+      return {
+        x: Math.cos(a) * (o.w / 2 - 0.12),
+        z: Math.sin(a) * (o.d / 2 - 0.12),
+        s: 0.1 + ((i * 37) % 10) / 55,
+        ry: i * 0.7,
+      }
+    })
+  }, [o.w, o.d])
+  return (
+    <group>
+      <mesh position={[0, 0.05, 0]} scale={[o.w / 2 - 0.15, 1, o.d / 2 - 0.15]}>
+        <cylinderGeometry args={[1, 1, 0.1, 28]} />
+        <meshStandardMaterial color={tint ?? o.color} roughness={0.08} metalness={0.15} />
+      </mesh>
+      <mesh position={[0, 0.01, 0]} scale={[o.w / 2, 1, o.d / 2]}>
+        <cylinderGeometry args={[1, 1, 0.06, 28]} />
+        <meshStandardMaterial color="#7a7266" roughness={0.95} />
+      </mesh>
+      {stones.map((s, i) => (
+        <mesh key={i} position={[s.x, 0.1, s.z]} rotation-y={s.ry} castShadow>
+          <icosahedronGeometry args={[s.s, 0]} />
+          <meshStandardMaterial color={i % 3 ? '#8a8378' : '#6d675d'} roughness={0.95} flatShading />
+        </mesh>
+      ))}
+      {/* lily pads */}
+      {[
+        [-0.2, 0.15],
+        [0.25, -0.1],
+        [0.05, 0.3],
+      ].map(([x, z], i) => (
+        <mesh key={`l${i}`} position={[x * o.w, 0.105, z * o.d]} rotation-y={i}>
+          <cylinderGeometry args={[0.14, 0.14, 0.015, 10, 1, false, 0.4, 5.6]} />
+          <meshStandardMaterial color="#4e7d3e" roughness={0.8} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+// Two-tier stone fountain with a translucent water jet.
+function Fountain({ o, tint }: { o: Placed; tint: string | null }) {
+  const c = tint ?? o.color
+  const r = Math.min(o.w, o.d) / 2
+  return (
+    <group>
+      <mesh position={[0, 0.18, 0]} castShadow>
+        <cylinderGeometry args={[r, r * 1.05, 0.36, 20]} />
+        <meshStandardMaterial color={c} roughness={0.8} />
+      </mesh>
+      <mesh position={[0, 0.37, 0]} scale={[r * 0.92, 1, r * 0.92]}>
+        <cylinderGeometry args={[1, 1, 0.03, 20]} />
+        <meshStandardMaterial color="#5d8bab" roughness={0.08} />
+      </mesh>
+      <mesh position={[0, 0.6, 0]} castShadow>
+        <cylinderGeometry args={[0.09, 0.13, 0.5, 10]} />
+        <meshStandardMaterial color={c} roughness={0.8} />
+      </mesh>
+      <mesh position={[0, 0.92, 0]} castShadow>
+        <cylinderGeometry args={[r * 0.42, r * 0.2, 0.18, 16]} />
+        <meshStandardMaterial color={c} roughness={0.8} />
+      </mesh>
+      <mesh position={[0, 1.0, 0]} scale={[r * 0.38, 1, r * 0.38]}>
+        <cylinderGeometry args={[1, 1, 0.02, 16]} />
+        <meshStandardMaterial color="#5d8bab" roughness={0.08} />
+      </mesh>
+      {/* jet + falling water */}
+      <mesh position={[0, Math.min(o.h, 1.7) * 0.78, 0]}>
+        <cylinderGeometry args={[0.025, 0.045, Math.min(o.h, 1.7) * 0.5, 8]} />
+        <meshStandardMaterial color="#bfe0ea" transparent opacity={0.55} roughness={0.1} />
+      </mesh>
+      <mesh position={[0, 0.72, 0]}>
+        <cylinderGeometry args={[r * 0.3, r * 0.14, 0.42, 12, 1, true]} />
+        <meshStandardMaterial color="#bfe0ea" transparent opacity={0.28} roughness={0.1} side={THREE.DoubleSide} />
+      </mesh>
+    </group>
+  )
+}
+
+// Slatted garden bench with cast metal legs and a back.
+function BenchOut({ o, tint }: { o: Placed; tint: string | null }) {
+  const c = tint ?? o.color
+  return (
+    <group>
+      {[-1, 1].map((s) => (
+        <group key={s} position={[(s * (o.w - 0.3)) / 2, 0, 0]}>
+          <Box args={[0.06, 0.42, o.d - 0.08]} pos={[0, 0.21, 0]} color="#2f3237" />
+          <Box args={[0.06, 0.5, 0.07]} pos={[0, 0.62, -o.d / 2 + 0.06]} rot={[-0.22, 0, 0]} color="#2f3237" />
+        </group>
+      ))}
+      {[0, 1, 2].map((i) => (
+        <Box key={i} args={[o.w, 0.035, 0.12]} pos={[0, 0.44, -o.d / 2 + 0.14 + i * 0.16]} color={c} />
+      ))}
+      {[0, 1, 2].map((i) => (
+        <Box key={`b${i}`} args={[o.w, 0.12, 0.035]} pos={[0, 0.6 + i * 0.15, -o.d / 2 + 0.02 - i * 0.035]} rot={[-0.22, 0, 0]} color={c} />
+      ))}
+    </group>
+  )
+}
+
+// Round outdoor table with two mesh chairs.
+function TableOutSet({ o, tint }: { o: Placed; tint: string | null }) {
+  const c = tint ?? o.color
+  const r = Math.min(o.w, o.d) * 0.26
+  return (
+    <group>
+      <mesh position={[0, o.h, 0]} castShadow>
+        <cylinderGeometry args={[r, r, 0.03, 20]} />
+        <meshStandardMaterial color={c} roughness={0.5} metalness={0.4} />
+      </mesh>
+      <Alu args={[0.04, o.h, 0.04]} pos={[0, o.h / 2, 0]} color="#3a3f45" />
+      <mesh position={[0, 0.02, 0]}>
+        <cylinderGeometry args={[r * 0.55, r * 0.55, 0.03, 14]} />
+        <meshStandardMaterial color="#3a3f45" roughness={0.5} metalness={0.4} />
+      </mesh>
+      {[0, Math.PI].map((a, i) => (
+        <group key={i} position={[Math.cos(a) * (r + 0.35), 0, Math.sin(a) * (r + 0.35)]} rotation-y={-a + Math.PI / 2}>
+          <Box args={[0.4, 0.03, 0.4]} pos={[0, 0.44, 0]} color={c} />
+          <Box args={[0.4, 0.42, 0.03]} pos={[0, 0.66, -0.19]} rot={[-0.1, 0, 0]} color={c} />
+          {[
+            [-0.17, -0.17],
+            [0.17, -0.17],
+            [-0.17, 0.17],
+            [0.17, 0.17],
+          ].map(([x, z], k) => (
+            <Alu key={k} args={[0.025, 0.44, 0.025]} pos={[x, 0.22, z]} color="#3a3f45" />
+          ))}
+        </group>
+      ))}
+    </group>
+  )
+}
+
+// Concrete walkway: textured slab with joint grooves.
+function PathWay({ o, tint }: { o: Placed; tint: string | null }) {
+  const joints = useMemo(() => spread(Math.max(1, Math.round(o.w / 1.2)), o.w - 0.6), [o.w])
+  return (
+    <group>
+      <mesh position={[0, 0.03, 0]} receiveShadow>
+        <boxGeometry args={[o.w, 0.06, o.d]} />
+        <meshStandardMaterial color={tint ?? '#ffffff'} map={surfaceMap('concrete', o.w, o.d)} roughness={0.95} />
+      </mesh>
+      {joints.map((x, i) => (
+        <Box key={i} args={[0.02, 0.012, o.d]} pos={[x, 0.062, 0]} color="#9b968c" />
+      ))}
+    </group>
+  )
+}
+
+// Freestanding canvas shade: two tall posts at the back, sloped fabric with
+// a slight sag reading, guy bars at the front.
+function Awning({ o, tint }: { o: Placed; tint: string | null }) {
+  const c = tint ?? o.color
+  const backH = o.h
+  const frontH = o.h - 0.7
+  const slope = Math.atan2(backH - frontH, o.d)
+  const fabricLen = Math.hypot(o.d + 0.3, backH - frontH)
+  return (
+    <group>
+      {[-1, 1].map((s) => (
+        <Alu key={`b${s}`} args={[0.08, backH, 0.08]} pos={[(s * (o.w - 0.15)) / 2, backH / 2, -o.d / 2 + 0.08]} color="#4b5563" />
+      ))}
+      {[-1, 1].map((s) => (
+        <Alu key={`f${s}`} args={[0.07, frontH, 0.07]} pos={[(s * (o.w - 0.15)) / 2, frontH / 2, o.d / 2 - 0.08]} color="#4b5563" />
+      ))}
+      <group position={[0, (backH + frontH) / 2 - 0.03, 0]} rotation-x={slope}>
+        <mesh castShadow>
+          <boxGeometry args={[o.w, 0.03, fabricLen]} />
+          <meshStandardMaterial color={c} roughness={0.9} side={THREE.DoubleSide} />
+        </mesh>
+        {/* seam ribs */}
+        {spread(Math.max(2, Math.round(o.w / 0.8)), o.w - 0.2).map((x, i) => (
+          <Box key={i} args={[0.025, 0.045, fabricLen]} pos={[x, -0.01, 0]} color={c} />
+        ))}
+        {/* scalloped front edge */}
+        <Box args={[o.w, 0.14, 0.03]} pos={[0, -0.07, fabricLen / 2]} color={c} />
+      </group>
+    </group>
+  )
+}
+
+// Patio umbrella: base, pole, ribbed octagonal canopy with a finial.
+function Umbrella({ o, tint }: { o: Placed; tint: string | null }) {
+  const c = tint ?? o.color
+  const r = Math.min(o.w, o.d) / 2
+  const topY = o.h
+  return (
+    <group>
+      <mesh position={[0, 0.03, 0]} castShadow>
+        <cylinderGeometry args={[0.26, 0.3, 0.06, 12]} />
+        <meshStandardMaterial color="#3a3f45" roughness={0.6} />
+      </mesh>
+      <Alu args={[0.045, topY, 0.045]} pos={[0, topY / 2, 0]} color="#8a6f52" />
+      <mesh position={[0, topY - 0.28, 0]} castShadow>
+        <coneGeometry args={[r, 0.66, 8]} />
+        <meshStandardMaterial color={c} roughness={0.85} side={THREE.DoubleSide} />
+      </mesh>
+      {/* rib tips + finial */}
+      {Array.from({ length: 8 }, (_, i) => {
+        const a = (i / 8) * Math.PI * 2 + Math.PI / 8
+        return <Box key={i} args={[0.03, 0.1, 0.03]} pos={[Math.cos(a) * r * 0.98, topY - 0.6, Math.sin(a) * r * 0.98]} color={c} />
+      })}
+      <mesh position={[0, topY + 0.08, 0]}>
+        <sphereGeometry args={[0.045, 8, 6]} />
+        <meshStandardMaterial color="#8a6f52" roughness={0.6} />
+      </mesh>
+    </group>
+  )
+}
+
+// Hold-washing room: lean-to extension with a mono-pitch roof, twin utility
+// sinks, drying racks full of washed holds and a hose reel on the wall.
+function WashRoom({ o, tint }: { o: Placed; tint: string | null }) {
+  const roofH = o.h
+  return (
+    <group>
+      <RoomShell o={o} tint={tint} wallColor={tint ?? '#cfd6dd'} floorColor="#b9b4a8" />
+      {/* mono-pitch roof */}
+      <group position={[0, roofH + 0.12, 0]} rotation-x={0.12}>
+        <mesh castShadow>
+          <boxGeometry args={[o.w + 0.4, 0.06, o.d + 0.5]} />
+          <meshStandardMaterial color="#9aa3ad" roughness={0.5} metalness={0.35} />
+        </mesh>
+        {spread(Math.max(3, Math.round(o.w / 0.8)), o.w).map((x, i) => (
+          <Box key={i} args={[0.07, 0.05, o.d + 0.5]} pos={[x, 0.05, 0]} color="#848d97" />
+        ))}
+      </group>
+      {/* twin stainless utility sinks along the back wall */}
+      {[-0.6, 0.6].map((x) => (
+        <group key={x} position={[x * (o.w / 3), 0, -o.d / 2 + 0.45]}>
+          <Alu args={[0.75, 0.06, 0.55]} pos={[0, 0.82, 0]} color="#c9ced4" />
+          <Box args={[0.6, 0.28, 0.42]} pos={[0, 0.68, 0]} color="#9aa2ab" />
+          <Alu args={[0.05, 0.7, 0.05]} pos={[-0.3, 0.35, -0.2]} color="#7c828a" />
+          <Alu args={[0.05, 0.7, 0.05]} pos={[0.3, 0.35, -0.2]} color="#7c828a" />
+          <Alu args={[0.03, 0.2, 0.03]} pos={[0, 0.95, -0.2]} color="#9aa2ab" />
+          <Alu args={[0.03, 0.03, 0.16]} pos={[0, 1.04, -0.13]} color="#9aa2ab" />
+        </group>
+      ))}
+      {/* drying racks with clean holds */}
+      <group position={[o.w / 2 - 0.35, 0, 0.2]}>
+        {[0.5, 0.95, 1.4].map((y, si) => (
+          <group key={y}>
+            <Box args={[0.5, 0.03, o.d - 1.2]} pos={[0, y, 0]} color="#7c828a" />
+            {spread(4, o.d - 1.5).map((z, i) => (
+              <mesh key={i} position={[((i % 2) - 0.5) * 0.2, y + 0.06, z]} castShadow>
+                <icosahedronGeometry args={[0.055 + ((si + i) % 3) * 0.02, 0]} />
+                <meshStandardMaterial color={HOLD_COLORS[(si * 4 + i) % HOLD_COLORS.length]} roughness={0.7} />
+              </mesh>
+            ))}
+          </group>
+        ))}
+      </group>
+      {/* hose reel on the outside wall */}
+      <mesh position={[-o.w / 2 - 0.05, 1.0, 0.3]} rotation-z={Math.PI / 2} castShadow>
+        <cylinderGeometry args={[0.16, 0.16, 0.1, 14]} />
+        <meshStandardMaterial color="#2f6b46" roughness={0.7} />
+      </mesh>
+    </group>
+  )
+}
+
 /* ------------------------------- dispatcher ------------------------------- */
 
 export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
@@ -1950,8 +2367,21 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
       if (o.defId === 'condenser') return <Condenser o={o} tint={tint} />
       if (o.defId === 'bigfan') return <BigFan o={o} tint={tint} />
       return <FloorFan o={o} tint={tint} />
+    case 'tech':
+      if (o.defId === 'highbay') return <HighBay o={o} tint={tint} />
+      if (o.defId === 'tracklight') return <TrackLight o={o} tint={tint} />
+      if (o.defId === 'cctv') return <Cctv o={o} tint={tint} />
+      return <SpeakerBox o={o} tint={tint} />
     case 'site':
       if (o.defId === 'tree_small' || o.defId === 'tree_big') return <Tree o={o} tint={tint} />
+      if (o.defId === 'tree_cone' || o.defId === 'tree_slim') return <Conifer o={o} tint={tint} />
+      if (o.defId === 'pond') return <Pond o={o} tint={tint} />
+      if (o.defId === 'fountain') return <Fountain o={o} tint={tint} />
+      if (o.defId === 'bench_out') return <BenchOut o={o} tint={tint} />
+      if (o.defId === 'table_out') return <TableOutSet o={o} tint={tint} />
+      if (o.defId === 'path') return <PathWay o={o} tint={tint} />
+      if (o.defId === 'awning') return <Awning o={o} tint={tint} />
+      if (o.defId === 'umbrella') return <Umbrella o={o} tint={tint} />
       if (o.defId === 'fence') return <Fence o={o} tint={tint} />
       if (o.defId === 'hedge') return <Hedge o={o} tint={tint} />
       if (o.defId === 'lightpole') return <LightPole o={o} tint={tint} />
@@ -2004,6 +2434,7 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
     case 'room':
       if (o.defId === 'toilet') return <Restroom o={o} tint={tint} />
       if (o.defId === 'sauna') return <Sauna o={o} tint={tint} />
+      if (o.defId === 'washroom') return <WashRoom o={o} tint={tint} />
       return <StorageRoom o={o} tint={tint} />
     case 'reception':
       return <Reception o={o} tint={tint} />

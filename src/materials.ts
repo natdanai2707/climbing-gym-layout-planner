@@ -6,12 +6,13 @@ import * as THREE from 'three'
  * texture files needed, so they work offline and load instantly.
  */
 
-export type SurfaceKind = 'epdm' | 'concrete' | 'birch'
+export type SurfaceKind = 'epdm' | 'concrete' | 'birch' | 'metalsheet'
 
 export const SURFACE_LABELS: Record<SurfaceKind, string> = {
   epdm: 'EPDM rubber',
   concrete: 'Concrete',
   birch: 'Birch plywood',
+  metalsheet: 'Corrugated metal sheet',
 }
 
 // EPDM is drawn near-white so the item's own color tints the rubber;
@@ -20,6 +21,7 @@ export const SURFACE_TINTED: Record<SurfaceKind, boolean> = {
   epdm: true,
   concrete: false,
   birch: false,
+  metalsheet: false,
 }
 
 const rnd = (() => {
@@ -93,6 +95,31 @@ function drawCanvas(kind: SurfaceKind): HTMLCanvasElement {
       }
       g.stroke()
     }
+  } else if (kind === 'metalsheet') {
+    // corrugated wall cladding: vertical ribs shaded left-to-right so each
+    // rib reads as a rounded flute, with faint panel seams
+    g.fillStyle = '#dfe3e7'
+    g.fillRect(0, 0, 256, 256)
+    const rib = 32 // 8 ribs per tile
+    for (let x = 0; x < 256; x += rib) {
+      const gr = g.createLinearGradient(x, 0, x + rib, 0)
+      gr.addColorStop(0, '#c4cad1')
+      gr.addColorStop(0.28, '#eef1f4')
+      gr.addColorStop(0.55, '#d7dce1')
+      gr.addColorStop(0.8, '#b9c0c7')
+      gr.addColorStop(1, '#c4cad1')
+      g.fillStyle = gr
+      g.fillRect(x, 0, rib, 256)
+    }
+    // subtle horizontal panel seam
+    g.fillStyle = 'rgba(90, 98, 106, 0.35)'
+    g.fillRect(0, 126, 256, 3)
+    // faint weathering streaks
+    for (let i = 0; i < 60; i++) {
+      const v = 150 + rnd() * 80
+      g.fillStyle = `rgba(${v}, ${v + 4}, ${v + 8}, 0.05)`
+      g.fillRect(rnd() * 256, rnd() * 256, 2, 20 + rnd() * 60)
+    }
   } else {
     // epdm: near-white base + dark/light granules (item color multiplies in)
     g.fillStyle = '#f3f3f3'
@@ -111,6 +138,27 @@ function drawCanvas(kind: SurfaceKind): HTMLCanvasElement {
 
 const canvases = new Map<SurfaceKind, HTMLCanvasElement>()
 const texCache = new Map<string, THREE.CanvasTexture>()
+
+// World-locked variant for geometries whose UVs are in meters (shapeGeometry):
+// one tile every 1.5 world units on both axes.
+export function surfaceMapWorld(kind: SurfaceKind): THREE.CanvasTexture {
+  const key = `${kind}:world`
+  let t = texCache.get(key)
+  if (!t) {
+    let c = canvases.get(kind)
+    if (!c) {
+      c = drawCanvas(kind)
+      canvases.set(kind, c)
+    }
+    t = new THREE.CanvasTexture(c)
+    t.wrapS = t.wrapT = THREE.RepeatWrapping
+    t.repeat.set(1 / 1.5, 1 / 1.5)
+    t.colorSpace = THREE.SRGBColorSpace
+    t.anisotropy = 4
+    texCache.set(key, t)
+  }
+  return t
+}
 
 // A tiled texture sized for a w × d surface (one tile ≈ 1.5 m).
 export function surfaceMap(kind: SurfaceKind, w: number, d: number): THREE.CanvasTexture {

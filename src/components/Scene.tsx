@@ -86,9 +86,9 @@ export const walkLook = { x: 0, y: 0 }
 
 // Solid things a walker bumps into; flat zones/mats and doors stay passable,
 // mezzanines are open underneath, and ceilings/ducts/fans hang overhead.
-const WALK_PASSABLE = new Set(['zone', 'mat', 'door', 'person', 'parking', 'mezzanine', 'ceiling', 'hvac'])
-// site items that are roofs on posts — walk (and park) beneath them
-const WALK_PASSABLE_DEFS = new Set(['carport'])
+const WALK_PASSABLE = new Set(['zone', 'mat', 'door', 'person', 'parking', 'mezzanine', 'ceiling', 'hvac', 'tech'])
+// site items that are roofs/canopies on posts — walk (and park) beneath them
+const WALK_PASSABLE_DEFS = new Set(['carport', 'awning', 'umbrella'])
 
 function WalkRig() {
   const gl = useThree((s) => s.gl)
@@ -453,7 +453,7 @@ const snapDim = (v: number) => Math.max(0.25, Math.round(v / 0.25) * 0.25)
 // (ceilings, ducts, FCUs, big fans, mezzanine floors) get their arrows at
 // their own working level instead of near the floor, so they're reachable.
 function arrowLevel(o: Placed): number {
-  if (o.category === 'ceiling' || o.category === 'mezzanine') return Math.max(0.25, o.h)
+  if (o.category === 'ceiling' || o.category === 'mezzanine' || o.category === 'tech') return Math.max(0.25, o.h)
   if (o.category === 'hvac' && (o.defId === 'duct' || o.defId === 'fcu' || o.defId === 'bigfan'))
     return Math.max(0.25, o.h)
   return Math.min(Math.max(o.h * 0.5, 0.25), 1.2)

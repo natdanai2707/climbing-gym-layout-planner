@@ -18,6 +18,7 @@ export type Category =
   | 'person'
   | 'ceiling'
   | 'hvac'
+  | 'tech'
   | 'site'
 
 export type Rule = 'floor' | 'edge' | 'outdoor'

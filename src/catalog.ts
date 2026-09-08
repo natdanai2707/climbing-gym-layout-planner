@@ -8,7 +8,7 @@ export const CATALOG: ObjectDef[] = [
   { id: 'parking', label: 'Parking (1 car)', category: 'parking', w: 5.0, d: 2.5, h: 0.05, color: '#8ea0b5', rule: 'outdoor' },
   { id: 'reception', label: 'Reception Counter', category: 'reception', w: 3.0, d: 1.5, h: 1.1, color: '#d9995f', rule: 'floor' },
   { id: 'storage', label: 'Storage Room', category: 'room', w: 4.0, d: 3.0, h: 2.6, color: '#b9b2a6', rule: 'floor' },
-  { id: 'shoes', label: 'Shoe Rack', category: 'fixture', w: 2.0, d: 1.0, h: 1.6, color: '#a78bfa', rule: 'floor' },
+  { id: 'shoes', label: 'Shoe Rack', category: 'fixture', w: 2.0, d: 1.0, h: 1.6, color: '#b59b7c', rule: 'floor' },
   { id: 'toilet', label: 'Restrooms', category: 'room', w: 4.0, d: 3.0, h: 2.6, color: '#7dd3fc', rule: 'floor' },
   { id: 'cowork', label: 'Co-working Space', category: 'zone', w: 6.0, d: 5.0, h: 0.1, color: '#86efac', rule: 'floor' },
   { id: 'boulder', label: 'Boulder Wall (4.5 m)', category: 'wall_low', w: 15.0, d: 2.5, h: 4.5, color: '#60a5fa', rule: 'floor' },
@@ -21,7 +21,7 @@ export const CATALOG: ObjectDef[] = [
   { id: 'partition', label: 'Wall Partition', category: 'partition', w: 3.0, d: 0.15, h: 2.6, color: '#eae6dd', rule: 'floor' },
   { id: 'person', label: 'Person', category: 'person', w: 0.5, d: 0.4, h: 1.7, color: '#3b82f6', rule: 'floor' },
   { id: 'training', label: 'Training Area', category: 'zone', w: 8.0, d: 6.0, h: 0.1, color: '#fca5a5', rule: 'floor' },
-  { id: 'hyrox', label: 'Hyrox Zone', category: 'zone', w: 20.0, d: 15.0, h: 0.1, color: '#fdba74', rule: 'floor' },
+  { id: 'hyrox', label: 'Hyrox Zone', category: 'zone', w: 20.0, d: 15.0, h: 0.1, color: '#33363b', rule: 'floor' },
   { id: 'icebath', label: 'Ice Bath', category: 'fixture', w: 3.0, d: 2.0, h: 1.0, color: '#38bdf8', rule: 'floor' },
   { id: 'sauna', label: 'Sauna', category: 'room', w: 3.0, d: 3.0, h: 2.4, color: '#d4a373', rule: 'floor' },
   { id: 'table', label: 'Table', category: 'furniture', w: 1.6, d: 0.8, h: 0.75, color: '#b98a5a', rule: 'floor' },
@@ -37,6 +37,13 @@ export const CATALOG: ObjectDef[] = [
   { id: 'condenser', label: 'Condenser (hot coil)', category: 'hvac', w: 1.0, d: 0.42, h: 0.85, color: '#d8dadd', rule: 'outdoor' },
   { id: 'bigfan', label: 'HVLS Big Fan (H = mount height)', category: 'hvac', w: 4.0, d: 4.0, h: 5.5, color: '#6b7280', rule: 'floor' },
   { id: 'floorfan', label: 'Floor Fan', category: 'hvac', w: 0.7, d: 0.7, h: 1.5, color: '#374151', rule: 'floor' },
+  // lighting & AV: for mounted items H = mounting height
+  { id: 'highbay', label: 'UFO High-Bay Light (H = mount height)', category: 'tech', w: 0.5, d: 0.5, h: 6.0, color: '#2f3237', rule: 'floor' },
+  { id: 'tracklight', label: 'Track Light (H = mount height)', category: 'tech', w: 2.5, d: 0.15, h: 3.2, color: '#2b2f35', rule: 'floor' },
+  { id: 'cctv', label: 'CCTV Camera (H = mount height)', category: 'tech', w: 0.3, d: 0.3, h: 3.0, color: '#e8eaec', rule: 'floor' },
+  { id: 'speaker', label: 'PA Speaker (H = mount height)', category: 'tech', w: 0.35, d: 0.3, h: 2.8, color: '#23262b', rule: 'floor' },
+  // hold-washing room: a lean-to extension against the outside of the building
+  { id: 'washroom', label: 'Hold Washing Room (outdoor)', category: 'room', w: 3.0, d: 2.5, h: 2.5, color: '#cfd6dd', rule: 'outdoor' },
   // site & outdoors
   { id: 'tree_small', label: 'Small Tree', category: 'site', w: 1.6, d: 1.6, h: 2.2, color: '#6ca055', rule: 'outdoor' },
   { id: 'tree_big', label: 'Big Tree', category: 'site', w: 4.0, d: 4.0, h: 7.0, color: '#4e7d3e', rule: 'outdoor' },
@@ -46,6 +53,16 @@ export const CATALOG: ObjectDef[] = [
   { id: 'car', label: 'Car (parked)', category: 'site', w: 4.6, d: 1.8, h: 1.5, color: '#5b7fb4', rule: 'outdoor' },
   { id: 'moto', label: 'Motorcycle', category: 'site', w: 2.1, d: 0.8, h: 1.2, color: '#c2452f', rule: 'outdoor' },
   { id: 'carport', label: 'Carport Roof', category: 'site', w: 5.5, d: 5.5, h: 2.7, color: '#9aa3ad', rule: 'outdoor' },
+  // garden set
+  { id: 'tree_cone', label: 'Conifer Tree', category: 'site', w: 2.2, d: 2.2, h: 4.5, color: '#3f6d3a', rule: 'outdoor' },
+  { id: 'tree_slim', label: 'Cypress (columnar)', category: 'site', w: 1.2, d: 1.2, h: 5.0, color: '#4a7a42', rule: 'outdoor' },
+  { id: 'pond', label: 'Garden Pond', category: 'site', w: 4.0, d: 3.0, h: 0.35, color: '#4f7d9e', rule: 'outdoor' },
+  { id: 'fountain', label: 'Fountain', category: 'site', w: 2.0, d: 2.0, h: 1.8, color: '#b9c0c7', rule: 'outdoor' },
+  { id: 'bench_out', label: 'Garden Bench', category: 'site', w: 1.8, d: 0.6, h: 0.9, color: '#8a6f52', rule: 'outdoor' },
+  { id: 'table_out', label: 'Outdoor Table Set', category: 'site', w: 1.8, d: 1.8, h: 0.75, color: '#7c828a', rule: 'outdoor' },
+  { id: 'path', label: 'Concrete Path', category: 'site', w: 6.0, d: 1.5, h: 0.06, color: '#c9c5bc', rule: 'outdoor' },
+  { id: 'awning', label: 'Canvas Awning', category: 'site', w: 4.0, d: 3.0, h: 2.8, color: '#d8cdb8', rule: 'outdoor' },
+  { id: 'umbrella', label: 'Patio Umbrella', category: 'site', w: 2.2, d: 2.2, h: 2.4, color: '#b45341', rule: 'outdoor' },
 ]
 
 export const CATEGORY_LABELS: Record<Category, string> = {
@@ -68,6 +85,7 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   person: 'People',
   ceiling: 'Ceiling',
   hvac: 'Air & Ventilation',
+  tech: 'Lighting & AV',
   site: 'Site & Outdoors',
 }
 
@@ -90,6 +108,7 @@ export const CATEGORY_ORDER: Category[] = [
   'person',
   'ceiling',
   'hvac',
+  'tech',
   'door',
   'parking',
   'site',

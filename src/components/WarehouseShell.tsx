@@ -6,11 +6,14 @@ import type { ThreeEvent } from '@react-three/fiber'
 import { useThree } from '@react-three/fiber'
 import { useStore } from '../store'
 import { ArrowHandle } from './gizmo'
+import { surfaceMap, surfaceMapWorld } from '../materials'
 
 // Roof pitch of the gable (rise over half-width). ~15°.
 export const ROOF_PITCH = Math.tan((15 * Math.PI) / 180)
 
 const GLASS = { color: '#9fc8e0', roughness: 0.25, metalness: 0.15 }
+
+const spread = (n: number, size: number) => Array.from({ length: n }, (_, i) => ((i + 0.5) / n - 0.5) * size)
 
 /**
  * Gable-roof warehouse shell around the building. The gable (triangle) sits on
@@ -62,15 +65,37 @@ export function WarehouseShell() {
   // only perimeter doors show on the facade — interior room doors stay inside
   const doors = useMemo(() => objects.filter((o) => o.category === 'door' && o.rule === 'edge'), [objects])
 
+  // skylight strips let daylight into the hall — one every ~6 m per roof plane
+  const skylights = useMemo(() => {
+    const n = Math.max(1, Math.floor((L - 2) / 6))
+    return spread(n, L - 3)
+  }, [L])
+
   if (shell.mode === 0) return null
   const transparent = shell.mode === 1
 
+  // solid walls read as real corrugated metal-sheet cladding
   const wallMat = transparent
     ? { color: '#8fb0cc', transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide }
-    : { color: '#eef0f2', side: THREE.DoubleSide }
+    : {
+        color: '#ffffff',
+        map: surfaceMap('metalsheet', L, eave),
+        roughness: 0.45,
+        metalness: 0.35,
+        side: THREE.DoubleSide,
+      }
+  const gableMat = transparent
+    ? wallMat
+    : {
+        color: '#ffffff',
+        map: surfaceMapWorld('metalsheet'),
+        roughness: 0.45,
+        metalness: 0.35,
+        side: THREE.DoubleSide,
+      }
   const roofMat = transparent
     ? { color: '#7fa3c4', transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide }
-    : { color: '#cfd6dd', side: THREE.DoubleSide }
+    : { color: '#cfd6dd', roughness: 0.5, metalness: 0.3, side: THREE.DoubleSide }
 
   const slope = Math.atan2(rise, W / 2)
   const roofLen = Math.hypot(W / 2, rise) + 0.3
@@ -139,19 +164,26 @@ export function WarehouseShell() {
       {/* gable end walls (short sides) */}
       <mesh position={[0, 0, -L / 2 - t / 2]}>
         <shapeGeometry args={[gable]} />
-        <meshStandardMaterial {...wallMat} />
+        <meshStandardMaterial {...gableMat} />
       </mesh>
       <mesh position={[0, 0, L / 2 + t / 2]}>
         <shapeGeometry args={[gable]} />
-        <meshStandardMaterial {...wallMat} />
+        <meshStandardMaterial {...gableMat} />
       </mesh>
-      {/* roof planes */}
+      {/* roof planes with translucent skylight strips */}
       <group position={[-W / 4, (eave + ridge) / 2, 0]} rotation-z={slope}>
         <mesh>
           <boxGeometry args={[roofLen, 0.12, L + 0.4]} />
           <meshStandardMaterial {...roofMat} />
           {transparent && <Edges color="#5c7fa6" />}
         </mesh>
+        {!transparent &&
+          skylights.map((z, i) => (
+            <mesh key={i} position={[0, 0.08, z]}>
+              <boxGeometry args={[roofLen * 0.55, 0.05, 1.2]} />
+              <meshStandardMaterial color="#f2f7fa" transparent opacity={0.55} roughness={0.25} emissive="#dfeaf2" emissiveIntensity={0.25} />
+            </mesh>
+          ))}
       </group>
       <group position={[W / 4, (eave + ridge) / 2, 0]} rotation-z={-slope}>
         <mesh>
@@ -159,6 +191,13 @@ export function WarehouseShell() {
           <meshStandardMaterial {...roofMat} />
           {transparent && <Edges color="#5c7fa6" />}
         </mesh>
+        {!transparent &&
+          skylights.map((z, i) => (
+            <mesh key={i} position={[0, 0.08, z]}>
+              <boxGeometry args={[roofLen * 0.55, 0.05, 1.2]} />
+              <meshStandardMaterial color="#f2f7fa" transparent opacity={0.55} roughness={0.25} emissive="#dfeaf2" emissiveIntensity={0.25} />
+            </mesh>
+          ))}
       </group>
       {/* ridge beam */}
       <mesh position={[0, ridge + 0.05, 0]}>
