@@ -6,13 +6,15 @@ import * as THREE from 'three'
  * texture files needed, so they work offline and load instantly.
  */
 
-export type SurfaceKind = 'epdm' | 'concrete' | 'birch' | 'metalsheet'
+export type SurfaceKind = 'epdm' | 'concrete' | 'birch' | 'metalsheet' | 'grass' | 'gravel'
 
 export const SURFACE_LABELS: Record<SurfaceKind, string> = {
   epdm: 'EPDM rubber',
   concrete: 'Concrete',
   birch: 'Birch plywood',
   metalsheet: 'Corrugated metal sheet',
+  grass: 'Grass lawn',
+  gravel: 'Gravel',
 }
 
 // EPDM is drawn near-white so the item's own color tints the rubber;
@@ -22,7 +24,12 @@ export const SURFACE_TINTED: Record<SurfaceKind, boolean> = {
   concrete: false,
   birch: false,
   metalsheet: false,
+  grass: false,
+  gravel: false,
 }
+
+// Route colors as real gyms set them: every hold on one route shares a color.
+export const ROUTE_COLORS = ['#d62828', '#f77f00', '#fcbf49', '#2a9d8f', '#3a6ea5', '#7b2cbf', '#16181d', '#f2f1ec', '#4f9d69', '#e5539b']
 
 const rnd = (() => {
   // deterministic so the tiles look identical every session
@@ -119,6 +126,45 @@ function drawCanvas(kind: SurfaceKind): HTMLCanvasElement {
       const v = 150 + rnd() * 80
       g.fillStyle = `rgba(${v}, ${v + 4}, ${v + 8}, 0.05)`
       g.fillRect(rnd() * 256, rnd() * 256, 2, 20 + rnd() * 60)
+    }
+  } else if (kind === 'grass') {
+    // lawn: layered green base with thousands of short blade strokes
+    g.fillStyle = '#4e7a3c'
+    g.fillRect(0, 0, 256, 256)
+    for (let i = 0; i < 26; i++) {
+      const gr = 100 + rnd() * 45
+      g.fillStyle = `rgba(${52 + rnd() * 30}, ${gr}, ${44 + rnd() * 20}, 0.18)`
+      g.beginPath()
+      g.ellipse(rnd() * 256, rnd() * 256, 22 + rnd() * 50, 16 + rnd() * 40, rnd() * 3, 0, Math.PI * 2)
+      g.fill()
+    }
+    for (let i = 0; i < 3200; i++) {
+      const gr = 95 + rnd() * 85
+      g.strokeStyle = `rgba(${40 + rnd() * 35}, ${gr}, ${35 + rnd() * 30}, ${0.25 + rnd() * 0.35})`
+      g.lineWidth = 0.7
+      const x = rnd() * 256
+      const y = rnd() * 256
+      g.beginPath()
+      g.moveTo(x, y)
+      g.lineTo(x + (rnd() - 0.5) * 3, y - 2 - rnd() * 3.5)
+      g.stroke()
+    }
+  } else if (kind === 'gravel') {
+    // crushed stone: tightly packed rounded pebbles in warm greys
+    g.fillStyle = '#9d968b'
+    g.fillRect(0, 0, 256, 256)
+    for (let i = 0; i < 1500; i++) {
+      const v = 120 + rnd() * 110
+      const warm = rnd() * 14
+      g.fillStyle = `rgb(${v + warm}, ${v + warm * 0.6}, ${v})`
+      g.beginPath()
+      g.ellipse(rnd() * 256, rnd() * 256, 1.6 + rnd() * 3.4, 1.2 + rnd() * 2.8, rnd() * 3, 0, Math.PI * 2)
+      g.fill()
+      // shadow crescent under each pebble for depth
+      g.fillStyle = `rgba(40, 38, 34, ${0.10 + rnd() * 0.12})`
+      g.beginPath()
+      g.ellipse(rnd() * 256, rnd() * 256, 1.4 + rnd() * 2.6, 1 + rnd() * 2, rnd() * 3, 0, Math.PI * 2)
+      g.fill()
     }
   } else {
     // epdm: near-white base + dark/light granules (item color multiplies in)

@@ -139,8 +139,6 @@ export interface GymState {
   enterPlan: () => void
   lightMood: 'day' | 'golden' | 'night'
   setLightMood: (m: 'day' | 'golden' | 'night') => void
-  clayMode: boolean
-  toggleClay: () => void
   realMode: boolean // realistic presentation: sky, soft shadows, reflective floor
   toggleReal: () => void
 
@@ -700,10 +698,8 @@ export const useStore = create<GymState>()(
     enterPlan: () => set({ planMode: true, viewPreset: 'top', viewMode: 'iso', viewKey: get().viewKey + 1 }),
     lightMood: 'day',
     setLightMood: (m) => set({ lightMood: m }),
-    clayMode: false,
-    toggleClay: () => set({ clayMode: !get().clayMode, realMode: false }),
     realMode: false,
-    toggleReal: () => set({ realMode: !get().realMode, clayMode: false }),
+    toggleReal: () => set({ realMode: !get().realMode }),
 
     setFloor: (f) => {
       get().snapshot(true)

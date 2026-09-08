@@ -71,6 +71,9 @@ export const CATALOG: ObjectDef[] = [
   { id: 'bench_out', label: 'Garden Bench', category: 'site', w: 1.8, d: 0.6, h: 0.9, color: '#8a6f52', rule: 'outdoor' },
   { id: 'table_out', label: 'Outdoor Table Set', category: 'site', w: 1.8, d: 1.8, h: 0.75, color: '#7c828a', rule: 'outdoor' },
   { id: 'path', label: 'Concrete Path', category: 'site', w: 6.0, d: 1.5, h: 0.06, color: '#c9c5bc', rule: 'outdoor' },
+  // resizable ground finishes for planning outdoor materials
+  { id: 'lawn', label: 'Grass Lawn', category: 'site', w: 6.0, d: 4.0, h: 0.04, color: '#4e7a3c', rule: 'outdoor' },
+  { id: 'gravel', label: 'Gravel Area', category: 'site', w: 5.0, d: 4.0, h: 0.05, color: '#a49d92', rule: 'outdoor' },
   { id: 'awning', label: 'Canvas Awning', category: 'site', w: 4.0, d: 3.0, h: 2.8, color: '#d8cdb8', rule: 'outdoor' },
   { id: 'umbrella', label: 'Patio Umbrella', category: 'site', w: 2.2, d: 2.2, h: 2.4, color: '#b45341', rule: 'outdoor' },
 ]

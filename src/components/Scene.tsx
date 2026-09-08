@@ -529,20 +529,6 @@ function RealisticExtras() {
   )
 }
 
-// Architect "presentation board" style: real colors stay, but on a clean
-// white ground with bright, soft, low-contrast light — the space-planning
-// render look. People turn amber inside Figure; grid and gizmos hide.
-function PresentStyle() {
-  const present = useStore((s) => s.clayMode)
-  if (!present) return null
-  return (
-    <>
-      <ambientLight intensity={0.55} color="#ffffff" />
-      <hemisphereLight intensity={0.3} color="#ffffff" groundColor="#e8e4da" />
-    </>
-  )
-}
-
 const snapDim = (v: number) => Math.max(0.25, Math.round(v / 0.25) * 0.25)
 
 // Height at which the side resize arrows sit. Suspended/elevated items
@@ -754,12 +740,11 @@ function ArrowPriorityPicker() {
   const selectedId = useStore((s) => s.selectedId)
   const shellMode = useStore((s) => s.shell.mode)
   const walking = useStore((s) => s.viewMode === 'walk')
-  const clay = useStore((s) => s.clayMode)
 
   const measuring = useStore((s) => s.measuring)
 
   useEffect(() => {
-    if (walking || clay || measuring) return // arrows hidden while presenting / measuring
+    if (walking || measuring) return // arrows hidden while walking / measuring
     if (!selectedId && shellMode === 0) return
     const el = gl.domElement
 
@@ -821,7 +806,7 @@ function ArrowPriorityPicker() {
 
     el.addEventListener('pointerdown', onDown, { capture: true })
     return () => el.removeEventListener('pointerdown', onDown, { capture: true })
-  }, [selectedId, shellMode, walking, clay, measuring, gl, camera, controls])
+  }, [selectedId, shellMode, walking, measuring, gl, camera, controls])
 
   return null
 }
@@ -858,21 +843,19 @@ function SceneContent() {
   const selectedId = useStore((s) => s.selectedId)
   const moveArmed = useStore((s) => s.moveArmed)
   const walking = useStore((s) => s.viewMode === 'walk')
-  const clay = useStore((s) => s.clayMode)
   const plan = useStore((s) => s.planMode)
   const warnings = useMemo(() => getWarningIds(objects, building), [objects, building])
   // hide the resize arrows while Move mode is armed — moving and resizing are
   // separate gestures, and the arrows would only get in the way of the drag
-  const selected = moveArmed || walking || clay ? undefined : objects.find((o) => o.id === selectedId)
+  const selected = moveArmed || walking ? undefined : objects.find((o) => o.id === selectedId)
 
   return (
     <>
       <MoodLights />
-      <PresentStyle />
       <RealisticExtras />
 
       <BuildingFloor />
-      {!walking && !clay && <GridOverlay />}
+      {!walking && <GridOverlay />}
       {objects.map((o) => (
         <PlacedObject key={o.id} o={o} warning={warnings.has(o.id)} elev={elevationFor(o, objects)} />
       ))}
@@ -904,8 +887,7 @@ export function Scene() {
   const viewKey = useStore((s) => s.viewKey)
   const walking = useStore((s) => s.viewMode === 'walk')
   const mood = useStore((s) => s.lightMood)
-  const clay = useStore((s) => s.clayMode)
-  const bg = clay ? '#ffffff' : MOODS[mood].bg
+  const bg = MOODS[mood].bg
   return (
     <Canvas shadows dpr={[1, 2]} gl={{ preserveDrawingBuffer: true, antialias: true }} style={{ background: bg }}>
       <color attach="background" args={[bg]} />

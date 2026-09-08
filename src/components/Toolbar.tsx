@@ -62,8 +62,6 @@ export function Toolbar() {
   const enterPlan = useStore((s) => s.enterPlan)
   const lightMood = useStore((s) => s.lightMood)
   const setLightMood = useStore((s) => s.setLightMood)
-  const clayMode = useStore((s) => s.clayMode)
-  const toggleClay = useStore((s) => s.toggleClay)
   const realMode = useStore((s) => s.realMode)
   const toggleReal = useStore((s) => s.toggleReal)
   const applyTheme = useStore((s) => s.applyTheme)
@@ -166,13 +164,6 @@ export function Toolbar() {
             <option value="night">🌙 Night</option>
           </select>
         </label>
-        <button
-          className={clayMode ? 'on' : ''}
-          onClick={toggleClay}
-          title="Architect presentation style: white background, soft light, amber people"
-        >
-          📐 Present
-        </button>
         <button
           className={realMode ? 'on' : ''}
           onClick={toggleReal}

@@ -2,8 +2,7 @@ import { useMemo } from 'react'
 import * as THREE from 'three'
 import type { WallDesign } from '../types'
 import { buildWallTriangles, designDepth, vertexPos } from './profile'
-
-const HOLD_COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#a855f7', '#111827']
+import { ROUTE_COLORS } from '../materials'
 
 // deterministic pseudo-random so holds don't jump between renders
 const hash = (a: number, b: number, c: number) => {
@@ -54,12 +53,15 @@ export function WallModel({ design, tint, holds = true }: { design: WallDesign; 
           const px = p00[0] * (1 - a) * (1 - b) + p10[0] * a * (1 - b) + p01[0] * (1 - a) * b + p11[0] * a * b
           const py = p00[1] * (1 - a) * (1 - b) + p10[1] * a * (1 - b) + p01[1] * (1 - a) * b + p11[1] * a * b
           const pz = p00[2] * (1 - a) * (1 - b) + p10[2] * a * (1 - b) + p01[2] * (1 - a) * b + p11[2] * a * b
-          const s = 0.05 + 0.06 * hash(i, j, k * 3 + 3)
+          // real-set size mix: mostly crimps/feet, some mid, occasional jugs
+          const roll = hash(i, j, k * 3 + 3)
+          const s = roll < 0.5 ? 0.032 + roll * 0.06 : roll < 0.85 ? 0.06 + (roll - 0.5) * 0.12 : 0.1 + (roll - 0.85) * 0.4
           list.push({
             pos: [px + nn[0] * s * 0.5, py + nn[1] * s * 0.5, pz + zShift + nn[2] * s * 0.5],
             n: nn,
             s,
-            c: HOLD_COLORS[Math.floor(hash(j, i, k) * HOLD_COLORS.length)],
+            // one color per column = one route line, like real gyms set
+            c: ROUTE_COLORS[(i + design.nx) % ROUTE_COLORS.length],
           })
         }
       }
@@ -73,9 +75,9 @@ export function WallModel({ design, tint, holds = true }: { design: WallDesign; 
         <meshStandardMaterial color={color} roughness={0.88} flatShading />
       </mesh>
       {holdList.map((h, i) => (
-        <mesh key={i} position={h.pos} castShadow>
-          <icosahedronGeometry args={[h.s, 0]} />
-          <meshStandardMaterial color={h.c} roughness={0.7} />
+        <mesh key={i} position={h.pos} scale={[1.2, 0.85, 0.7]} castShadow>
+          <icosahedronGeometry args={[h.s, 1]} />
+          <meshStandardMaterial color={h.c} roughness={0.75} flatShading />
         </mesh>
       ))}
       {/* landing mat in front */}

@@ -41,8 +41,8 @@ export function WarehouseShell() {
   const objects = useStore((s) => s.objects)
   const setShellResizing = useStore((s) => s.setShellResizing)
   const controls = useThree((s) => s.controls) as { enabled?: boolean } | null
-  // no adjustment arrows while walking inside, presenting in clay, or measuring
-  const presenting = useStore((s) => s.viewMode === 'walk' || s.clayMode || s.measuring)
+  // no adjustment arrows while walking inside or measuring
+  const presenting = useStore((s) => s.viewMode === 'walk' || s.measuring)
 
   const W = building.width
   const L = building.length

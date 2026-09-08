@@ -6,7 +6,7 @@ import type { Placed } from '../types'
 import { useWallStore } from '../wall/wallStore'
 import { WallModel } from '../wall/WallModel'
 import { designDepth, designWidth } from '../wall/profile'
-import { SURFACE_TINTED, surfaceMap } from '../materials'
+import { ROUTE_COLORS, SURFACE_TINTED, surfaceMap } from '../materials'
 import { wallOpenings } from '../placement'
 import type { Opening } from '../placement'
 import { useStore } from '../store'
@@ -62,7 +62,7 @@ function Box({
 const HOLD_COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#a855f7', '#eab308', '#ec4899', '#14b8a6']
 const SKIN_COLORS = ['#f2c9a0', '#e0ac7e', '#b98058', '#8d5f3d']
 const HAIR_COLORS = ['#2c2320', '#171717', '#4a382a', '#5b4632', '#3a3a3e']
-const PANTS = '#374151'
+const PANTS_COLORS = ['#374151', '#23272e', '#4a5568', '#5b5348', '#2f3a4a']
 
 export type Pose = 'stand' | 'walk' | 'sit' | 'climb' | 'push' | 'hang'
 
@@ -121,15 +121,11 @@ export function Figure({
   idx?: number
   scale?: number
 }) {
-  // Present style: everyone becomes a flat amber silhouette figure, the way
-  // architects mark people in space-planning boards
-  const present = useStore((s) => s.clayMode)
-  const AMBER = '#f0a63a'
-  const cShirt = present ? AMBER : shirt
-  const cSkin = present ? AMBER : SKIN_COLORS[idx % SKIN_COLORS.length]
-  const cPants = present ? AMBER : PANTS
-  const cHair = present ? AMBER : HAIR_COLORS[(idx * 3 + 1) % HAIR_COLORS.length]
-  const cShoe = present ? AMBER : '#2b2f35'
+  const cShirt = shirt
+  const cSkin = SKIN_COLORS[idx % SKIN_COLORS.length]
+  const cPants = PANTS_COLORS[(idx * 5 + 2) % PANTS_COLORS.length]
+  const cHair = HAIR_COLORS[(idx * 3 + 1) % HAIR_COLORS.length]
+  const cShoe = idx % 3 === 0 ? '#2b2f35' : idx % 3 === 1 ? '#e8e6e1' : '#7a4a35'
   const P = POSES[pose]
   const rot3 = (a: number[]) => a as [number, number, number]
   const hand = (
@@ -140,22 +136,22 @@ export function Figure({
   )
   return (
     <group position={pos} rotation-y={ry} scale={scale}>
-      {/* shirt torso over pants hips */}
-      <mesh position={[0, 0.8, 0]} castShadow>
+      {/* shirt torso (broader shoulders, flatter chest) over pants hips */}
+      <mesh position={[0, 0.8, 0]} scale={[1.12, 1, 0.76]} castShadow>
         <capsuleGeometry args={[0.125, 0.28, 4, 10]} />
         <meshStandardMaterial color={cShirt} roughness={0.85} />
       </mesh>
-      <mesh position={[0, 0.58, 0]} castShadow>
+      <mesh position={[0, 0.58, 0]} scale={[1.02, 1, 0.82]} castShadow>
         <capsuleGeometry args={[0.108, 0.1, 3, 10]} />
         <meshStandardMaterial color={cPants} roughness={0.85} />
       </mesh>
-      {/* neck, head and a hair cap so heads stop reading as clay balls */}
+      {/* neck and a slightly oval head with a hair cap */}
       <mesh position={[0, 1.05, 0]}>
-        <cylinderGeometry args={[0.045, 0.052, 0.09, 8]} />
+        <cylinderGeometry args={[0.042, 0.05, 0.09, 8]} />
         <meshStandardMaterial color={cSkin} roughness={0.7} />
       </mesh>
-      <mesh position={[0, 1.17, 0]} castShadow>
-        <sphereGeometry args={[0.105, 12, 10]} />
+      <mesh position={[0, 1.17, 0]} scale={[0.94, 1.08, 0.96]} castShadow>
+        <sphereGeometry args={[0.103, 14, 12]} />
         <meshStandardMaterial color={cSkin} roughness={0.7} />
       </mesh>
       <mesh position={[0, 1.2, -0.018]} scale={[1.05, 0.85, 1.05]} castShadow>
@@ -163,21 +159,21 @@ export function Figure({
         <meshStandardMaterial color={cHair} roughness={0.95} />
       </mesh>
       {/* arms from the shoulders, with hands */}
-      <Limb r={0.042} len={0.48} pos={[0.185, 0.94, 0]} rot={rot3(P.aL)} color={cShirt}>
+      <Limb r={0.037} len={0.48} pos={[0.18, 0.94, 0]} rot={rot3(P.aL)} color={cShirt}>
         {hand}
       </Limb>
-      <Limb r={0.042} len={0.48} pos={[-0.185, 0.94, 0]} rot={rot3(P.aR)} color={cShirt}>
+      <Limb r={0.037} len={0.48} pos={[-0.18, 0.94, 0]} rot={rot3(P.aR)} color={cShirt}>
         {hand}
       </Limb>
       {/* legs: thigh with nested shin (knee), shoes at the ankles */}
-      <Limb r={0.055} len={0.24} pos={[0.08, 0.55, 0]} rot={rot3(P.tL)} color={cPants}>
-        <Limb r={0.046} len={0.24} pos={[0, -0.28, 0]} rot={rot3(P.sL)} color={cPants}>
-          <Box args={[0.085, 0.06, 0.19]} pos={[0, -0.29, 0.045]} color={cShoe} />
+      <Limb r={0.051} len={0.24} pos={[0.08, 0.55, 0]} rot={rot3(P.tL)} color={cPants}>
+        <Limb r={0.041} len={0.24} pos={[0, -0.28, 0]} rot={rot3(P.sL)} color={cPants}>
+          <Box args={[0.08, 0.055, 0.19]} pos={[0, -0.29, 0.045]} color={cShoe} />
         </Limb>
       </Limb>
-      <Limb r={0.055} len={0.24} pos={[-0.08, 0.55, 0]} rot={rot3(P.tR)} color={cPants}>
-        <Limb r={0.046} len={0.24} pos={[0, -0.28, 0]} rot={rot3(P.sR)} color={cPants}>
-          <Box args={[0.085, 0.06, 0.19]} pos={[0, -0.29, 0.045]} color={cShoe} />
+      <Limb r={0.051} len={0.24} pos={[-0.08, 0.55, 0]} rot={rot3(P.tR)} color={cPants}>
+        <Limb r={0.041} len={0.24} pos={[0, -0.28, 0]} rot={rot3(P.sR)} color={cPants}>
+          <Box args={[0.08, 0.055, 0.19]} pos={[0, -0.29, 0.045]} color={cShoe} />
         </Limb>
       </Limb>
     </group>
@@ -206,39 +202,99 @@ function Climber({
 
 /* ------------------------------ climbing walls ------------------------------ */
 
-// A cloud of climbing holds scattered over a w × len plane (local xy), sticking out in +z
-export function Holds({ w, len, count }: { w: number; len: number; count: number }) {
+/**
+ * Route-set holds over a w × len wall plane (local xy, +z out of the wall) —
+ * the way real gyms set: each ROUTE is a wandering bottom-to-top line of
+ * holds sharing ONE color, spaced roughly every 1.1 m across the wall, and
+ * hold sizes mix like a real set: mostly small crimps and foot chips, some
+ * mid-size holds, the occasional big jug. Plus a couple of plywood-style
+ * screw-on volumes on larger faces. Deterministic per seed.
+ */
+export function Holds({ w, len, count, seed = 1 }: { w: number; len: number; count?: number; seed?: number }) {
   const ref = useRef<THREE.InstancedMesh>(null)
-  const items = useMemo(
-    () =>
-      Array.from({ length: count }, () => ({
-        x: (Math.random() - 0.5) * Math.max(0.1, w - 0.4),
-        y: (Math.random() - 0.5) * Math.max(0.1, len - 0.4),
-        s: 0.055 + Math.random() * 0.06,
-        color: HOLD_COLORS[Math.floor(Math.random() * HOLD_COLORS.length)],
-      })),
-    [w, len, count],
-  )
+  const { items, volumes } = useMemo(() => {
+    let s = ((seed + 1) * 2654435761) >>> 0 || 7
+    const rnd = () => {
+      s = (s * 1103515245 + 12345) & 0x7fffffff
+      return s / 0x7fffffff
+    }
+    const uw = Math.max(0.3, w - 0.3)
+    const ul = Math.max(0.3, len - 0.2)
+    const nRoutes = Math.max(1, Math.min(10, Math.round(uw / 1.1)))
+    const list: Array<{ x: number; y: number; sx: number; sy: number; sz: number; rz: number; c: string }> = []
+    const colStart = Math.floor(rnd() * ROUTE_COLORS.length)
+    for (let r = 0; r < nRoutes; r++) {
+      const c = ROUTE_COLORS[(colStart + r) % ROUTE_COLORS.length]
+      let x = -uw / 2 + ((r + 0.5) / nRoutes) * uw + (rnd() - 0.5) * 0.3
+      let y = -ul / 2 + 0.05 + rnd() * 0.2
+      while (y < ul / 2) {
+        const roll = rnd()
+        // 50% crimps/foot chips, 35% mid-size, 15% jugs
+        const base = roll < 0.5 ? 0.032 + rnd() * 0.028 : roll < 0.85 ? 0.065 + rnd() * 0.04 : 0.11 + rnd() * 0.055
+        list.push({
+          x,
+          y,
+          sx: base * (1.1 + rnd() * 0.9), // wider than tall, like real shapes
+          sy: base * (0.7 + rnd() * 0.5),
+          sz: base * (0.5 + rnd() * 0.35), // low profile off the wall
+          rz: rnd() * Math.PI * 2,
+          c,
+        })
+        y += 0.3 + rnd() * 0.35
+        x = Math.max(-uw / 2, Math.min(uw / 2, x + (rnd() - 0.5) * 0.55))
+        if (count && list.length >= count * 4) break
+      }
+    }
+    // large volumes on big faces (matte black / plywood, like fiberglass macros)
+    const vols: Array<{ x: number; y: number; r: number; h: number; ry: number; c: string }> = []
+    const nVol = uw > 2 && ul > 2 ? 1 + Math.floor(rnd() * 2) : 0
+    for (let i = 0; i < nVol; i++) {
+      vols.push({
+        x: (rnd() - 0.5) * (uw - 0.9),
+        y: (rnd() - 0.5) * (ul - 1.1),
+        r: 0.32 + rnd() * 0.26,
+        h: 0.16 + rnd() * 0.14,
+        ry: rnd() * Math.PI,
+        c: rnd() < 0.5 ? '#23262c' : rnd() < 0.5 ? '#cfc4ae' : '#3a6ea5',
+      })
+    }
+    return { items: list, volumes: vols }
+  }, [w, len, seed, count])
   useLayoutEffect(() => {
     const mesh = ref.current
     if (!mesh) return
-    const m = new THREE.Matrix4()
+    const M = new THREE.Matrix4()
+    const P = new THREE.Vector3()
+    const Q = new THREE.Quaternion()
+    const S = new THREE.Vector3()
+    const E = new THREE.Euler()
     const c = new THREE.Color()
     items.forEach((it, i) => {
-      m.makeScale(it.s, it.s, it.s * 0.7)
-      m.setPosition(it.x, it.y, 0)
-      mesh.setMatrixAt(i, m)
-      mesh.setColorAt(i, c.set(it.color))
+      P.set(it.x, it.y, 0)
+      E.set(0, 0, it.rz)
+      Q.setFromEuler(E)
+      S.set(it.sx, it.sy, it.sz)
+      M.compose(P, Q, S)
+      mesh.setMatrixAt(i, M)
+      mesh.setColorAt(i, c.set(it.c))
     })
     mesh.instanceMatrix.needsUpdate = true
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
   }, [items])
-  if (count <= 0) return null
+  if (items.length === 0) return null
   return (
-    <instancedMesh ref={ref} args={[undefined, undefined, count]} frustumCulled={false}>
-      <icosahedronGeometry args={[1, 0]} />
-      <meshStandardMaterial roughness={0.7} />
-    </instancedMesh>
+    <group>
+      <instancedMesh key={items.length} ref={ref} args={[undefined, undefined, items.length]} frustumCulled={false}>
+        <icosahedronGeometry args={[1, 1]} />
+        <meshStandardMaterial roughness={0.75} flatShading />
+      </instancedMesh>
+      {volumes.map((v, i) => (
+        <mesh key={`v${i}`} position={[v.x, v.y, v.h / 2]} rotation={[-Math.PI / 2, v.ry, 0]} castShadow>
+          <coneGeometry args={[v.r, v.h, 4]} />
+          <meshStandardMaterial color={v.c} roughness={0.85} flatShading />
+        </mesh>
+      ))}
+    </group>
   )
 }
 
@@ -254,13 +310,13 @@ function ProfiledFace({
   profile,
   color,
   backZ,
-  holdDensity = 1.6,
+  seed = 1,
 }: {
   w: number
   profile: ProfilePoint[]
   color: string
   backZ: number
-  holdDensity?: number
+  seed?: number
 }) {
   const t = 0.22
   return (
@@ -271,7 +327,6 @@ function ProfiledFace({
         const doff = p1.off - p0.off
         const len = Math.hypot(dy, doff) + 0.18 // slight overlap hides seams at joints
         const ang = Math.atan2(doff, dy)
-        const holds = Math.round(clampN(w * len * holdDensity, 4, 60))
         return (
           <group
             key={i}
@@ -284,7 +339,7 @@ function ProfiledFace({
             </mesh>
             {len > 0.7 && (
               <group position={[0, 0, t / 2 + 0.03]}>
-                <Holds w={w} len={len} count={holds} />
+                <Holds w={w} len={len} seed={seed * 13 + i} />
               </group>
             )}
           </group>
@@ -354,7 +409,7 @@ function ClimbingWall({ o, tint }: { o: Placed; tint: string | null }) {
       ))}
       {Array.from({ length: nSec }, (_, i) => (
         <group key={i} position={[-o.w / 2 + secW * (i + 0.5), 0, 0]}>
-          <ProfiledFace w={secW - 0.04} profile={profiles[i % profiles.length]} color={color} backZ={wallBack} />
+          <ProfiledFace w={secW - 0.04} profile={profiles[i % profiles.length]} color={color} backZ={wallBack} seed={i + 1} />
           {/* top cap board per section */}
           <Box
             args={[secW - 0.04, 0.12, 0.5]}
@@ -382,7 +437,7 @@ function ClimbingWall({ o, tint }: { o: Placed; tint: string | null }) {
 function IslandBoulder({ o, tint }: { o: Placed; tint: string | null }) {
   const color = tint ?? o.color
   const flare = clampN(Math.min(o.w, o.d) * 0.13, 0.25, 0.6)
-  const face = (width: number, half: number) => {
+  const face = (width: number, half: number, seed: number) => {
     const p0 = { y: 0, off: -flare } // bottom tucked toward center
     const p1 = { y: o.h * 0.55, off: -flare * 0.55 }
     const p2 = { y: o.h, off: 0 } // top at the footprint edge
@@ -401,7 +456,7 @@ function IslandBoulder({ o, tint }: { o: Placed; tint: string | null }) {
                 <meshStandardMaterial color={color} {...MAT} />
               </mesh>
               <group position={[0, 0, 0.14]}>
-                <Holds w={width} len={len} count={Math.round(clampN(width * len * 1.6, 6, 50))} />
+                <Holds w={width} len={len} seed={seed * 5 + i} />
               </group>
             </group>
           )
@@ -414,10 +469,10 @@ function IslandBoulder({ o, tint }: { o: Placed; tint: string | null }) {
       {/* core mass */}
       <Box args={[Math.max(0.4, o.w - flare * 2), o.h * 0.9, Math.max(0.4, o.d - flare * 2)]} pos={[0, o.h * 0.45, 0]} color={color} />
       {/* four outward-leaning faces */}
-      <group>{face(o.w, o.d / 2)}</group>
-      <group rotation-y={Math.PI}>{face(o.w, o.d / 2)}</group>
-      <group rotation-y={Math.PI / 2}>{face(o.d, o.w / 2)}</group>
-      <group rotation-y={-Math.PI / 2}>{face(o.d, o.w / 2)}</group>
+      <group>{face(o.w, o.d / 2, 1)}</group>
+      <group rotation-y={Math.PI}>{face(o.w, o.d / 2, 2)}</group>
+      <group rotation-y={Math.PI / 2}>{face(o.d, o.w / 2, 3)}</group>
+      <group rotation-y={-Math.PI / 2}>{face(o.d, o.w / 2, 4)}</group>
       {/* top cap */}
       <Box args={[Math.max(0.4, o.w - flare), 0.14, Math.max(0.4, o.d - flare)]} pos={[0, o.h + 0.07, 0]} color={tint ?? '#e6e1d6'} />
       {/* climbers on opposite faces, clear of the surface */}
@@ -1968,80 +2023,101 @@ function LeafClumps({ list }: { list: Clump[] }) {
   )
 }
 
+// A tapered branch cylinder between two points
+function BranchSeg({ p0, p1, r0, r1 }: { p0: [number, number, number]; p1: [number, number, number]; r0: number; r1: number }) {
+  const d = new THREE.Vector3(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2])
+  const len = d.length()
+  return (
+    <mesh
+      position={[(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, (p0[2] + p1[2]) / 2]}
+      quaternion={new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize())}
+      castShadow
+    >
+      <cylinderGeometry args={[r1, r0, len, 7]} />
+      <meshStandardMaterial color="#66513a" roughness={0.92} />
+    </mesh>
+  )
+}
+
+// Tree with a real branch skeleton: trunk → primary limbs → secondary twigs,
+// with separate leaf clusters hanging at the branch TIPS, so the branching
+// structure stays visible through the crown instead of one solid blob.
 function Tree({ o, tint }: { o: Placed; tint: string | null }) {
   const big = o.defId === 'tree_big'
   const h = o.h
-  const trunkH = big ? h * 0.4 : h * 0.34
   const r = Math.min(o.w, o.d) / 2
 
-  const { leaves, branches } = useMemo(() => {
+  const { limbs, leaves, trunkH } = useMemo(() => {
     const rnd = seededRnd(o.id)
-    const centers: Array<[number, number, number, number]> = [] // x,y,z,radius
-    const nC = big ? 6 : 4
-    for (let i = 0; i < nC; i++) {
-      const a = (i / nC) * Math.PI * 2 + rnd()
-      const rr = i === 0 ? 0 : r * (0.28 + rnd() * 0.34)
-      centers.push([
-        Math.cos(a) * rr,
-        trunkH + (h - trunkH) * (0.3 + rnd() * 0.5),
-        Math.sin(a) * rr,
-        r * (i === 0 ? 0.52 : 0.3 + rnd() * 0.2),
-      ])
-    }
     const base = new THREE.Color(tint ?? o.color)
-    const canopyTop = Math.max(...centers.map((c) => c[1] + c[3]))
-    const canopyBot = Math.min(...centers.map((c) => c[1] - c[3]))
-    const n = big ? 340 : 190
-    const list: Clump[] = []
-    for (let i = 0; i < n; i++) {
-      const c = centers[Math.floor(rnd() * centers.length)]
-      // bias leaf tufts toward the shell of each cluster
-      const th = rnd() * Math.PI * 2
-      const ph = Math.acos(2 * rnd() - 1)
-      const rad = c[3] * (0.6 + 0.4 * Math.sqrt(rnd()))
-      const p: [number, number, number] = [
-        c[0] + rad * Math.sin(ph) * Math.cos(th),
-        c[1] + rad * Math.cos(ph) * 0.78,
-        c[2] + rad * Math.sin(ph) * Math.sin(th),
-      ]
-      // sun-lit gradient: tufts higher in the canopy are lighter, low/inner ones darker
-      const t = Math.min(1, Math.max(0, (p[1] - canopyBot) / (canopyTop - canopyBot)))
-      list.push({
-        p,
-        s: r * (0.09 + rnd() * 0.08),
-        e: [rnd() * 0.9 - 0.45, rnd() * Math.PI * 2, rnd() * 0.9 - 0.45],
-        c: base.clone().offsetHSL((rnd() - 0.5) * 0.035, -0.06 + rnd() * 0.08, -0.16 + t * 0.2 + rnd() * 0.07),
-      })
+    const tH = h * (big ? 0.34 : 0.3)
+    type LimbT = { p0: [number, number, number]; p1: [number, number, number]; r0: number; r1: number }
+    const limbList: LimbT[] = []
+    const tips: Array<{ p: [number, number, number]; R: number }> = []
+    const nP = big ? 5 : 4
+    for (let i = 0; i < nP; i++) {
+      const a = (i / nP) * Math.PI * 2 + rnd() * 0.9
+      const tilt = 0.5 + rnd() * 0.5 // 29°–57° off vertical
+      const len1 = (h - tH) * (0.5 + rnd() * 0.28)
+      const d1 = [Math.sin(tilt) * Math.cos(a), Math.cos(tilt), Math.sin(tilt) * Math.sin(a)]
+      const p0: [number, number, number] = [(rnd() - 0.5) * r * 0.12, tH * (0.7 + rnd() * 0.28), (rnd() - 0.5) * r * 0.12]
+      const p1: [number, number, number] = [p0[0] + d1[0] * len1, p0[1] + d1[1] * len1, p0[2] + d1[2] * len1]
+      limbList.push({ p0, p1, r0: r * 0.06, r1: r * 0.026 })
+      tips.push({ p: p1, R: r * (big ? 0.4 : 0.44) })
+      // two twigs branching off each limb, each carrying a smaller cluster
+      for (let k = 0; k < 2; k++) {
+        const t0 = 0.45 + rnd() * 0.35
+        const q0: [number, number, number] = [p0[0] + d1[0] * len1 * t0, p0[1] + d1[1] * len1 * t0, p0[2] + d1[2] * len1 * t0]
+        const a2 = a + (rnd() - 0.5) * 2.4
+        const tilt2 = Math.min(1.3, tilt + 0.2 + rnd() * 0.45)
+        const dv = new THREE.Vector3(Math.sin(tilt2) * Math.cos(a2), Math.cos(tilt2) * (0.7 + rnd() * 0.5), Math.sin(tilt2) * Math.sin(a2)).normalize()
+        const len2 = len1 * (0.45 + rnd() * 0.3)
+        const q1: [number, number, number] = [q0[0] + dv.x * len2, q0[1] + dv.y * len2, q0[2] + dv.z * len2]
+        limbList.push({ p0: q0, p1: q1, r0: r * 0.024, r1: r * 0.011 })
+        tips.push({ p: q1, R: r * (big ? 0.28 : 0.3) })
+      }
     }
-    const br = centers.slice(1).map((c) => c)
-    return { leaves: list, branches: br }
-  }, [o.id, o.color, tint, big, h, trunkH, r])
+    // leaf clusters at the branch tips (flattened, shaded darker underneath)
+    const yTop = Math.max(...tips.map((t) => t.p[1] + t.R))
+    const yBot = Math.min(...tips.map((t) => t.p[1] - t.R))
+    const list: Clump[] = []
+    for (const tip of tips) {
+      const n = Math.round(tip.R * (big ? 62 : 55))
+      for (let i = 0; i < n; i++) {
+        const th = rnd() * Math.PI * 2
+        const ph = Math.acos(2 * rnd() - 1)
+        const rad = tip.R * (0.35 + 0.65 * Math.sqrt(rnd()))
+        const p: [number, number, number] = [
+          tip.p[0] + rad * Math.sin(ph) * Math.cos(th),
+          tip.p[1] + rad * Math.cos(ph) * 0.6,
+          tip.p[2] + rad * Math.sin(ph) * Math.sin(th),
+        ]
+        const t = Math.min(1, Math.max(0, (p[1] - yBot) / Math.max(0.1, yTop - yBot)))
+        list.push({
+          p,
+          s: r * (0.075 + rnd() * 0.065),
+          e: [rnd() * 0.9 - 0.45, rnd() * Math.PI * 2, rnd() * 0.9 - 0.45],
+          c: base.clone().offsetHSL((rnd() - 0.5) * 0.035, -0.06 + rnd() * 0.08, -0.17 + t * 0.22 + rnd() * 0.06),
+        })
+      }
+    }
+    return { limbs: limbList, leaves: list, trunkH: tH }
+  }, [o.id, o.color, tint, big, h, r])
 
   return (
     <group>
+      {/* trunk with a root flare */}
       <mesh position={[0, trunkH / 2, 0]} castShadow>
-        <cylinderGeometry args={[r * 0.08, r * 0.13, trunkH, 8]} />
-        <meshStandardMaterial color="#6e5335" roughness={0.9} />
+        <cylinderGeometry args={[r * 0.075, r * 0.13, trunkH, 9]} />
+        <meshStandardMaterial color="#66513a" roughness={0.92} />
       </mesh>
-      {/* branches reaching toward the foliage clusters */}
-      {branches.map((c, i) => {
-        const len = Math.hypot(c[0], c[1] - trunkH * 0.9, c[2])
-        return (
-          <group key={i} position={[0, trunkH * 0.9, 0]}>
-            <mesh
-              position={[c[0] / 2, (c[1] - trunkH * 0.9) / 2, c[2] / 2]}
-              quaternion={new THREE.Quaternion().setFromUnitVectors(
-                new THREE.Vector3(0, 1, 0),
-                new THREE.Vector3(c[0], c[1] - trunkH * 0.9, c[2]).normalize(),
-              )}
-              castShadow
-            >
-              <cylinderGeometry args={[r * 0.025, r * 0.05, len, 6]} />
-              <meshStandardMaterial color="#6e5335" roughness={0.9} />
-            </mesh>
-          </group>
-        )
-      })}
+      <mesh position={[0, 0.06, 0]} castShadow>
+        <cylinderGeometry args={[r * 0.13, r * 0.2, 0.12, 9]} />
+        <meshStandardMaterial color="#5c4933" roughness={0.95} />
+      </mesh>
+      {limbs.map((l, i) => (
+        <BranchSeg key={i} {...l} />
+      ))}
       <LeafClumps list={leaves} />
     </group>
   )
@@ -2186,9 +2262,10 @@ function Car({ o, tint }: { o: Placed; tint: string | null }) {
   const W = o.d
   const wx = L * 0.3 // wheel positions along the length
   const { bodyGeo, glassGeo } = useMemo(() => {
-    const archR = 0.35
-    const belt = 0.88
-    // side profile: x = along the car (front at +x), y = up
+    const archR = 0.37
+    const belt = 0.86
+    // side profile: x = along the car (front at +x), y = up — gentle curves
+    // everywhere so the massing reads like pressed sheet metal, not slabs
     const b = new THREE.Shape()
     b.moveTo(-L * 0.44, 0.26)
     b.lineTo(-wx - archR, 0.26)
@@ -2197,19 +2274,19 @@ function Car({ o, tint }: { o: Placed; tint: string | null }) {
     b.absarc(wx, 0.26, archR, Math.PI, 0, true)
     b.lineTo(L * 0.46, 0.26)
     b.quadraticCurveTo(L * 0.5, 0.28, L * 0.5, 0.44) // front bumper
-    b.lineTo(L * 0.5, 0.6)
-    b.quadraticCurveTo(L * 0.5, 0.72, L * 0.43, 0.76) // nose
-    b.lineTo(L * 0.14, belt) // hood rising to the cowl
-    b.lineTo(-L * 0.42, belt) // belt line
-    b.quadraticCurveTo(-L * 0.5, belt, -L * 0.5, 0.74) // trunk edge
+    b.lineTo(L * 0.5, 0.56)
+    b.quadraticCurveTo(L * 0.5, 0.68, L * 0.42, 0.73) // nose rounds over
+    b.quadraticCurveTo(L * 0.28, 0.79, L * 0.14, belt) // curved hood to the cowl
+    b.quadraticCurveTo(-L * 0.15, belt + 0.035, -L * 0.42, belt) // belt line with a slight arc
+    b.quadraticCurveTo(-L * 0.5, belt - 0.01, -L * 0.5, 0.72) // trunk edge
     b.lineTo(-L * 0.5, 0.42)
     b.quadraticCurveTo(-L * 0.5, 0.3, -L * 0.44, 0.26)
     b.closePath()
-    // glasshouse: windscreen → roof → rear window, inset from the body sides
+    // glasshouse: raked windscreen → curved roof → fastback rear window
     const g = new THREE.Shape()
     g.moveTo(L * 0.13, belt - 0.03)
-    g.lineTo(-L * 0.02, 1.24)
-    g.lineTo(-L * 0.27, 1.24)
+    g.lineTo(-L * 0.03, 1.22)
+    g.quadraticCurveTo(-L * 0.15, 1.26, -L * 0.26, 1.22)
     g.lineTo(-L * 0.41, belt - 0.03)
     g.closePath()
     const opts = (depth: number, bev: number) => ({
@@ -2235,7 +2312,7 @@ function Car({ o, tint }: { o: Placed; tint: string | null }) {
         <meshStandardMaterial color="#141d26" roughness={0.06} metalness={0.35} />
       </mesh>
       {/* painted roof panel on top of the glasshouse */}
-      <Box args={[L * 0.26, 0.04, W - 0.52]} pos={[-L * 0.145, 1.31, 0]} color={body} />
+      <Box args={[L * 0.22, 0.035, W - 0.54]} pos={[-L * 0.145, 1.285, 0]} color={body} />
       <CarWheel pos={[wx, 0.3, W / 2 - 0.2]} />
       <CarWheel pos={[wx, 0.3, -W / 2 + 0.2]} />
       <CarWheel pos={[-wx, 0.3, W / 2 - 0.2]} />
@@ -2844,6 +2921,20 @@ function FaceGate({ o, tint }: { o: Placed; tint: string | null }) {
   )
 }
 
+// Flat outdoor ground finish (grass lawn / gravel / etc.) with a real tiled
+// texture and a thin soil edge, for planning surface materials on the site.
+function GroundPatch({ o, tint, kind }: { o: Placed; tint: string | null; kind: 'grass' | 'gravel' }) {
+  const h = Math.max(0.03, o.h)
+  return (
+    <group>
+      <mesh position={[0, h / 2, 0]} receiveShadow>
+        <boxGeometry args={[o.w, h, o.d]} />
+        <meshStandardMaterial color={tint ?? '#ffffff'} map={surfaceMap(kind, o.w, o.d)} roughness={1} />
+      </mesh>
+    </group>
+  )
+}
+
 // Fitness wall mirror: alu-framed panel that really reflects the scene.
 // Place it flush against any partition or room wall (front faces local +z).
 function WallMirror({ o, tint }: { o: Placed; tint: string | null }) {
@@ -3138,6 +3229,8 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
       if (o.defId === 'bench_out') return <BenchOut o={o} tint={tint} />
       if (o.defId === 'table_out') return <TableOutSet o={o} tint={tint} />
       if (o.defId === 'path') return <PathWay o={o} tint={tint} />
+      if (o.defId === 'lawn') return <GroundPatch o={o} tint={tint} kind="grass" />
+      if (o.defId === 'gravel') return <GroundPatch o={o} tint={tint} kind="gravel" />
       if (o.defId === 'awning') return <Awning o={o} tint={tint} />
       if (o.defId === 'umbrella') return <Umbrella o={o} tint={tint} />
       if (o.defId === 'fence') return <Fence o={o} tint={tint} />
