@@ -77,7 +77,7 @@ export function WallModel({ design, tint, holds = true }: { design: WallDesign; 
       {holdList.map((h, i) => (
         <mesh key={i} position={h.pos} scale={[1.2, 0.85, 0.7]} castShadow>
           <icosahedronGeometry args={[h.s, 1]} />
-          <meshStandardMaterial color={h.c} roughness={0.75} flatShading />
+          <meshPhysicalMaterial color={h.c} roughness={0.3} clearcoat={0.4} clearcoatRoughness={0.3} flatShading />
         </mesh>
       ))}
       {/* landing mat in front */}

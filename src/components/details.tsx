@@ -269,6 +269,7 @@ export function Holds({ w, len, count, seed = 1 }: { w: number; len: number; cou
     const S = new THREE.Vector3()
     const E = new THREE.Euler()
     const c = new THREE.Color()
+    const hsl = { h: 0, s: 0, l: 0 }
     items.forEach((it, i) => {
       P.set(it.x, it.y, 0)
       E.set(0, 0, it.rz)
@@ -276,7 +277,10 @@ export function Holds({ w, len, count, seed = 1 }: { w: number; len: number; cou
       S.set(it.sx, it.sy, it.sz)
       M.compose(P, Q, S)
       mesh.setMatrixAt(i, M)
-      mesh.setColorAt(i, c.set(it.c))
+      // resin holds: colorful but ~15% less saturated than pure catalog hues
+      c.set(it.c).getHSL(hsl)
+      c.setHSL(hsl.h, hsl.s * 0.85, hsl.l)
+      mesh.setColorAt(i, c)
     })
     mesh.instanceMatrix.needsUpdate = true
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
@@ -286,7 +290,7 @@ export function Holds({ w, len, count, seed = 1 }: { w: number; len: number; cou
     <group>
       <instancedMesh key={items.length} ref={ref} args={[undefined, undefined, items.length]} frustumCulled={false}>
         <icosahedronGeometry args={[1, 1]} />
-        <meshStandardMaterial roughness={0.75} flatShading />
+        <meshPhysicalMaterial roughness={0.3} clearcoat={0.4} clearcoatRoughness={0.3} flatShading />
       </instancedMesh>
       {volumes.map((v, i) => (
         <mesh key={`v${i}`} position={[v.x, v.y, v.h / 2]} rotation={[-Math.PI / 2, v.ry, 0]} castShadow>
@@ -335,7 +339,7 @@ function ProfiledFace({
           >
             <mesh castShadow receiveShadow>
               <boxGeometry args={[w, len, t]} />
-              <meshStandardMaterial color={color} {...MAT} />
+              <meshStandardMaterial color={color} map={surfaceMap('plywood', w, len)} roughness={0.75} />
             </mesh>
             {len > 0.7 && (
               <group position={[0, 0, t / 2 + 0.03]}>
@@ -453,7 +457,7 @@ function IslandBoulder({ o, tint }: { o: Placed; tint: string | null }) {
             <group key={i} position={[0, (a.y + b.y) / 2, half - 0.11 + (a.off + b.off) / 2]} rotation-x={ang}>
               <mesh castShadow receiveShadow>
                 <boxGeometry args={[width, len, 0.22]} />
-                <meshStandardMaterial color={color} {...MAT} />
+                <meshStandardMaterial color={color} map={surfaceMap('plywood', width, len)} roughness={0.75} />
               </mesh>
               <group position={[0, 0, 0.14]}>
                 <Holds w={width} len={len} seed={seed * 5 + i} />
@@ -505,7 +509,7 @@ function Mats({ o, tint }: { o: Placed; tint: string | null }) {
             roughness={0.95}
           />
         ) : (
-          <meshStandardMaterial color={tint ?? o.color} {...MAT} />
+          <meshStandardMaterial color={tint ?? o.color} roughness={0.92} metalness={0} />
         )}
         <Edges color="#ffffff" />
       </mesh>
@@ -1705,7 +1709,7 @@ function Door({ o, tint }: { o: Placed; tint: string | null }) {
             {/* glass pane */}
             <mesh position={[0, leafH / 2 + 0.02, 0]} castShadow>
               <boxGeometry args={[leafW - 0.08, leafH - 0.3, 0.025]} />
-              <meshStandardMaterial color="#bfe0ea" transparent opacity={0.3} roughness={0.06} metalness={0.1} depthWrite={false} />
+              <PaneGlass />
             </mesh>
             {/* leaf stiles + rails */}
             <Alu args={[0.05, leafH, 0.05]} pos={[-leafW / 2 + 0.025, leafH / 2 + 0.02, 0]} />
@@ -1724,6 +1728,25 @@ function Door({ o, tint }: { o: Placed; tint: string | null }) {
   )
 }
 
+
+// Entrance/partition glass: on High quality this is REAL refractive glass
+// (transmission + IOR); below that, a cheap transparent pane.
+function PaneGlass({ tint = null as string | null }) {
+  const high = useStore((s) => s.quality === 'high')
+  return high ? (
+    <meshPhysicalMaterial
+      color={tint ?? '#eef7fb'}
+      transmission={0.9}
+      ior={1.5}
+      thickness={0.02}
+      roughness={0.05}
+      metalness={0}
+    />
+  ) : (
+    <meshStandardMaterial color={tint ?? '#bfe0ea'} transparent opacity={0.28} roughness={0.05} metalness={0.1} depthWrite={false} />
+  )
+}
+
 // brushed-aluminium box, the framing material for storefront doors etc.
 function Alu({
   args,
@@ -1739,7 +1762,7 @@ function Alu({
   return (
     <mesh position={pos} rotation={rot} castShadow>
       <boxGeometry args={args} />
-      <meshStandardMaterial color={color} roughness={0.35} metalness={0.6} />
+      <meshStandardMaterial color={color} roughness={0.35} metalness={0.85} />
     </mesh>
   )
 }
@@ -1803,7 +1826,7 @@ function GlassPanel({ w, h, t, tint }: { w: number; h: number; t: number; tint: 
     <group>
       <mesh castShadow>
         <boxGeometry args={[w, h, Math.max(0.02, t * 0.35)]} />
-        <meshStandardMaterial color={tint ?? '#bfe0ea'} transparent opacity={0.25} roughness={0.08} metalness={0.1} depthWrite={false} />
+        <PaneGlass tint={tint} />
       </mesh>
       <Box args={[w, 0.06, t]} pos={[0, h / 2 - 0.03, 0]} color="#3f454d" />
       <Box args={[w, 0.06, t]} pos={[0, -h / 2 + 0.03, 0]} color="#3f454d" />
@@ -2978,13 +3001,13 @@ function Railing({ o, tint }: { o: Placed; tint: string | null }) {
       {posts.map((x, i) => (
         <mesh key={i} position={[x, o.h / 2, 0]} castShadow>
           <cylinderGeometry args={[0.022, 0.022, o.h, 10]} />
-          <meshStandardMaterial color={c} roughness={0.35} metalness={0.7} />
+          <meshStandardMaterial color={c} roughness={0.35} metalness={0.9} />
         </mesh>
       ))}
       {/* round top rail */}
       <mesh position={[0, o.h - 0.024, 0]} rotation-z={Math.PI / 2} castShadow>
         <cylinderGeometry args={[0.025, 0.025, o.w, 12]} />
-        <meshStandardMaterial color={c} roughness={0.3} metalness={0.75} />
+        <meshStandardMaterial color={c} roughness={0.35} metalness={0.9} />
       </mesh>
       {/* flat bottom rail + balusters */}
       <Alu args={[o.w, 0.045, 0.03]} pos={[0, 0.09, 0]} color={c} />
@@ -3022,7 +3045,7 @@ function GlassDoorInterior({ o, tint }: { o: Placed; tint: string | null }) {
           <group key={i} position={[hingeX, 0, 0]} rotation-y={i === 0 ? -0.5 : 0}>
             <mesh position={[(dir * leafW) / 2, leafH / 2, 0]} castShadow>
               <boxGeometry args={[leafW - 0.04, leafH - 0.06, 0.012]} />
-              <meshStandardMaterial color="#cfe6ee" transparent opacity={0.26} roughness={0.05} metalness={0.1} depthWrite={false} />
+              <PaneGlass />
             </mesh>
             {/* slim stiles, top rail and a wider bottom rail */}
             <Alu args={[0.035, leafH, 0.035]} pos={[dir * 0.018, leafH / 2, 0]} color={fc} />

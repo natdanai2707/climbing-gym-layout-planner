@@ -6,7 +6,7 @@ import * as THREE from 'three'
  * texture files needed, so they work offline and load instantly.
  */
 
-export type SurfaceKind = 'epdm' | 'concrete' | 'birch' | 'metalsheet' | 'grass' | 'gravel'
+export type SurfaceKind = 'epdm' | 'concrete' | 'birch' | 'metalsheet' | 'grass' | 'gravel' | 'plywood'
 
 export const SURFACE_LABELS: Record<SurfaceKind, string> = {
   epdm: 'EPDM rubber',
@@ -15,6 +15,7 @@ export const SURFACE_LABELS: Record<SurfaceKind, string> = {
   metalsheet: 'Corrugated metal sheet',
   grass: 'Grass lawn',
   gravel: 'Gravel',
+  plywood: 'Climbing-wall plywood',
 }
 
 // EPDM is drawn near-white so the item's own color tints the rubber;
@@ -26,6 +27,7 @@ export const SURFACE_TINTED: Record<SurfaceKind, boolean> = {
   metalsheet: false,
   grass: false,
   gravel: false,
+  plywood: true,
 }
 
 // Route colors as real gyms set them: every hold on one route shares a color.
@@ -126,6 +128,39 @@ function drawCanvas(kind: SurfaceKind): HTMLCanvasElement {
       const v = 150 + rnd() * 80
       g.fillStyle = `rgba(${v}, ${v + 4}, ${v + 8}, 0.05)`
       g.fillRect(rnd() * 256, rnd() * 256, 2, 20 + rnd() * 60)
+    }
+  } else if (kind === 'plywood') {
+    // near-white painted climbing plywood (item color multiplies in): faint
+    // grain, PANEL SEAMS and countersunk screw heads on a T-nut-like grid
+    g.fillStyle = '#f2efe9'
+    g.fillRect(0, 0, 256, 256)
+    for (let i = 0; i < 30; i++) {
+      g.strokeStyle = `rgba(190, 178, 158, ${0.05 + rnd() * 0.08})`
+      g.lineWidth = 0.8 + rnd() * 2
+      const x0 = rnd() * 256
+      g.beginPath()
+      g.moveTo(x0, -4)
+      for (let y = 0; y <= 260; y += 20) g.lineTo(x0 + Math.sin(y * 0.02 + i) * 3, y)
+      g.stroke()
+    }
+    // panel seams (one per tile edge → 1.5 m panel rhythm)
+    g.strokeStyle = 'rgba(80, 74, 64, 0.4)'
+    g.lineWidth = 1.6
+    g.strokeRect(0.8, 0.8, 254.4, 254.4)
+    // screw heads
+    for (let sy = 0; sy < 4; sy++) {
+      for (let sx = 0; sx < 4; sx++) {
+        const x = 32 + sx * 64 + (rnd() - 0.5) * 6
+        const y = 32 + sy * 64 + (rnd() - 0.5) * 6
+        g.fillStyle = 'rgba(70, 66, 58, 0.55)'
+        g.beginPath()
+        g.arc(x, y, 1.8, 0, Math.PI * 2)
+        g.fill()
+        g.fillStyle = 'rgba(255, 255, 255, 0.35)'
+        g.beginPath()
+        g.arc(x - 0.6, y - 0.6, 0.6, 0, Math.PI * 2)
+        g.fill()
+      }
     }
   } else if (kind === 'grass') {
     // lawn: layered green base with thousands of short blade strokes
