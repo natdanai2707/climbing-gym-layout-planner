@@ -12,7 +12,8 @@ import { PlanBuildingOutline } from './PlanSymbols'
 import { PlacedObject } from './PlacedObject'
 import { WarehouseShell, ROOF_PITCH } from './WarehouseShell'
 import { ArrowHandle } from './gizmo'
-import { elevationFor, fp, getWarningIds } from '../placement'
+import { elevationFor, fp, getWarningIds, wallOpenings } from '../placement'
+import type { Opening } from '../placement'
 
 // Exposed so the toolbar can grab a PNG of the canvas
 export const canvasCapture: { el: HTMLCanvasElement | null } = { el: null }
@@ -125,6 +126,11 @@ function WalkRig() {
       st.current.yaw = 0 // facing -z, into the hall
     }
     st.current.pitch = 0
+    // test hook: teleport the walker (used by automated UI tests)
+    ;(window as unknown as Record<string, unknown>).__setWalk = (x: number, z: number, yaw: number) => {
+      st.current.pos.set(x, 1.65, z)
+      st.current.yaw = yaw
+    }
   }, [])
 
   // drag to look (mouse or touch) — the joystick overlay stops propagation,
@@ -240,14 +246,91 @@ function WalkRig() {
       nx = Math.max(-bw, Math.min(bw, nx))
       nz = Math.max(s.building.centerZ - bl, Math.min(s.building.centerZ + bl, nz))
       const foot = v.pos.y - EYE
+      const wallDoors = s.objects.filter((d) => d.category === 'door' && d.rule === 'floor')
+      const edgeDoors = s.objects.filter((d) => d.category === 'door' && d.rule === 'edge')
+      // The building shell (when shown) blocks at the perimeter — except where
+      // an entrance / fire-exit door is placed, which the walker passes through.
+      const hw2 = s.building.width / 2
+      const zMin = s.building.centerZ - s.building.length / 2
+      const zMax = s.building.centerZ + s.building.length / 2
+      const shellWalls = s.shell.mode > 0
+      const perimeterBlocked = (x: number, z: number) => {
+        if (!shellWalls) return false
+        const wt = 0.32
+        if (z > zMin - wt && z < zMax + wt) {
+          for (const sx of [-hw2, hw2]) {
+            if (Math.abs(x - sx) < wt) {
+              const rotWant = sx < 0 ? 2 : 6
+              if (!edgeDoors.some((d) => d.rot === rotWant && Math.abs(z - d.z) < d.w / 2 - 0.05)) return true
+            }
+          }
+        }
+        if (x > -hw2 - wt && x < hw2 + wt) {
+          for (const [sz, rotWant] of [
+            [zMin, 0],
+            [zMax, 4],
+          ] as const) {
+            if (Math.abs(z - sz) < wt) {
+              if (!edgeDoors.some((d) => d.rot === rotWant && Math.abs(x - d.x) < d.w / 2 - 0.05)) return true
+            }
+          }
+        }
+        return false
+      }
+      const passes = (ops: Opening[], u: number) => ops.some((op) => op.h > 1.5 && Math.abs(u - op.c) < op.w / 2 - 0.06)
       const blocked = (x: number, z: number) => {
+        if (perimeterBlocked(x, z)) return true
         for (const o of s.objects) {
           if (o.h < 0.9 || o.category === 'stairs' || WALK_PASSABLE.has(o.category) || WALK_PASSABLE_DEFS.has(o.defId)) continue
           const elev = elevationFor(o, s.objects)
           if (elev + o.h <= foot + 0.45) continue // entirely below the feet
           if (elev >= foot + 1.55) continue // entirely above the head
           const { fw, fd } = fp(o)
-          if (Math.abs(x - o.x) < fw / 2 + 0.25 && Math.abs(z - o.z) < fd / 2 + 0.25) return true
+          if (!(Math.abs(x - o.x) < fw / 2 + 0.25 && Math.abs(z - o.z) < fd / 2 + 0.25)) continue
+          // partitions and rooms are wall-aware: only the actual wall blocks,
+          // and doorways (placed doors or a room's built-in opening) let you through
+          const th = (o.rot * Math.PI) / 4
+          const lx = (x - o.x) * Math.cos(th) - (z - o.z) * Math.sin(th)
+          const lz = (x - o.x) * Math.sin(th) + (z - o.z) * Math.cos(th)
+          if (o.category === 'partition' && o.defId !== 'rail') {
+            const t = Math.max(0.08, o.d)
+            if (Math.abs(lz) > t / 2 + 0.18 || Math.abs(lx) > o.w / 2 + 0.18) continue
+            if (passes(wallOpenings(wallDoors, o, { cx: 0, cz: 0, along: 'x', len: o.w, t }), lx)) continue
+            return true
+          }
+          if (o.category === 'room') {
+            const t = 0.12
+            const m = 0.18
+            if (Math.abs(lx) > o.w / 2 + m || Math.abs(lz) > o.d / 2 + m) continue
+            const nearX = o.w / 2 - Math.abs(lx) < t + m // near an end wall (runs along z)
+            const nearZ = o.d / 2 - Math.abs(lz) < t + m // near a long wall (runs along x)
+            if (!nearX && !nearZ) continue // room interior — walk freely
+            const isTennis = o.defId === 'tennis_sim'
+            let pass = false
+            if (nearZ) {
+              const front = lz > 0
+              const ops = wallOpenings(wallDoors, o, { cx: 0, cz: (front ? 1 : -1) * (o.d / 2 - t / 2), along: 'x', len: o.w, t })
+              if (!isTennis && front && ops.length === 0) {
+                // RoomShell's built-in doorway near the right corner
+                const doorW = Math.min(0.95, o.w * 0.4)
+                ops.push({ c: o.w / 2 - 0.35 - doorW / 2, w: doorW, h: Math.min(2.05, o.h - 0.2) })
+              }
+              pass = passes(ops, lx)
+            }
+            if (!pass && nearX) {
+              const east = lx > 0
+              const ops = wallOpenings(wallDoors, o, { cx: (east ? 1 : -1) * (o.w / 2 - t / 2), cz: 0, along: 'z', len: o.d, t })
+              if (isTennis && east && ops.length === 0) {
+                // tennis room's built-in doorway on the end opposite the screen
+                const doorW = Math.min(1.0, o.d * 0.35)
+                ops.push({ c: o.d / 2 - 0.4 - doorW / 2, w: doorW, h: Math.min(2.05, o.h - 0.3) })
+              }
+              pass = passes(ops, lz)
+            }
+            if (pass) continue
+            return true
+          }
+          return true
         }
         return false
       }

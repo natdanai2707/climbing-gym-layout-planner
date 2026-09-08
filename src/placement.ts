@@ -157,6 +157,44 @@ export function usedStrip(objects: Placed[], b: Building): { length: number; are
   return { length, area: b.width * length }
 }
 
+export interface Opening {
+  c: number // center along the wall (wall-local x)
+  w: number
+  h: number
+}
+
+// Doors (room / glass doors) placed on a wall cut an opening automatically.
+// The wall is described in the HOST's local frame: center (cx,cz), running
+// along local 'x' or 'z', length len, thickness t. Shared by the renderers
+// (walls open up around doors) and the walk-mode collision (walk through them).
+export function wallOpenings(
+  doors: Placed[],
+  host: Placed,
+  wall: { cx: number; cz: number; along: 'x' | 'z'; len: number; t: number },
+): Opening[] {
+  const a = (host.rot * Math.PI) / 4
+  const cos = Math.cos(a)
+  const sin = Math.sin(a)
+  const res: Opening[] = []
+  for (const d of doors) {
+    if ((d.level ?? 'ground') !== (host.level ?? 'ground')) continue
+    // door must run parallel to the wall (45° doors don't cut)
+    const rel = (((d.rot - host.rot) % 8) + 8) % 8
+    if (wall.along === 'x' ? rel % 4 !== 0 : rel % 4 !== 2) continue
+    // door center in host-local coordinates (inverse of rotation-y = a)
+    const wx = d.x - host.x
+    const wz = d.z - host.z
+    const lx = wx * cos - wz * sin
+    const lz = wx * sin + wz * cos
+    const u = wall.along === 'x' ? lx - wall.cx : lz - wall.cz
+    const v = wall.along === 'x' ? lz - wall.cz : lx - wall.cx
+    if (Math.abs(v) > wall.t / 2 + d.d / 2 + 0.15) continue // not on this wall
+    if (Math.abs(u) > wall.len / 2 + d.w / 2 - 0.08) continue
+    res.push({ c: u, w: d.w + 0.02, h: Math.min(d.h, host.h - 0.02) })
+  }
+  return res
+}
+
 // Height an object sits at: objects marked 'upper' rest on the first mezzanine
 // whose footprint contains their center.
 export function elevationFor(o: Pick<Placed, 'x' | 'z' | 'level'>, objects: Placed[]): number {

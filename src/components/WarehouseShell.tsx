@@ -12,6 +12,17 @@ import { surfaceMap, surfaceMapWorld } from '../materials'
 export const ROOF_PITCH = Math.tan((15 * Math.PI) / 180)
 
 const GLASS = { color: '#9fc8e0', roughness: 0.25, metalness: 0.15 }
+// the wrap-around window band is really see-through (walk mode looks out)
+const BAND_GLASS = {
+  color: '#aed3e4',
+  transparent: true,
+  opacity: 0.35,
+  roughness: 0.1,
+  metalness: 0.2,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+}
+const MULLION = { color: '#8f979f', roughness: 0.4, metalness: 0.55 }
 
 const spread = (n: number, size: number) => Array.from({ length: n }, (_, i) => ((i + 0.5) / n - 0.5) * size)
 
@@ -50,6 +61,24 @@ export function WarehouseShell() {
     s.closePath()
     return s
   }, [W, eave, ridge])
+
+  // continuous glazing band around all four sides, 0.5 m – 2.5 m
+  const bandBot = 0.5
+  const bandTop = Math.min(2.5, eave - 0.4)
+  const bandH = bandTop - bandBot
+  // gable cladding above the band (the band replaces the wall below it)
+  const gableUpper = useMemo(() => {
+    const s = new THREE.Shape()
+    s.moveTo(-W / 2, bandTop)
+    s.lineTo(W / 2, bandTop)
+    s.lineTo(W / 2, eave)
+    s.lineTo(0, ridge)
+    s.lineTo(-W / 2, eave)
+    s.closePath()
+    return s
+  }, [W, eave, ridge, bandTop])
+  const sideMullions = useMemo(() => spread(Math.max(2, Math.round(L / 2.2)), L - 0.3), [L])
+  const endMullions = useMemo(() => spread(Math.max(2, Math.round(W / 2.2)), W - 0.3), [W])
 
   // window band segments along the long walls, high near the eave
   const sideWindows = useMemo(() => {
@@ -150,26 +179,96 @@ export function WarehouseShell() {
     // transparent-mode material props (opacity/depthWrite) on the solid shell.
     // The z offset lets one gable end be moved while the other stays put.
     <group key={shell.mode} position={[0, 0, off]}>
-      {/* long side walls */}
-      <mesh position={[-W / 2 - t / 2, eave / 2, 0]}>
-        <boxGeometry args={[t, eave, L]} />
-        <meshStandardMaterial {...wallMat} />
-        {transparent && <Edges color="#5c7fa6" />}
-      </mesh>
-      <mesh position={[W / 2 + t / 2, eave / 2, 0]}>
-        <boxGeometry args={[t, eave, L]} />
-        <meshStandardMaterial {...wallMat} />
-        {transparent && <Edges color="#5c7fa6" />}
-      </mesh>
-      {/* gable end walls (short sides) */}
-      <mesh position={[0, 0, -L / 2 - t / 2]}>
-        <shapeGeometry args={[gable]} />
-        <meshStandardMaterial {...gableMat} />
-      </mesh>
-      <mesh position={[0, 0, L / 2 + t / 2]}>
-        <shapeGeometry args={[gable]} />
-        <meshStandardMaterial {...gableMat} />
-      </mesh>
+      {transparent ? (
+        <>
+          {/* long side walls */}
+          <mesh position={[-W / 2 - t / 2, eave / 2, 0]}>
+            <boxGeometry args={[t, eave, L]} />
+            <meshStandardMaterial {...wallMat} />
+            <Edges color="#5c7fa6" />
+          </mesh>
+          <mesh position={[W / 2 + t / 2, eave / 2, 0]}>
+            <boxGeometry args={[t, eave, L]} />
+            <meshStandardMaterial {...wallMat} />
+            <Edges color="#5c7fa6" />
+          </mesh>
+          {/* gable end walls (short sides) */}
+          <mesh position={[0, 0, -L / 2 - t / 2]}>
+            <shapeGeometry args={[gable]} />
+            <meshStandardMaterial {...gableMat} />
+          </mesh>
+          <mesh position={[0, 0, L / 2 + t / 2]}>
+            <shapeGeometry args={[gable]} />
+            <meshStandardMaterial {...gableMat} />
+          </mesh>
+        </>
+      ) : (
+        <>
+          {/* long side walls: cladding below/above a see-through glazing band */}
+          {[-1, 1].map((sx) => (
+            <group key={sx} position={[sx * (W / 2 + t / 2), 0, 0]}>
+              <mesh position={[0, bandBot / 2, 0]}>
+                <boxGeometry args={[t, bandBot, L]} />
+                <meshStandardMaterial {...wallMat} />
+              </mesh>
+              <mesh position={[0, (bandTop + eave) / 2, 0]}>
+                <boxGeometry args={[t, Math.max(0.05, eave - bandTop), L]} />
+                <meshStandardMaterial {...wallMat} />
+              </mesh>
+              <mesh position={[0, bandBot + bandH / 2, 0]}>
+                <boxGeometry args={[t * 0.35, bandH, L]} />
+                <meshStandardMaterial {...BAND_GLASS} />
+              </mesh>
+              {/* sill + head rails and mullions */}
+              <mesh position={[0, bandBot - 0.03, 0]}>
+                <boxGeometry args={[t + 0.02, 0.07, L]} />
+                <meshStandardMaterial {...MULLION} />
+              </mesh>
+              <mesh position={[0, bandTop + 0.03, 0]}>
+                <boxGeometry args={[t + 0.02, 0.07, L]} />
+                <meshStandardMaterial {...MULLION} />
+              </mesh>
+              {sideMullions.map((z, i) => (
+                <mesh key={i} position={[0, bandBot + bandH / 2, z]}>
+                  <boxGeometry args={[t * 0.7, bandH, 0.09]} />
+                  <meshStandardMaterial {...MULLION} />
+                </mesh>
+              ))}
+            </group>
+          ))}
+          {/* gable ends: cladding above the band, band + base below */}
+          {[-1, 1].map((sz) => (
+            <group key={`e${sz}`} position={[0, 0, sz * (L / 2 + t / 2)]}>
+              <mesh>
+                <shapeGeometry args={[gableUpper]} />
+                <meshStandardMaterial {...gableMat} />
+              </mesh>
+              <mesh position={[0, bandBot / 2, 0]}>
+                <boxGeometry args={[W, bandBot, t]} />
+                <meshStandardMaterial {...gableMat} />
+              </mesh>
+              <mesh position={[0, bandBot + bandH / 2, 0]}>
+                <boxGeometry args={[W, bandH, t * 0.35]} />
+                <meshStandardMaterial {...BAND_GLASS} />
+              </mesh>
+              <mesh position={[0, bandBot - 0.03, 0]}>
+                <boxGeometry args={[W, 0.07, t + 0.02]} />
+                <meshStandardMaterial {...MULLION} />
+              </mesh>
+              <mesh position={[0, bandTop + 0.03, 0]}>
+                <boxGeometry args={[W, 0.07, t + 0.02]} />
+                <meshStandardMaterial {...MULLION} />
+              </mesh>
+              {endMullions.map((x, i) => (
+                <mesh key={i} position={[x, bandBot + bandH / 2, 0]}>
+                  <boxGeometry args={[0.09, bandH, t * 0.7]} />
+                  <meshStandardMaterial {...MULLION} />
+                </mesh>
+              ))}
+            </group>
+          ))}
+        </>
+      )}
       {/* roof planes with translucent skylight strips */}
       <group position={[-W / 4, (eave + ridge) / 2, 0]} rotation-z={slope}>
         <mesh>
