@@ -42,6 +42,8 @@ export function Toolbar() {
   const showLabels = useStore((s) => s.showLabels)
   const toggleGrid = useStore((s) => s.toggleGrid)
   const toggleLabels = useStore((s) => s.toggleLabels)
+  const showCeilings = useStore((s) => s.showCeilings)
+  const toggleCeilings = useStore((s) => s.toggleCeilings)
   const resetView = useStore((s) => s.resetView)
   const shellMode = useStore((s) => s.shell.mode)
   const eave = useStore((s) => s.shell.eave)
@@ -226,6 +228,13 @@ export function Toolbar() {
           title="Cycle the warehouse shell: off → transparent → complete building with doors and windows"
         >
           {shellMode === 0 ? '🏭 Shell: Off' : shellMode === 1 ? '🏭 Shell: Clear' : '🏭 Shell: Solid'}
+        </button>
+        <button
+          className={showCeilings ? 'on' : ''}
+          onClick={toggleCeilings}
+          title="Show / hide ceiling panels and vertical ceilings to look inside"
+        >
+          {showCeilings ? '⬜ Ceiling: On' : '⬜ Ceiling: Off'}
         </button>
       </div>
       <div className="tb-group">

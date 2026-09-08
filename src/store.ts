@@ -66,6 +66,7 @@ export interface GymState {
 
   showGrid: boolean
   showLabels: boolean
+  showCeilings: boolean
   viewKey: number
 
   // objects only drag when move mode is armed (prevents accidental touch-moves);
@@ -126,6 +127,7 @@ export interface GymState {
   importLayout: (file: LayoutFile) => void
   toggleGrid: () => void
   toggleLabels: () => void
+  toggleCeilings: () => void
   resetView: () => void
 
   // presentation & navigation
@@ -325,6 +327,7 @@ export const useStore = create<GymState>()(
     dragValid: true,
     dragPlaneY: 0,
     showGrid: true,
+    showCeilings: true,
     showLabels: false,
     viewKey: 0,
     moveArmed: false,
@@ -671,6 +674,16 @@ export const useStore = create<GymState>()(
 
     toggleGrid: () => set({ showGrid: !get().showGrid }),
     toggleLabels: () => set({ showLabels: !get().showLabels }),
+    // Hide ceiling panels / vertical ceilings to look inside; a hidden
+    // ceiling can't stay selected (its arrows would float in empty space).
+    toggleCeilings: () => {
+      const show = !get().showCeilings
+      const sel = get().objects.find((o) => o.id === get().selectedId)
+      set({
+        showCeilings: show,
+        selectedId: !show && sel?.category === 'ceiling' ? null : get().selectedId,
+      })
+    },
     resetView: () => set({ viewKey: get().viewKey + 1, viewPreset: 'iso', planMode: false }),
 
     viewMode: 'iso',

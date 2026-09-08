@@ -26,9 +26,13 @@ function labelY(o: Placed): number {
 export function PlacedObject({ o, warning, elev }: { o: Placed; warning: boolean; elev: number }) {
   const selected = useStore((s) => s.selectedId === o.id)
   const showLabels = useStore((s) => s.showLabels)
+  const showCeilings = useStore((s) => s.showCeilings)
   const beginMove = useStore((s) => s.beginMove)
   const plan = useStore((s) => s.planMode && s.viewMode === 'iso')
   const controls = useThree((s) => s.controls) as { enabled?: boolean } | null
+
+  // ceilings can be hidden from the toolbar to look inside the hall
+  if (!showCeilings && o.category === 'ceiling') return null
 
   const tint = warning ? '#e05252' : null
   const baseY = o.rule === 'outdoor' ? -0.04 : elev
