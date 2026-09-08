@@ -445,22 +445,40 @@ function Mezzanine({ o, tint }: { o: Placed; tint: string | null }) {
     for (const z of spread(nz, o.d - 0.1)) res.push([-o.w / 2 + 0.05, z], [o.w / 2 - 0.05, z])
     return res
   }, [o.w, o.d])
-  const floorColor = tint ?? o.color
+  const balusters = useMemo(() => {
+    const res: Array<[number, number]> = []
+    for (const x of spread(Math.max(4, Math.round(o.w / 0.16)), o.w - 0.15))
+      res.push([x, -o.d / 2 + 0.05], [x, o.d / 2 - 0.05])
+    for (const z of spread(Math.max(4, Math.round(o.d / 0.16)), o.d - 0.15))
+      res.push([-o.w / 2 + 0.05, z], [o.w / 2 - 0.05, z])
+    return res
+  }, [o.w, o.d])
   return (
     <group>
-      <mesh position={[0, o.h - slabT / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[o.w, slabT, o.d]} />
-        <meshStandardMaterial color={floorColor} {...MAT} />
-        <Edges color="#b09468" />
+      {/* deck: birch floor over a steel edge beam */}
+      <mesh position={[0, o.h - 0.03, 0]} castShadow receiveShadow>
+        <boxGeometry args={[o.w, 0.06, o.d]} />
+        <meshStandardMaterial color={tint ?? '#ffffff'} map={surfaceMap('birch', o.w, o.d)} roughness={0.8} />
       </mesh>
+      <mesh position={[0, o.h - 0.06 - (slabT - 0.06) / 2, 0]} castShadow>
+        <boxGeometry args={[o.w, slabT - 0.06, o.d]} />
+        <meshStandardMaterial color={tint ?? '#5b6472'} roughness={0.5} metalness={0.4} />
+      </mesh>
+      {/* guardrail: posts, thin balusters, kick plate, round-ish handrail */}
       {posts.map(([x, z], i) => (
-        <Box key={`p${i}`} args={[0.05, railH, 0.05]} pos={[x, o.h + railH / 2, z]} color={STEEL} />
+        <Box key={`p${i}`} args={[0.045, railH, 0.045]} pos={[x, o.h + railH / 2, z]} color="#3a3f45" />
       ))}
-      {/* top rails */}
-      <Box args={[o.w, 0.06, 0.06]} pos={[0, o.h + railH, -o.d / 2 + 0.05]} color={STEEL} />
-      <Box args={[o.w, 0.06, 0.06]} pos={[0, o.h + railH, o.d / 2 - 0.05]} color={STEEL} />
-      <Box args={[0.06, 0.06, o.d]} pos={[-o.w / 2 + 0.05, o.h + railH, 0]} color={STEEL} />
-      <Box args={[0.06, 0.06, o.d]} pos={[o.w / 2 - 0.05, o.h + railH, 0]} color={STEEL} />
+      {balusters.map(([x, z], i) => (
+        <Box key={`b${i}`} args={[0.015, railH - 0.14, 0.015]} pos={[x, o.h + (railH - 0.14) / 2 + 0.02, z]} color="#4b5563" />
+      ))}
+      <Box args={[o.w, 0.1, 0.02]} pos={[0, o.h + 0.05, -o.d / 2 + 0.03]} color="#3a3f45" />
+      <Box args={[o.w, 0.1, 0.02]} pos={[0, o.h + 0.05, o.d / 2 - 0.03]} color="#3a3f45" />
+      <Box args={[0.02, 0.1, o.d]} pos={[-o.w / 2 + 0.03, o.h + 0.05, 0]} color="#3a3f45" />
+      <Box args={[0.02, 0.1, o.d]} pos={[o.w / 2 - 0.03, o.h + 0.05, 0]} color="#3a3f45" />
+      <Alu args={[o.w, 0.055, 0.055]} pos={[0, o.h + railH, -o.d / 2 + 0.05]} color="#c9a06c" />
+      <Alu args={[o.w, 0.055, 0.055]} pos={[0, o.h + railH, o.d / 2 - 0.05]} color="#c9a06c" />
+      <Alu args={[0.055, 0.055, o.d]} pos={[-o.w / 2 + 0.05, o.h + railH, 0]} color="#c9a06c" />
+      <Alu args={[0.055, 0.055, o.d]} pos={[o.w / 2 - 0.05, o.h + railH, 0]} color="#c9a06c" />
     </group>
   )
 }
@@ -502,9 +520,24 @@ function Stairs({ o, tint }: { o: Placed; tint: string | null }) {
 function Column({ o, tint }: { o: Placed; tint: string | null }) {
   return (
     <group>
-      <Box args={[o.w + 0.12, 0.06, o.d + 0.12]} pos={[0, 0.03, 0]} color={tint ?? '#7d8590'} />
-      <Box args={[o.w, o.h, o.d]} pos={[0, o.h / 2, 0]} color={tint ?? o.color} />
-      <Box args={[o.w + 0.16, 0.1, o.d + 0.16]} pos={[0, o.h - 0.05, 0]} color={tint ?? '#7d8590'} />
+      <Alu args={[o.w + 0.14, 0.05, o.d + 0.14]} pos={[0, 0.025, 0]} color={tint ?? '#7d8590'} />
+      {/* anchor bolts */}
+      {[
+        [-1, -1],
+        [1, -1],
+        [-1, 1],
+        [1, 1],
+      ].map(([sx, sz], i) => (
+        <mesh key={i} position={[(sx * (o.w + 0.08)) / 2, 0.07, (sz * (o.d + 0.08)) / 2]} castShadow>
+          <cylinderGeometry args={[0.016, 0.016, 0.05, 6]} />
+          <meshStandardMaterial color="#4b5563" roughness={0.4} metalness={0.6} />
+        </mesh>
+      ))}
+      <mesh position={[0, o.h / 2, 0]} castShadow>
+        <boxGeometry args={[o.w, o.h, o.d]} />
+        <meshStandardMaterial color={tint ?? o.color} roughness={0.45} metalness={0.35} />
+      </mesh>
+      <Alu args={[o.w + 0.16, 0.08, o.d + 0.16]} pos={[0, o.h - 0.04, 0]} color={tint ?? '#7d8590'} />
     </group>
   )
 }
@@ -524,29 +557,46 @@ function TableMesh({
   color?: string
   pos?: [number, number, number]
 }) {
-  const lx = w / 2 - 0.08
-  const lz = d / 2 - 0.08
+  const lx = w / 2 - 0.07
+  const lz = d / 2 - 0.07
   return (
     <group position={pos}>
-      <Box args={[w, 0.06, d]} pos={[0, h, 0]} color={color} />
+      {/* worktop: birch with a slim edge band */}
+      <mesh position={[0, h, 0]} castShadow receiveShadow>
+        <boxGeometry args={[w, 0.035, d]} />
+        <meshStandardMaterial color={color === WOOD ? '#ffffff' : color} map={color === WOOD ? surfaceMap('birch', w, d) : undefined} roughness={0.6} />
+      </mesh>
       {[
         [-lx, -lz],
         [lx, -lz],
         [-lx, lz],
         [lx, lz],
       ].map(([x, z], i) => (
-        <Box key={i} args={[0.06, h, 0.06]} pos={[x, h / 2, z]} color={DARKWOOD} />
+        <Alu key={i} args={[0.04, h, 0.04]} pos={[x, h / 2, z]} color="#3a3f45" />
       ))}
+      {/* cross stretcher */}
+      <Alu args={[w - 0.2, 0.03, 0.03]} pos={[0, h - 0.12, 0]} color="#3a3f45" />
     </group>
   )
 }
 
+// Office task chair: star/disc base, gas-lift post, padded seat, tilted back.
 function ChairMesh({ pos, facing = 0, color = '#5f6b7a' }: { pos: [number, number, number]; facing?: number; color?: string }) {
   return (
     <group position={pos} rotation-y={facing}>
-      <Box args={[0.42, 0.06, 0.42]} pos={[0, 0.45, 0]} color={color} />
-      <Box args={[0.42, 0.5, 0.06]} pos={[0, 0.73, -0.19]} color={color} />
-      <Box args={[0.07, 0.45, 0.07]} pos={[0, 0.22, 0]} color={STEEL} />
+      <mesh position={[0, 0.03, 0]} castShadow>
+        <cylinderGeometry args={[0.26, 0.29, 0.04, 12]} />
+        <meshStandardMaterial color="#2b2f35" roughness={0.5} metalness={0.4} />
+      </mesh>
+      <mesh position={[0, 0.25, 0]}>
+        <cylinderGeometry args={[0.03, 0.03, 0.4, 8]} />
+        <meshStandardMaterial color="#8f959c" roughness={0.35} metalness={0.6} />
+      </mesh>
+      <Box args={[0.44, 0.07, 0.44]} pos={[0, 0.47, 0]} color={color} />
+      <Box args={[0.42, 0.5, 0.06]} pos={[0, 0.76, -0.22]} rot={[-0.12, 0, 0]} color={color} />
+      {/* armrests */}
+      <Box args={[0.04, 0.16, 0.24]} pos={[-0.23, 0.58, -0.04]} color="#2b2f35" />
+      <Box args={[0.04, 0.16, 0.24]} pos={[0.23, 0.58, -0.04]} color="#2b2f35" />
     </group>
   )
 }
@@ -624,6 +674,21 @@ function CoworkZone({ o, tint }: { o: Placed; tint: string | null }) {
         zs.map((z, j) => (
           <group key={`${i}-${j}`} position={[x, 0.08, z]}>
             <TableMesh />
+            {/* laptops facing each seat */}
+            <group position={[-0.28, 0.775, 0.16]} rotation-y={Math.PI}>
+              <Box args={[0.32, 0.015, 0.22]} pos={[0, 0, 0]} color="#3a3f45" />
+              <mesh position={[0, 0.1, -0.13]} rotation-x={-0.35}>
+                <boxGeometry args={[0.32, 0.22, 0.012]} />
+                <meshStandardMaterial color="#1c1f24" emissive="#33506b" emissiveIntensity={0.5} roughness={0.4} />
+              </mesh>
+            </group>
+            <group position={[0.28, 0.775, -0.16]}>
+              <Box args={[0.32, 0.015, 0.22]} pos={[0, 0, 0]} color="#3a3f45" />
+              <mesh position={[0, 0.1, -0.13]} rotation-x={-0.35}>
+                <boxGeometry args={[0.32, 0.22, 0.012]} />
+                <meshStandardMaterial color="#1c1f24" emissive="#33506b" emissiveIntensity={0.5} roughness={0.4} />
+              </mesh>
+            </group>
             <ChairMesh pos={[0, 0, 0.75]} facing={Math.PI} />
             <ChairMesh pos={[0, 0, -0.75]} />
             {/* people working at the desks */}
@@ -768,40 +833,67 @@ function Sled({ pos, color = '#1f2937' }: { pos: [number, number, number]; color
   )
 }
 
-// SkiErg: tall frame with a flywheel head and hanging cords
+// SkiErg: tall frame with a round flywheel head and hanging pull cords
 function SkiErg({ pos }: { pos: [number, number, number] }) {
   return (
     <group position={pos}>
       <Box args={[0.55, 0.08, 0.7]} pos={[0, 0.04, 0]} color={STEEL} />
-      <Box args={[0.13, 2.15, 0.13]} pos={[0, 1.12, 0]} color={STEEL} />
-      <Box args={[0.5, 0.55, 0.28]} pos={[0, 1.95, 0.1]} color="#111827" />
-      <Box args={[0.04, 0.6, 0.04]} pos={[-0.15, 1.4, 0.2]} color="#6b7280" />
-      <Box args={[0.04, 0.6, 0.04]} pos={[0.15, 1.4, 0.2]} color="#6b7280" />
+      <Alu args={[0.1, 2.15, 0.1]} pos={[0, 1.12, 0]} color="#4b5563" />
+      <mesh position={[0, 1.95, 0.08]} rotation-x={Math.PI / 2} castShadow>
+        <cylinderGeometry args={[0.3, 0.3, 0.22, 18]} />
+        <meshStandardMaterial color="#111827" roughness={0.5} />
+      </mesh>
+      <Box args={[0.44, 0.1, 0.06]} pos={[0, 1.62, 0.16]} color="#2b2f35" />
+      {/* cords + handles */}
+      <Box args={[0.012, 0.6, 0.012]} pos={[-0.15, 1.35, 0.2]} color="#6b7280" />
+      <Box args={[0.012, 0.6, 0.012]} pos={[0.15, 1.35, 0.2]} color="#6b7280" />
+      <Alu args={[0.1, 0.028, 0.028]} pos={[-0.15, 1.04, 0.2]} color="#111318" />
+      <Alu args={[0.1, 0.028, 0.028]} pos={[0.15, 1.04, 0.2]} color="#111318" />
     </group>
   )
 }
 
-// Concept-style rower
+// Concept-style rower: monorail, sliding seat, fan cage, footrests, handle
 function Rower({ pos, ry = 0 }: { pos: [number, number, number]; ry?: number }) {
   return (
     <group position={pos} rotation-y={ry}>
-      <Box args={[2.1, 0.14, 0.4]} pos={[0, 0.32, 0]} color="#1f2937" />
-      <Box args={[0.38, 0.55, 0.45]} pos={[-0.95, 0.35, 0]} color={STEEL} />
-      <Box args={[0.35, 0.06, 0.3]} pos={[0.35, 0.42, 0]} color="#374151" />
-      <Box args={[0.1, 0.3, 0.1]} pos={[1.0, 0.15, 0]} color={STEEL} />
+      {/* monorail slightly inclined + rear support leg */}
+      <Alu args={[1.9, 0.07, 0.12]} pos={[0.15, 0.4, 0]} rot={[0, 0, 0.045]} color="#c9ced4" />
+      <Alu args={[0.08, 0.32, 0.08]} pos={[1.0, 0.17, 0]} color="#4b5563" />
+      {/* fan cage + frame at the front */}
+      <mesh position={[-0.85, 0.62, 0]} rotation-x={Math.PI / 2} castShadow>
+        <cylinderGeometry args={[0.32, 0.32, 0.24, 18]} />
+        <meshStandardMaterial color="#23262b" roughness={0.55} />
+      </mesh>
+      <Box args={[0.32, 0.5, 0.4]} pos={[-0.85, 0.22, 0]} color="#374151" />
+      {/* performance monitor on an arm */}
+      <Alu args={[0.03, 0.34, 0.03]} pos={[-0.62, 0.92, 0]} rot={[0, 0, -0.3]} color="#8f959c" />
+      <Box args={[0.2, 0.14, 0.03]} pos={[-0.53, 1.08, 0]} color="#1c1f24" />
+      {/* sliding seat + footrests + handle docked */}
+      <Box args={[0.32, 0.06, 0.3]} pos={[0.32, 0.5, 0]} color="#2b2f35" />
+      <Box args={[0.1, 0.3, 0.24]} pos={[-0.42, 0.35, 0.22]} rot={[0, 0, -0.5]} color="#111318" />
+      <Box args={[0.1, 0.3, 0.24]} pos={[-0.42, 0.35, -0.22]} rot={[0, 0, -0.5]} color="#111318" />
+      <Alu args={[0.04, 0.04, 0.42]} pos={[-0.6, 0.75, 0]} color="#111318" />
     </group>
   )
 }
 
-// Kettlebell: ball + handle
+// Kettlebell: ball with a flat base and an arched handle
 function Kettlebell({ pos, color = '#374151' }: { pos: [number, number, number]; color?: string }) {
   return (
     <group position={pos}>
       <mesh position={[0, 0.16, 0]} castShadow>
-        <sphereGeometry args={[0.15, 10, 8]} />
-        <meshStandardMaterial color={color} {...MAT} />
+        <sphereGeometry args={[0.15, 12, 10]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.25} />
       </mesh>
-      <Box args={[0.2, 0.06, 0.06]} pos={[0, 0.36, 0]} color={color} />
+      <mesh position={[0, 0.03, 0]}>
+        <cylinderGeometry args={[0.11, 0.12, 0.05, 12]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.25} />
+      </mesh>
+      <mesh position={[0, 0.29, 0]} castShadow>
+        <torusGeometry args={[0.09, 0.024, 8, 14, Math.PI]} />
+        <meshStandardMaterial color="#2b2f35" roughness={0.5} metalness={0.4} />
+      </mesh>
     </group>
   )
 }
@@ -887,16 +979,30 @@ function HyroxZone({ o, tint }: { o: Placed; tint: string | null }) {
 /* --------------------------------- rooms --------------------------------- */
 
 // Open-top thin-wall shell (dollhouse cutaway), shared by all room types
+// Room walls with a real doorway opening in the front wall (offset right),
+// a header above it, and a dark baseboard line around the outside.
 function RoomShell({ o, tint, wallColor = WHITE, floorColor }: { o: Placed; tint: string | null; wallColor?: string; floorColor?: string }) {
   const t = 0.12
   const wc = tint ?? wallColor
+  const doorW = Math.min(0.95, o.w * 0.4)
+  const doorH = Math.min(2.05, o.h - 0.2)
+  const doorX = o.w / 2 - 0.35 - doorW / 2 // opening near the right corner
+  const leftW = doorX - doorW / 2 + o.w / 2
+  const rightW = o.w / 2 - (doorX + doorW / 2)
   return (
     <group>
       <Box args={[o.w, 0.06, o.d]} pos={[0, 0.03, 0]} color={tint ?? floorColor ?? o.color} />
       <Box args={[o.w, o.h, t]} pos={[0, o.h / 2, -o.d / 2 + t / 2]} color={wc} />
-      <Box args={[o.w, o.h, t]} pos={[0, o.h / 2, o.d / 2 - t / 2]} color={wc} />
+      {/* front wall split around the doorway + header */}
+      {leftW > 0.05 && <Box args={[leftW, o.h, t]} pos={[-o.w / 2 + leftW / 2, o.h / 2, o.d / 2 - t / 2]} color={wc} />}
+      {rightW > 0.05 && <Box args={[rightW, o.h, t]} pos={[o.w / 2 - rightW / 2, o.h / 2, o.d / 2 - t / 2]} color={wc} />}
+      <Box args={[doorW, Math.max(0.08, o.h - doorH), t]} pos={[doorX, doorH + (o.h - doorH) / 2, o.d / 2 - t / 2]} color={wc} />
+      <Alu args={[0.05, doorH, t + 0.02]} pos={[doorX - doorW / 2, doorH / 2, o.d / 2 - t / 2]} color="#8a9099" />
+      <Alu args={[0.05, doorH, t + 0.02]} pos={[doorX + doorW / 2, doorH / 2, o.d / 2 - t / 2]} color="#8a9099" />
       <Box args={[t, o.h, Math.max(0.05, o.d - t * 2)]} pos={[-o.w / 2 + t / 2, o.h / 2, 0]} color={wc} />
       <Box args={[t, o.h, Math.max(0.05, o.d - t * 2)]} pos={[o.w / 2 - t / 2, o.h / 2, 0]} color={wc} />
+      {/* baseboard */}
+      <Box args={[o.w + 0.02, 0.09, o.d + 0.02]} pos={[0, 0.045, 0]} color="#57534e" />
     </group>
   )
 }
@@ -910,18 +1016,47 @@ function Restroom({ o, tint }: { o: Placed; tint: string | null }) {
       <RoomShell o={o} tint={tint} floorColor="#dbeafe" />
       {xs.map((x, i) => (
         <group key={i} position={[x, 0, -o.d / 2 + 0.75]}>
-          {/* stall partition + toilet */}
-          <Box args={[0.05, 1.5, 1.2]} pos={[-0.52, 0.78, 0]} color="#cbd5e1" />
-          {i === xs.length - 1 && <Box args={[0.05, 1.5, 1.2]} pos={[0.52, 0.78, 0]} color="#cbd5e1" />}
-          <Box args={[0.4, 0.42, 0.6]} pos={[0, 0.24, -0.1]} color="#ffffff" />
-          <Box args={[0.4, 0.7, 0.14]} pos={[0, 0.55, -0.42]} color="#ffffff" />
+          {/* stall partitions raised off the floor, with a slightly ajar door */}
+          <Box args={[0.04, 1.4, 1.2]} pos={[-0.52, 0.9, 0]} color="#94a3b8" />
+          {i === xs.length - 1 && <Box args={[0.04, 1.4, 1.2]} pos={[0.52, 0.9, 0]} color="#94a3b8" />}
+          <group position={[-0.5, 0, 0.6]} rotation-y={i % 2 ? -0.35 : 0}>
+            <Box args={[0.95, 1.4, 0.035]} pos={[0.48, 0.9, 0]} color="#a8b6c8" />
+            <mesh position={[0.85, 1.0, 0.05]} castShadow>
+              <sphereGeometry args={[0.025, 8, 6]} />
+              <meshStandardMaterial color="#6b7280" roughness={0.4} metalness={0.5} />
+            </mesh>
+          </group>
+          {/* toilet: bowl + seat + cistern */}
+          <mesh position={[0, 0.22, -0.12]} castShadow>
+            <cylinderGeometry args={[0.19, 0.14, 0.34, 12]} />
+            <meshStandardMaterial color="#ffffff" roughness={0.25} />
+          </mesh>
+          <mesh position={[0, 0.4, -0.12]}>
+            <cylinderGeometry args={[0.21, 0.21, 0.045, 12]} />
+            <meshStandardMaterial color="#f4f4f5" roughness={0.3} />
+          </mesh>
+          <Box args={[0.42, 0.5, 0.16]} pos={[0, 0.62, -0.42]} color="#ffffff" />
+          <Box args={[0.14, 0.05, 0.03]} pos={[0.1, 0.82, -0.35]} color="#c9ced4" />
         </group>
       ))}
-      {/* sink counter */}
+      {/* vanity: counter, round basins, taps and a mirror strip */}
       <group position={[o.w / 4, 0, o.d / 2 - 0.5]}>
-        <Box args={[Math.min(1.6, o.w / 2), 0.85, 0.5]} pos={[0, 0.43, 0]} color="#e2e8f0" />
-        <Box args={[0.4, 0.08, 0.32]} pos={[-0.35, 0.9, 0]} color="#ffffff" />
-        <Box args={[0.4, 0.08, 0.32]} pos={[0.35, 0.9, 0]} color="#ffffff" />
+        <Box args={[Math.min(1.6, o.w / 2), 0.06, 0.5]} pos={[0, 0.82, 0]} color="#d7dbe0" />
+        <Box args={[Math.min(1.6, o.w / 2) - 0.15, 0.72, 0.42]} pos={[0, 0.4, 0]} color="#8a7b6a" />
+        {[-0.35, 0.35].map((x) => (
+          <group key={x} position={[x, 0.86, 0]}>
+            <mesh castShadow>
+              <cylinderGeometry args={[0.16, 0.12, 0.09, 14]} />
+              <meshStandardMaterial color="#ffffff" roughness={0.2} />
+            </mesh>
+            <Alu args={[0.03, 0.16, 0.03]} pos={[0, 0.12, -0.16]} color="#9aa2ab" />
+            <Alu args={[0.03, 0.03, 0.12]} pos={[0, 0.19, -0.11]} color="#9aa2ab" />
+          </group>
+        ))}
+        <mesh position={[0, 1.5, 0.19]}>
+          <boxGeometry args={[Math.min(1.5, o.w / 2), 0.6, 0.02]} />
+          <meshStandardMaterial color="#b8d4de" roughness={0.05} metalness={0.5} />
+        </mesh>
       </group>
     </group>
   )
@@ -932,20 +1067,46 @@ function Sauna({ o, tint }: { o: Placed; tint: string | null }) {
   return (
     <group>
       <RoomShell o={o} tint={tint} wallColor={tint ?? '#d9b98c'} floorColor="#c9a06c" />
-      <Box args={[o.w - 0.4, 0.1, 0.6]} pos={[0, 0.45, -o.d / 2 + 0.5]} color={WOOD} />
-      <Box args={[o.w - 0.4, 0.1, 0.55]} pos={[0, 0.85, -o.d / 2 + 0.35]} color={WOOD} />
-      <group position={[o.w / 2 - 0.55, 0, o.d / 2 - 0.55]}>
-        <Box args={[0.45, 0.6, 0.45]} pos={[0, 0.3, 0]} color="#374151" />
+      {/* wood slat lining on the back wall */}
+      {[0.5, 0.9, 1.3, 1.7].map((y) => (
+        <mesh key={y} position={[0, y, -o.d / 2 + 0.16]} castShadow>
+          <boxGeometry args={[o.w - 0.3, 0.3, 0.03]} />
+          <meshStandardMaterial color="#ffffff" map={surfaceMap('birch', o.w, 0.6)} roughness={0.8} />
+        </mesh>
+      ))}
+      {/* two-tier slatted benches */}
+      {[
+        [0.45, 0.5, 0.6],
+        [0.85, 0.35, 0.55],
+      ].map(([y, zoff, depth], t) => (
+        <group key={t} position={[0, y, -o.d / 2 + zoff]}>
+          {[-1, 0, 1].map((k) => (
+            <Box key={k} args={[o.w - 0.5, 0.045, depth / 3.4]} pos={[0, 0, (k * depth) / 3]} color={WOOD} />
+          ))}
+          <Box args={[0.08, y, 0.08]} pos={[-o.w / 2 + 0.45, -y / 2, 0]} color={DARKWOOD} />
+          <Box args={[0.08, y, 0.08]} pos={[o.w / 2 - 0.45, -y / 2, 0]} color={DARKWOOD} />
+        </group>
+      ))}
+      {/* heater: steel cage stove with a pile of stones */}
+      <group position={[o.w / 2 - 0.55, 0, o.d / 2 - 0.6]}>
+        <Alu args={[0.45, 0.62, 0.45]} pos={[0, 0.31, 0]} color="#4b5563" />
+        {[0, 0.16, 0.32, 0.48].map((y) => (
+          <Box key={y} args={[0.47, 0.02, 0.47]} pos={[0, 0.12 + y * 0.9, 0]} color="#2b2f35" />
+        ))}
         {[
-          [-0.08, 0.07],
-          [0.1, -0.05],
-          [0, 0.0],
-        ].map(([x, z], i) => (
-          <mesh key={i} position={[x, 0.68, z]} castShadow>
-            <sphereGeometry args={[0.09, 8, 6]} />
-            <meshStandardMaterial color="#6b7280" {...MAT} />
+          [-0.09, 0.06, 0.1],
+          [0.1, -0.06, 0.09],
+          [0, 0.02, 0.11],
+          [0.03, 0.1, 0.08],
+          [-0.05, -0.09, 0.085],
+        ].map(([x, z, r], i) => (
+          <mesh key={i} position={[x, 0.68 + i * 0.015, z]} castShadow>
+            <icosahedronGeometry args={[r, 1]} />
+            <meshStandardMaterial color={i % 2 ? '#6b7280' : '#57534e'} roughness={0.95} flatShading />
           </mesh>
         ))}
+        {/* guard rail */}
+        <Alu args={[0.6, 0.04, 0.04]} pos={[0, 0.75, 0.32]} color="#8a6f52" />
       </group>
     </group>
   )
@@ -956,11 +1117,28 @@ function StorageRoom({ o, tint }: { o: Placed; tint: string | null }) {
   return (
     <group>
       <RoomShell o={o} tint={tint} floorColor="#d6d0c4" />
+      {/* boltless steel shelving with cardboard boxes and bins */}
       <group position={[0, 0, -o.d / 2 + 0.45]}>
-        <Box args={[o.w - 0.6, 0.05, 0.6]} pos={[0, 0.6, 0]} color={DARKWOOD} />
-        <Box args={[o.w - 0.6, 0.05, 0.6]} pos={[0, 1.3, 0]} color={DARKWOOD} />
-        {spread(Math.max(2, Math.floor(o.w / 1)), o.w - 1).map((x, i) => (
-          <Box key={i} args={[0.5, 0.4, 0.45]} pos={[x, i % 2 ? 0.85 : 1.55, 0]} color={i % 3 ? '#b8a88a' : '#9c8666'} />
+        {spread(Math.max(2, Math.round(o.w / 1.6)), o.w - 0.7).map((x, i) => (
+          <group key={`u${i}`}>
+            <Alu args={[0.05, 1.9, 0.05]} pos={[x - 0.65, 0.95, -0.25]} color="#5b6472" />
+            <Alu args={[0.05, 1.9, 0.05]} pos={[x + 0.65, 0.95, -0.25]} color="#5b6472" />
+            <Alu args={[0.05, 1.9, 0.05]} pos={[x - 0.65, 0.95, 0.25]} color="#5b6472" />
+            <Alu args={[0.05, 1.9, 0.05]} pos={[x + 0.65, 0.95, 0.25]} color="#5b6472" />
+          </group>
+        ))}
+        {[0.35, 0.95, 1.55].map((y) => (
+          <Box key={y} args={[o.w - 0.6, 0.04, 0.6]} pos={[0, y, 0]} color="#7c828a" />
+        ))}
+        {spread(Math.max(3, Math.floor(o.w / 0.75)), o.w - 1).map((x, i) => (
+          <group key={i} rotation-y={((i * 37) % 10) / 40 - 0.12}>
+            <Box
+              args={[0.45, i % 3 ? 0.34 : 0.42, 0.42]}
+              pos={[x, [0.55, 1.15, 1.75][i % 3], 0]}
+              color={i % 4 === 0 ? '#3b6ea5' : i % 3 ? '#b8a081' : '#a3865f'}
+            />
+            {i % 3 === 1 && <Box args={[0.4, 0.02, 0.02]} pos={[x, [0.55, 1.15, 1.75][i % 3] + 0.18, 0]} color="#8a6f52" />}
+          </group>
         ))}
       </group>
     </group>
@@ -970,25 +1148,38 @@ function StorageRoom({ o, tint }: { o: Placed; tint: string | null }) {
 /* ------------------------------- fixtures ------------------------------- */
 
 // Shoe rack: shelving with pairs of shoes
+// Cubby shoe wall: birch carcass, divider grid, pairs of shoes inside.
 function ShoeRack({ o, tint }: { o: Placed; tint: string | null }) {
-  const shelves = [0.35, 0.8, 1.25].filter((y) => y < o.h)
-  const perShelf = Math.round(clampN(Math.floor(o.w / 0.45), 2, 6))
+  const shelves = [0.06, 0.42, 0.78, 1.14].filter((y) => y < o.h - 0.2)
+  const cols = Math.round(clampN(Math.floor(o.w / 0.4), 2, 8))
+  const colX = spread(cols + 1, o.w - 0.06)
+  const SHOE = ['#57534e', '#8a9099', '#3b6ea5', '#a3865f', '#6b7280', '#b45309']
   return (
     <group>
-      <Box args={[0.06, o.h, o.d]} pos={[-o.w / 2 + 0.03, o.h / 2, 0]} color={tint ?? o.color} />
-      <Box args={[0.06, o.h, o.d]} pos={[o.w / 2 - 0.03, o.h / 2, 0]} color={tint ?? o.color} />
+      <mesh position={[0, o.h / 2, -o.d / 2 + 0.02]} castShadow>
+        <boxGeometry args={[o.w, o.h, 0.04]} />
+        <meshStandardMaterial color={tint ?? '#ffffff'} map={surfaceMap('birch', o.w, o.h)} roughness={0.8} />
+      </mesh>
+      <Box args={[0.05, o.h, o.d]} pos={[-o.w / 2 + 0.025, o.h / 2, 0]} color={tint ?? o.color} />
+      <Box args={[0.05, o.h, o.d]} pos={[o.w / 2 - 0.025, o.h / 2, 0]} color={tint ?? o.color} />
+      <Box args={[o.w, 0.05, o.d]} pos={[0, o.h - 0.025, 0]} color={tint ?? o.color} />
       {shelves.map((y, i) => (
-        <Box key={i} args={[o.w - 0.1, 0.05, o.d - 0.1]} pos={[0, y, 0]} color={tint ?? o.color} />
+        <Box key={i} args={[o.w - 0.06, 0.035, o.d - 0.06]} pos={[0, y, 0]} color={tint ?? o.color} />
       ))}
+      {colX.slice(1, -1).map((x, i) => (
+        <Box key={`d${i}`} args={[0.03, o.h - 0.1, o.d - 0.08]} pos={[x, o.h / 2 - 0.02, 0]} color={tint ?? o.color} />
+      ))}
+      {/* pairs of shoes in some cubbies */}
       {shelves.flatMap((y, si) =>
-        spread(perShelf, o.w - 0.4).map((x, i) => (
-          <Box
-            key={`${si}-${i}`}
-            args={[0.26, 0.11, 0.3]}
-            pos={[x, y + 0.09, ((i % 2) - 0.5) * 0.2]}
-            color={HOLD_COLORS[(si * perShelf + i) % HOLD_COLORS.length]}
-          />
-        )),
+        spread(cols, o.w - 0.35)
+          .filter((_, i) => (si * 5 + i * 3) % 4 !== 0)
+          .map((x, i) => (
+            <group key={`${si}-${i}`} position={[x, y + 0.06, 0.05]}>
+              <Box args={[0.09, 0.09, 0.27]} pos={[-0.055, 0, 0]} color={SHOE[(si * cols + i) % SHOE.length]} />
+              <Box args={[0.09, 0.09, 0.27]} pos={[0.055, 0, 0]} color={SHOE[(si * cols + i) % SHOE.length]} />
+              <Box args={[0.2, 0.03, 0.29]} pos={[0, -0.055, 0]} color="#e7e5e4" />
+            </group>
+          )),
       )}
     </group>
   )
@@ -1004,26 +1195,68 @@ function IceBath({ o, tint }: { o: Placed; tint: string | null }) {
       <Box args={[o.w, o.h, t]} pos={[0, o.h / 2, o.d / 2 - t / 2]} color={wc} />
       <Box args={[t, o.h, o.d - t * 2]} pos={[-o.w / 2 + t / 2, o.h / 2, 0]} color={wc} />
       <Box args={[t, o.h, o.d - t * 2]} pos={[o.w / 2 - t / 2, o.h / 2, 0]} color={wc} />
+      {/* rim cap */}
+      <Alu args={[o.w + 0.06, 0.05, t + 0.06]} pos={[0, o.h - 0.02, -o.d / 2 + t / 2]} color="#b9c0c7" />
+      <Alu args={[o.w + 0.06, 0.05, t + 0.06]} pos={[0, o.h - 0.02, o.d / 2 - t / 2]} color="#b9c0c7" />
+      <Alu args={[t + 0.06, 0.05, o.d]} pos={[-o.w / 2 + t / 2, o.h - 0.02, 0]} color="#b9c0c7" />
+      <Alu args={[t + 0.06, 0.05, o.d]} pos={[o.w / 2 - t / 2, o.h - 0.02, 0]} color="#b9c0c7" />
       <mesh position={[0, o.h * 0.75, 0]}>
         <boxGeometry args={[o.w - t * 2, 0.04, o.d - t * 2]} />
-        <meshStandardMaterial color={tint ?? '#7dd3fc'} transparent opacity={0.85} roughness={0.2} />
+        <meshStandardMaterial color={tint ?? '#7dd3fc'} transparent opacity={0.75} roughness={0.12} />
       </mesh>
-      {/* step */}
-      <Box args={[0.6, o.h * 0.45, 0.35]} pos={[0, o.h * 0.22, o.d / 2 + 0.18]} color="#cbd5e1" />
+      {/* floating ice chunks */}
+      {[
+        [-0.5, -0.3, 0.12],
+        [0.4, 0.25, 0.1],
+        [0.15, -0.35, 0.08],
+        [-0.25, 0.3, 0.09],
+      ].map(([x, z, r], i) => (
+        <mesh key={i} position={[x * o.w * 0.6, o.h * 0.77, z * o.d * 0.6]} castShadow>
+          <icosahedronGeometry args={[r, 0]} />
+          <meshStandardMaterial color="#eef6fb" roughness={0.3} transparent opacity={0.9} />
+        </mesh>
+      ))}
+      {/* step-up stairs with grab rail */}
+      <Box args={[0.6, o.h * 0.3, 0.32]} pos={[0, o.h * 0.15, o.d / 2 + 0.32]} color="#cbd5e1" />
+      <Box args={[0.6, o.h * 0.62, 0.32]} pos={[0, o.h * 0.31, o.d / 2 + 0.06]} color="#cbd5e1" />
+      <Alu args={[0.035, o.h + 0.5, 0.035]} pos={[0.34, (o.h + 0.5) / 2, o.d / 2 + 0.2]} color="#9aa2ab" />
+      <Alu args={[0.035, 0.035, 0.5]} pos={[0.34, o.h + 0.48, o.d / 2]} color="#9aa2ab" />
       {/* someone soaking, chest-deep */}
       <Figure pose="sit" pos={[0, o.h - 0.95, 0]} shirt="#0ea5e9" idx={2} />
     </group>
   )
 }
 
-// Reception: counter base, worktop and a monitor
+// Reception: birch-clad counter with recessed toe kick, stone top, monitor
+// on a stand, keyboard, and a staff member seated behind.
 function Reception({ o, tint }: { o: Placed; tint: string | null }) {
   return (
     <group>
-      <Box args={[o.w, o.h - 0.08, o.d]} pos={[0, (o.h - 0.08) / 2, 0]} color={tint ?? o.color} />
-      <Box args={[o.w + 0.16, 0.08, o.d + 0.16]} pos={[0, o.h - 0.04, 0]} color={tint ?? '#8a5f38'} />
-      <Box args={[0.42, 0.28, 0.05]} pos={[-o.w / 5, o.h + 0.14, 0]} color="#1f2937" />
-      <Box args={[0.06, 0.12, 0.06]} pos={[-o.w / 5, o.h + 0.02, 0]} color="#1f2937" />
+      {/* toe kick + birch front panel */}
+      <Box args={[o.w - 0.16, 0.12, o.d - 0.16]} pos={[0, 0.06, 0]} color="#2b2f35" />
+      <mesh position={[0, (o.h - 0.06) / 2 + 0.06, 0]} castShadow receiveShadow>
+        <boxGeometry args={[o.w, o.h - 0.16, o.d]} />
+        <meshStandardMaterial color={tint ?? '#ffffff'} map={surfaceMap('birch', o.w, o.h)} roughness={0.7} />
+      </mesh>
+      {/* stone worktop with overhang */}
+      <mesh position={[0, o.h - 0.03, 0]} castShadow>
+        <boxGeometry args={[o.w + 0.14, 0.06, o.d + 0.14]} />
+        <meshStandardMaterial color={tint ?? '#e7e5e0'} roughness={0.35} />
+      </mesh>
+      {/* monitor on stand + keyboard, facing the staff side */}
+      <group position={[-o.w / 5, o.h, -o.d / 8]}>
+        <Box args={[0.2, 0.02, 0.14]} pos={[0, 0.01, 0]} color="#2b2f35" />
+        <Alu args={[0.035, 0.14, 0.035]} pos={[0, 0.08, 0]} color="#3a3f45" />
+        <mesh position={[0, 0.28, 0]} rotation-y={Math.PI} castShadow>
+          <boxGeometry args={[0.5, 0.3, 0.025]} />
+          <meshStandardMaterial color="#1c1f24" emissive="#33506b" emissiveIntensity={0.4} roughness={0.4} />
+        </mesh>
+        <Box args={[0.34, 0.015, 0.12]} pos={[0, 0.01, -0.24]} color="#3a3f45" />
+      </group>
+      {/* small card reader + bell on the guest side */}
+      <Box args={[0.1, 0.09, 0.07]} pos={[o.w / 4, o.h + 0.045, o.d / 6]} color="#374151" />
+      {/* staff member on a stool behind the counter */}
+      <Figure pose="sit" pos={[-o.w / 5, 0.28, -o.d / 2 - 0.35]} shirt="#0e8f86" idx={3} />
     </group>
   )
 }
@@ -1068,6 +1301,8 @@ function Parking({ o, tint }: { o: Placed; tint: string | null }) {
         <meshBasicMaterial visible={false} />
         <Edges color="#ffffff" />
       </mesh>
+      {/* concrete wheel stop near the head of the stall */}
+      <Box args={[Math.min(1.7, o.w * 0.35), 0.12, 0.16]} pos={[-o.w / 2 + Math.min(1.7, o.w * 0.35) / 2 + 0.3, 0.12, 0]} color="#cfcbc2" />
     </group>
   )
 }
@@ -1585,25 +1820,58 @@ function Car({ o, tint }: { o: Placed; tint: string | null }) {
   const W = o.d
   return (
     <group>
-      <mesh position={[0, 0.55, 0]} castShadow>
-        <boxGeometry args={[L, 0.5, W]} />
-        <meshStandardMaterial color={body} roughness={0.35} metalness={0.15} />
+      {/* body with hood and trunk steps */}
+      <mesh position={[0, 0.52, 0]} castShadow>
+        <boxGeometry args={[L, 0.42, W]} />
+        <meshStandardMaterial color={body} roughness={0.25} metalness={0.35} />
       </mesh>
-      <mesh position={[-L * 0.06, 0.98, 0]} castShadow>
-        <boxGeometry args={[L * 0.5, 0.42, W - 0.24]} />
-        <meshStandardMaterial color={body} roughness={0.35} metalness={0.15} />
+      <mesh position={[L * 0.36, 0.71, 0]} rotation-z={-0.06} castShadow>
+        <boxGeometry args={[L * 0.3, 0.1, W - 0.06]} />
+        <meshStandardMaterial color={body} roughness={0.25} metalness={0.35} />
       </mesh>
-      {/* windows */}
-      <Box args={[L * 0.5 + 0.02, 0.24, W - 0.34]} pos={[-L * 0.06, 1.0, 0]} color="#3a4652" />
+      {/* cabin with slanted windscreens */}
+      <mesh position={[-L * 0.08, 0.96, 0]} castShadow>
+        <boxGeometry args={[L * 0.42, 0.36, W - 0.3]} />
+        <meshStandardMaterial color={body} roughness={0.25} metalness={0.35} />
+      </mesh>
+      <mesh position={[L * 0.16, 0.9, 0]} rotation-z={0.62}>
+        <boxGeometry args={[0.34, 0.03, W - 0.34]} />
+        <meshStandardMaterial color="#42566a" roughness={0.08} metalness={0.4} />
+      </mesh>
+      <mesh position={[-L * 0.32, 0.9, 0]} rotation-z={-0.7}>
+        <boxGeometry args={[0.3, 0.03, W - 0.34]} />
+        <meshStandardMaterial color="#42566a" roughness={0.08} metalness={0.4} />
+      </mesh>
+      {/* side glass */}
+      <Box args={[L * 0.4, 0.24, W - 0.26]} pos={[-L * 0.08, 0.96, 0]} color="#42566a" />
+      {/* bumpers, sills, mirrors */}
+      <Box args={[0.1, 0.14, W - 0.05]} pos={[L / 2 - 0.03, 0.4, 0]} color="#2b2f35" />
+      <Box args={[0.1, 0.14, W - 0.05]} pos={[-L / 2 + 0.03, 0.4, 0]} color="#2b2f35" />
+      <Box args={[L - 0.5, 0.07, 0.04]} pos={[0, 0.34, W / 2 - 0.01]} color="#2b2f35" />
+      <Box args={[L - 0.5, 0.07, 0.04]} pos={[0, 0.34, -W / 2 + 0.01]} color="#2b2f35" />
+      <Box args={[0.1, 0.06, 0.16]} pos={[L * 0.12, 0.88, W / 2 + 0.05]} color={body} />
+      <Box args={[0.1, 0.06, 0.16]} pos={[L * 0.12, 0.88, -W / 2 - 0.05]} color={body} />
       <Wheel pos={[L * 0.32, 0.3, W / 2 - 0.08]} r={0.3} />
       <Wheel pos={[L * 0.32, 0.3, -W / 2 + 0.08]} r={0.3} />
       <Wheel pos={[-L * 0.32, 0.3, W / 2 - 0.08]} r={0.3} />
       <Wheel pos={[-L * 0.32, 0.3, -W / 2 + 0.08]} r={0.3} />
+      {/* hubcaps */}
+      {[
+        [L * 0.32, W / 2 + 0.04],
+        [L * 0.32, -W / 2 - 0.04],
+        [-L * 0.32, W / 2 + 0.04],
+        [-L * 0.32, -W / 2 - 0.04],
+      ].map(([x, z], i) => (
+        <mesh key={i} position={[x, 0.3, z]} rotation-x={Math.PI / 2}>
+          <cylinderGeometry args={[0.13, 0.13, 0.02, 12]} />
+          <meshStandardMaterial color="#c9ced4" roughness={0.3} metalness={0.7} />
+        </mesh>
+      ))}
       {/* lights */}
-      <Box args={[0.06, 0.1, 0.28]} pos={[L / 2 - 0.02, 0.62, W / 4]} color="#ffe9b0" />
-      <Box args={[0.06, 0.1, 0.28]} pos={[L / 2 - 0.02, 0.62, -W / 4]} color="#ffe9b0" />
-      <Box args={[0.06, 0.1, 0.24]} pos={[-L / 2 + 0.02, 0.62, W / 4]} color="#b3372c" />
-      <Box args={[0.06, 0.1, 0.24]} pos={[-L / 2 + 0.02, 0.62, -W / 4]} color="#b3372c" />
+      <Box args={[0.05, 0.09, 0.3]} pos={[L / 2 - 0.01, 0.6, W / 4]} color="#fff3cf" />
+      <Box args={[0.05, 0.09, 0.3]} pos={[L / 2 - 0.01, 0.6, -W / 4]} color="#fff3cf" />
+      <Box args={[0.05, 0.09, 0.26]} pos={[-L / 2 + 0.01, 0.6, W / 4]} color="#b3372c" />
+      <Box args={[0.05, 0.09, 0.26]} pos={[-L / 2 + 0.01, 0.6, -W / 4]} color="#b3372c" />
     </group>
   )
 }
@@ -1615,11 +1883,31 @@ function Motorcycle({ o, tint }: { o: Placed; tint: string | null }) {
     <group>
       <Wheel pos={[L * 0.36, 0.3, 0]} r={0.3} />
       <Wheel pos={[-L * 0.36, 0.3, 0]} r={0.3} />
-      <Box args={[L * 0.55, 0.22, 0.24]} pos={[0, 0.62, 0]} color={body} rot={[0, 0, 0.08]} />
-      <Box args={[L * 0.3, 0.1, 0.2]} pos={[-L * 0.12, 0.76, 0]} color="#2b2f35" />
-      {/* fork + handlebar */}
-      <Box args={[0.05, 0.5, 0.05]} pos={[L * 0.3, 0.62, 0]} color="#8f959c" rot={[0, 0, -0.5]} />
-      <Box args={[0.05, 0.05, 0.5]} pos={[L * 0.24, 0.92, 0]} color="#2b2f35" />
+      {/* frame spine, rounded fuel tank, stepped seat */}
+      <Box args={[L * 0.5, 0.16, 0.2]} pos={[0, 0.58, 0]} color="#3a3f45" rot={[0, 0, 0.08]} />
+      <mesh position={[L * 0.1, 0.74, 0]} castShadow>
+        <sphereGeometry args={[0.17, 12, 10]} />
+        <meshStandardMaterial color={body} roughness={0.3} metalness={0.3} />
+      </mesh>
+      <Box args={[L * 0.28, 0.08, 0.22]} pos={[-L * 0.14, 0.74, 0]} color="#1c1f24" />
+      <Box args={[L * 0.12, 0.06, 0.2]} pos={[-L * 0.3, 0.8, 0]} color="#1c1f24" />
+      {/* front fork + handlebar with grips, mirrors */}
+      <Alu args={[0.035, 0.55, 0.035]} pos={[L * 0.31, 0.6, 0.07]} rot={[0, 0, -0.45]} color="#c9ced4" />
+      <Alu args={[0.035, 0.55, 0.035]} pos={[L * 0.31, 0.6, -0.07]} rot={[0, 0, -0.45]} color="#c9ced4" />
+      <Alu args={[0.03, 0.03, 0.5]} pos={[L * 0.22, 0.94, 0]} color="#2b2f35" />
+      <Alu args={[0.02, 0.14, 0.02]} pos={[L * 0.2, 1.02, 0.16]} color="#6b7280" />
+      <Box args={[0.06, 0.04, 0.03]} pos={[L * 0.2, 1.1, 0.16]} color="#2b2f35" />
+      {/* exhaust + headlight */}
+      <mesh position={[-L * 0.22, 0.42, 0.12]} rotation-z={Math.PI / 2 - 0.08} castShadow>
+        <cylinderGeometry args={[0.045, 0.055, L * 0.5, 10]} />
+        <meshStandardMaterial color="#b9c0c7" roughness={0.25} metalness={0.7} />
+      </mesh>
+      <mesh position={[L * 0.38, 0.78, 0]} rotation-z={Math.PI / 2}>
+        <cylinderGeometry args={[0.07, 0.07, 0.06, 12]} />
+        <meshStandardMaterial color="#fff3cf" roughness={0.3} />
+      </mesh>
+      {/* kickstand */}
+      <Alu args={[0.02, 0.34, 0.02]} pos={[-L * 0.08, 0.18, 0.14]} rot={[0.35, 0, 0.2]} color="#6b7280" />
     </group>
   )
 }
