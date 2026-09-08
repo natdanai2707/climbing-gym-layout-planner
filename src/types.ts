@@ -94,11 +94,54 @@ export interface WallDesign {
   matThick: number
 }
 
+/* ---- freeform building designer ---- */
+
+export type ShellRoof = 'gable' | 'slopeL' | 'slopeR' | 'flat'
+
+// One zone of the building along its length, with its own height, roof and skin
+export interface ShellSegment {
+  len: number // meters along the building length (scaled to fit the footprint)
+  eave: number // wall height of this zone
+  roof: ShellRoof
+  rise: number // roof rise above the eave (slope amount)
+  color: string // cladding tint for this zone's metal sheet
+  clear?: boolean // translucent daylight sheeting instead of metal
+}
+
+export type FacadeSide = 'N' | 'S' | 'E' | 'W'
+
+// Free-shape glazing / cladding patch drawn on one facade (u along the wall, y up)
+export interface FacadePanel {
+  side: FacadeSide
+  pts: Array<[number, number]> // polygon, any shape — not just rectangles
+  kind: 'glass' | 'clear' | 'solid'
+  color?: string
+}
+
+// Canopy / awning attached to one side of the building
+export interface CanopyDef {
+  side: FacadeSide
+  u0: number // start along the wall (m)
+  len: number
+  depth: number // how far it sticks out
+  h: number // outer edge height
+  support: 'posts' | 'hung'
+  material: 'metal' | 'canvas' | 'clear'
+  color: string
+}
+
+export interface ShellDesign {
+  segments: ShellSegment[]
+  panels: FacadePanel[]
+  canopies: CanopyDef[]
+}
+
 export interface LayoutFile {
   version: number
   building: Building
   objects: Placed[]
   shell?: ShellConfig
+  shellDesign?: ShellDesign | null
   wallDesigns?: WallDesign[]
   coolFactor?: number // aircon sizing assumption (BTU/hr per m³ of hall volume)
   floor?: FloorFinish

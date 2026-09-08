@@ -11,6 +11,7 @@ import { GridOverlay } from './GridOverlay'
 import { PlanBuildingOutline } from './PlanSymbols'
 import { PlacedObject } from './PlacedObject'
 import { WarehouseShell, ROOF_PITCH } from './WarehouseShell'
+import { SegmentedShell } from './SegmentedShell'
 import { ArrowHandle } from './gizmo'
 import { elevationFor, fp, getWarningIds, wallOpenings } from '../placement'
 import type { Opening } from '../placement'
@@ -844,6 +845,7 @@ function SceneContent() {
   const moveArmed = useStore((s) => s.moveArmed)
   const walking = useStore((s) => s.viewMode === 'walk')
   const plan = useStore((s) => s.planMode)
+  const shellDesign = useStore((s) => s.shellDesign)
   const warnings = useMemo(() => getWarningIds(objects, building), [objects, building])
   // hide the resize arrows while Move mode is armed — moving and resizing are
   // separate gestures, and the arrows would only get in the way of the drag
@@ -863,6 +865,8 @@ function SceneContent() {
       <Ghost />
       {plan ? (
         <PlanBuildingOutline width={building.width} length={building.length} apron={building.apron} centerZ={building.centerZ} />
+      ) : shellDesign ? (
+        <SegmentedShell />
       ) : (
         <WarehouseShell />
       )}

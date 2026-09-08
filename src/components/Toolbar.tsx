@@ -232,6 +232,9 @@ export function Toolbar() {
         <button onClick={() => setPage('wall')} title="Design a custom climbing wall">
           🧱 Wall Design
         </button>
+        <button onClick={() => setPage('building')} title="Shape the building: zones with different heights/roofs, canopies, free-shape glazing, per-zone cladding colors">
+          🏗 Building Design
+        </button>
         <button className="save" onClick={exportJson}>💾 Save JSON</button>
         <button onClick={() => fileRef.current?.click()}>Import JSON</button>
         <button onClick={exportPng}>Export PNG</button>

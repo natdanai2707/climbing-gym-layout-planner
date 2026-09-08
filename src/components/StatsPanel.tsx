@@ -3,6 +3,7 @@ import { useStore } from '../store'
 import { CATEGORY_LABELS } from '../catalog'
 import { usedStrip } from '../placement'
 import { ROOF_PITCH } from './WarehouseShell'
+import { designMaxHeight, designVolume } from './SegmentedShell'
 import { NumInput } from './NumInput'
 import type { Category } from '../types'
 
@@ -15,6 +16,7 @@ export function StatsPanel() {
   const eave = useStore((s) => s.shell.eave)
   const setEave = useStore((s) => s.setShellEaveUndoable)
   const coolFactor = useStore((s) => s.coolFactor)
+  const design = useStore((s) => s.shellDesign)
   const setCoolFactor = useStore((s) => s.setCoolFactor)
 
   const stats = useMemo(() => {
@@ -115,8 +117,11 @@ export function StatsPanel() {
       {/* the hall is a gable prism: cross-section = W·eave + W·rise/2 */}
       {(() => {
         const rise = (building.width / 2) * ROOF_PITCH
-        const ridge = eave + rise
-        const volume = building.length * (building.width * eave + (building.width * rise) / 2)
+        // a custom building design computes volume from its zones
+        const ridge = design ? designMaxHeight(design) : eave + rise
+        const volume = design
+          ? designVolume(design, building.width, building.length)
+          : building.length * (building.width * eave + (building.width * rise) / 2)
         const btu = volume * coolFactor
         return (
           <>

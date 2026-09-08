@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
-import type { Building, FloorFinish, LayoutFile, ObjectDef, Placed, ShellConfig } from './types'
+import type { Building, FloorFinish, LayoutFile, ObjectDef, Placed, ShellConfig, ShellDesign } from './types'
 import { clampInside, computeDrop, elevationFor, fp, resolveAfterResize } from './placement'
 import { useWallStore } from './wall/wallStore'
 import defaultLayoutJson from './defaultLayout.json'
@@ -13,6 +13,7 @@ interface Snapshot {
   objects: Placed[]
   shell: ShellConfig
   floor: FloorFinish
+  shellDesign?: ShellDesign | null
 }
 
 let lastSnapAt = 0
@@ -90,9 +91,13 @@ export interface GymState {
   setPanelLeft: (v: boolean) => void
   setPanelRight: (v: boolean) => void
 
-  // app page: main layout planner or the wall designer
-  page: 'layout' | 'wall'
-  setPage: (p: 'layout' | 'wall') => void
+  // app page: main layout planner, the wall designer or the building designer
+  page: 'layout' | 'wall' | 'building'
+  setPage: (p: 'layout' | 'wall' | 'building') => void
+
+  // freeform building shell design (zones / canopies / facade glazing)
+  shellDesign: ShellDesign | null
+  setShellDesign: (d: ShellDesign | null) => void
 
   // undo / redo history (snapshots of building + objects + shell)
   past: Snapshot[]
@@ -274,6 +279,8 @@ function cleanShell(s?: ShellConfig): ShellConfig {
   return { mode: s?.mode ?? DEFAULT_SHELL.mode, eave: s?.eave ?? DEFAULT_SHELL.eave }
 }
 
+let DEFAULT_SHELL_DESIGN: ShellDesign | null = null
+
 const DEFAULT_COOL_FACTOR = 220 // ~600 BTU/m² at a 2.7 m ceiling, volume-based
 const DEFAULT_FLOOR: FloorFinish = { material: 'paint', color: '#e4c9a3' }
 
@@ -289,6 +296,7 @@ function loadSaved(): {
     if (raw) {
       const data = JSON.parse(raw) as LayoutFile
       if (data && data.building && Array.isArray(data.objects)) {
+        DEFAULT_SHELL_DESIGN = data.shellDesign ?? null
         return {
           ...normalizeFile(data),
           shell: cleanShell(data.shell),
@@ -302,6 +310,7 @@ function loadSaved(): {
   }
   // first visit: open with the bundled example gym instead of an empty hall
   const demo = DEFAULT_LAYOUT_FILE
+  DEFAULT_SHELL_DESIGN = demo.shellDesign ?? null
   return {
     ...normalizeFile(demo),
     shell: cleanShell(demo.shell),
@@ -352,20 +361,21 @@ export const useStore = create<GymState>()(
       const now = Date.now()
       if (coalesce && now - lastSnapAt < 800) return
       lastSnapAt = now
-      const { building, objects, shell, floor, past } = get()
-      set({ past: [...past.slice(-99), { building, objects, shell, floor }], future: [] })
+      const { building, objects, shell, floor, shellDesign, past } = get()
+      set({ past: [...past.slice(-99), { building, objects, shell, floor, shellDesign }], future: [] })
     },
     undo: () => {
-      const { past, future, building, objects, shell, floor } = get()
+      const { past, future, building, objects, shell, floor, shellDesign } = get()
       if (past.length === 0) return
       const prev = past[past.length - 1]
       set({
         past: past.slice(0, -1),
-        future: [...future.slice(-99), { building, objects, shell, floor }],
+        future: [...future.slice(-99), { building, objects, shell, floor, shellDesign }],
         building: prev.building,
         objects: prev.objects,
         shell: prev.shell,
         floor: prev.floor ?? floor,
+        shellDesign: prev.shellDesign !== undefined ? prev.shellDesign : shellDesign,
         selectedId: null,
         pendingId: null,
         resizing: null,
@@ -376,16 +386,17 @@ export const useStore = create<GymState>()(
       })
     },
     redo: () => {
-      const { past, future, building, objects, shell, floor } = get()
+      const { past, future, building, objects, shell, floor, shellDesign } = get()
       if (future.length === 0) return
       const next = future[future.length - 1]
       set({
         future: future.slice(0, -1),
-        past: [...past.slice(-99), { building, objects, shell, floor }],
+        past: [...past.slice(-99), { building, objects, shell, floor, shellDesign }],
         building: next.building,
         objects: next.objects,
         shell: next.shell,
         floor: next.floor ?? floor,
+        shellDesign: next.shellDesign !== undefined ? next.shellDesign : shellDesign,
         selectedId: null,
         pendingId: null,
         resizing: null,
@@ -401,6 +412,11 @@ export const useStore = create<GymState>()(
     setPanelRight: (v) => set({ panelRight: v }),
     page: 'layout',
     setPage: (p) => set({ page: p }),
+    shellDesign: DEFAULT_SHELL_DESIGN,
+    setShellDesign: (d) => {
+      get().snapshot(true)
+      set({ shellDesign: d })
+    },
 
     // Resizing never squeezes the layout: floor items stay exactly where they
     // are, and the building simply refuses to shrink past their outer edges.
@@ -663,6 +679,7 @@ export const useStore = create<GymState>()(
       set({
         ...normalizeFile(file),
         shell: cleanShell(file.shell),
+        shellDesign: file.shellDesign ?? null,
         coolFactor: typeof file.coolFactor === 'number' ? file.coolFactor : get().coolFactor,
         floor: { ...DEFAULT_FLOOR, ...file.floor },
         selectedId: null,
@@ -752,12 +769,12 @@ export const useStore = create<GymState>()(
 // ---- auto-save to localStorage (debounced) ----
 let saveTimer: ReturnType<typeof setTimeout> | undefined
 useStore.subscribe(
-  (s) => [s.building, s.objects, s.shell, s.coolFactor, s.floor] as const,
-  ([building, objects, shell, coolFactor, floor]) => {
+  (s) => [s.building, s.objects, s.shell, s.coolFactor, s.floor, s.shellDesign] as const,
+  ([building, objects, shell, coolFactor, floor, shellDesign]) => {
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
       try {
-        const file: LayoutFile = { version: FILE_VERSION, building, objects, shell, coolFactor, floor }
+        const file: LayoutFile = { version: FILE_VERSION, building, objects, shell, shellDesign, coolFactor, floor }
         localStorage.setItem(STORAGE_KEY, JSON.stringify(file))
       } catch {
         // storage full / unavailable — ignore
@@ -767,8 +784,8 @@ useStore.subscribe(
 )
 
 export function exportLayout(): LayoutFile {
-  const { building, objects, shell, coolFactor, floor } = useStore.getState()
-  return { version: FILE_VERSION, building, objects, shell, coolFactor, floor, wallDesigns: useWallStore.getState().designs }
+  const { building, objects, shell, coolFactor, floor, shellDesign } = useStore.getState()
+  return { version: FILE_VERSION, building, objects, shell, shellDesign, coolFactor, floor, wallDesigns: useWallStore.getState().designs }
 }
 
 // handy for debugging / automated UI tests

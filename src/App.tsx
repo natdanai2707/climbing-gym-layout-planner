@@ -6,6 +6,7 @@ import { Palette } from './components/Palette'
 import { Inspector } from './components/Inspector'
 import { StatsPanel } from './components/StatsPanel'
 import { WallDesigner } from './components/WallDesigner'
+import { BuildingDesigner } from './components/BuildingDesigner'
 import { useStore } from './store'
 import { useWallStore } from './wall/wallStore'
 import { fp } from './placement'
@@ -197,6 +198,7 @@ export default function App() {
   }, [])
 
   if (page === 'wall') return <WallDesigner />
+  if (page === 'building') return <BuildingDesigner />
 
   return (
     <div className="app">
