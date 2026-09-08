@@ -19,6 +19,31 @@ interface Snapshot {
 let lastSnapAt = 0
 
 const STORAGE_KEY = 'gym-layout-planner-v1'
+const QUALITY_KEY = 'gym-quality-v1'
+const EXPOSURE_KEY = 'gym-exposure-v1'
+
+// device-specific render settings live outside the layout file
+function loadQuality(): 'low' | 'medium' | 'high' {
+  try {
+    const q = localStorage.getItem(QUALITY_KEY)
+    if (q === 'low' || q === 'medium' || q === 'high') return q
+  } catch { /* ignore */ }
+  // phones and small tablets start on Low, desktop on Medium
+  try {
+    const mobile = window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 820
+    return mobile ? 'low' : 'medium'
+  } catch {
+    return 'medium'
+  }
+}
+
+function loadExposure(): number {
+  try {
+    const v = parseFloat(localStorage.getItem(EXPOSURE_KEY) ?? '')
+    if (!Number.isNaN(v)) return Math.max(0.5, Math.min(2, v))
+  } catch { /* ignore */ }
+  return 1
+}
 const FILE_VERSION = 2 // v2: rot is in 45° steps (v1 was 90° steps)
 
 let seq = 1
@@ -144,8 +169,12 @@ export interface GymState {
   enterPlan: () => void
   lightMood: 'day' | 'golden' | 'night'
   setLightMood: (m: 'day' | 'golden' | 'night') => void
-  realMode: boolean // realistic presentation: sky, soft shadows, reflective floor
-  toggleReal: () => void
+  // render quality: low (mobile default) / medium (desktop default) / high
+  // (presentation: sky, PCSS soft shadows, reflective floor, and later AO).
+  quality: 'low' | 'medium' | 'high'
+  setQuality: (q: 'low' | 'medium' | 'high') => void
+  exposure: number // tone-mapping exposure, user-adjustable
+  setExposure: (v: number) => void
 
   // whole-hall floor finish + one-tap color/material themes
   floor: FloorFinish
@@ -715,8 +744,21 @@ export const useStore = create<GymState>()(
     enterPlan: () => set({ planMode: true, viewPreset: 'top', viewMode: 'iso', viewKey: get().viewKey + 1 }),
     lightMood: 'day',
     setLightMood: (m) => set({ lightMood: m }),
-    realMode: false,
-    toggleReal: () => set({ realMode: !get().realMode }),
+    quality: loadQuality(),
+    setQuality: (q) => {
+      set({ quality: q })
+      try {
+        localStorage.setItem(QUALITY_KEY, q)
+      } catch { /* ignore */ }
+    },
+    exposure: loadExposure(),
+    setExposure: (v) => {
+      const e = Math.max(0.5, Math.min(2, v))
+      set({ exposure: e })
+      try {
+        localStorage.setItem(EXPOSURE_KEY, String(e))
+      } catch { /* ignore */ }
+    },
 
     setFloor: (f) => {
       get().snapshot(true)

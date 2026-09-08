@@ -13,7 +13,7 @@ const MIRROR: Record<string, number> = { paint: 0.3, concrete: 0.35, birch: 0.16
 export function BuildingFloor() {
   const { width: W, length: L, apron, centerZ } = useStore((s) => s.building)
   const floor = useStore((s) => s.floor)
-  const real = useStore((s) => s.realMode)
+  const real = useStore((s) => s.quality === 'high')
   const map = floor.material === 'paint' ? null : surfaceMap(floor.material, W, L)
 
   return (

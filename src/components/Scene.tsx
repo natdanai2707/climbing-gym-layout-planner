@@ -365,6 +365,8 @@ function MoodLights() {
   const mood = useStore((s) => s.lightMood)
   const building = useStore((s) => s.building)
   const eave = useStore((s) => s.shell.eave)
+  // Low quality (mobile default) halves the shadow map resolution
+  const shadowRes = useStore((s) => (s.quality === 'low' ? 1024 : 2048))
   const m = MOODS[mood]
   const lamps = useMemo(() => {
     if (!m.lamps) return []
@@ -383,7 +385,7 @@ function MoodLights() {
         color={m.dirColor}
         intensity={m.dirInt}
         castShadow
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[shadowRes, shadowRes]}
         shadow-camera-left={-60}
         shadow-camera-right={60}
         shadow-camera-top={60}
@@ -499,19 +501,22 @@ function MeasureGraphics() {
   )
 }
 
-// Realistic presentation: procedural sky (stars at night), percent-closer
-// soft shadows, a touch more exposure. The reflective floor lives in
-// BuildingFloor. No external assets — everything is generated on the GPU.
-function RealisticExtras() {
-  const real = useStore((s) => s.realMode)
-  const mood = useStore((s) => s.lightMood)
+// User-adjustable tone-mapping exposure (Quality panel slider)
+function ExposureBinder() {
+  const exposure = useStore((s) => s.exposure)
   const gl = useThree((s) => s.gl)
   useEffect(() => {
-    gl.toneMappingExposure = real ? 1.15 : 1
-    return () => {
-      gl.toneMappingExposure = 1
-    }
-  }, [real, gl])
+    gl.toneMappingExposure = exposure
+  }, [exposure, gl])
+  return null
+}
+
+// High-quality presentation extras: procedural sky (stars at night) and
+// percent-closer soft shadows. The reflective floor lives in BuildingFloor.
+// No external assets — everything is generated on the GPU.
+function RealisticExtras() {
+  const real = useStore((s) => s.quality === 'high')
+  const mood = useStore((s) => s.lightMood)
   if (!real) return null
   return (
     <>
@@ -893,8 +898,21 @@ export function Scene() {
   const mood = useStore((s) => s.lightMood)
   const bg = MOODS[mood].bg
   return (
-    <Canvas shadows dpr={[1, 2]} gl={{ preserveDrawingBuffer: true, antialias: true }} style={{ background: bg }}>
+    // Explicit modern pipeline: sRGB output + ACES Filmic tone mapping +
+    // PCF soft shadows; pixel ratio capped at 2. No legacy lighting anywhere.
+    <Canvas
+      shadows="soft"
+      dpr={[1, 2]}
+      gl={{
+        preserveDrawingBuffer: true,
+        antialias: true,
+        toneMapping: THREE.ACESFilmicToneMapping,
+        outputColorSpace: THREE.SRGBColorSpace,
+      }}
+      style={{ background: bg }}
+    >
       <color attach="background" args={[bg]} />
+      <ExposureBinder />
       <CaptureBinder />
       <group key={`rig-${viewKey}-${walking ? 'walk' : 'orbit'}`}>{walking ? <WalkRig /> : <CameraRig />}</group>
       <DragController />

@@ -62,8 +62,10 @@ export function Toolbar() {
   const enterPlan = useStore((s) => s.enterPlan)
   const lightMood = useStore((s) => s.lightMood)
   const setLightMood = useStore((s) => s.setLightMood)
-  const realMode = useStore((s) => s.realMode)
-  const toggleReal = useStore((s) => s.toggleReal)
+  const quality = useStore((s) => s.quality)
+  const setQuality = useStore((s) => s.setQuality)
+  const exposure = useStore((s) => s.exposure)
+  const setExposure = useStore((s) => s.setExposure)
   const applyTheme = useStore((s) => s.applyTheme)
   const floor = useStore((s) => s.floor)
   const setFloor = useStore((s) => s.setFloor)
@@ -164,13 +166,30 @@ export function Toolbar() {
             <option value="night">🌙 Night</option>
           </select>
         </label>
-        <button
-          className={realMode ? 'on' : ''}
-          onClick={toggleReal}
-          title="Realistic render: real sky, soft shadows, polished reflective floor"
-        >
-          ✨ Real
-        </button>
+        <label className="tb-field">
+          <span>Quality</span>
+          <select
+            value={quality}
+            onChange={(e) => setQuality(e.target.value as 'low' | 'medium' | 'high')}
+            title="Render quality: Low (mobile default), Medium (desktop), High (presentation: sky, PCSS soft shadows, reflective floor)"
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">✨ High</option>
+          </select>
+        </label>
+        <label className="tb-field" title="Tone-mapping exposure (brightness of the render)">
+          <span>☀ {exposure.toFixed(2)}</span>
+          <input
+            type="range"
+            min={0.6}
+            max={1.6}
+            step={0.05}
+            value={exposure}
+            onChange={(e) => setExposure(parseFloat(e.target.value))}
+            style={{ width: 72 }}
+          />
+        </label>
         <label className="tb-field">
           <span>Theme</span>
           <select
