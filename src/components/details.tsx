@@ -3428,6 +3428,7 @@ function GroundPatch({ o, tint, kind }: { o: Placed; tint: string | null; kind: 
 // Fitness wall mirror: alu-framed panel that really reflects the scene.
 // Place it flush against any partition or room wall (front faces local +z).
 function WallMirror({ o, tint }: { o: Placed; tint: string | null }) {
+  const reflect = useStore((s) => s.quality !== 'low')
   const t = Math.max(0.04, o.d)
   const ph = Math.max(0.3, o.h - 0.2) // glass panel, bottom lifted off the floor
   const py = 0.15 + ph / 2
@@ -3435,18 +3436,27 @@ function WallMirror({ o, tint }: { o: Placed; tint: string | null }) {
     <group>
       {/* backing board against the wall */}
       <Box args={[o.w, o.h - 0.06, t * 0.5]} pos={[0, (o.h - 0.06) / 2 + 0.03, -t * 0.25]} color="#5d646c" />
-      {/* the mirror itself */}
+      {/* the mirror itself. `mirror` is what actually shows the reflection —
+          without it MeshReflectorMaterial renders as a plain surface. Each
+          reflector costs an extra scene render per frame, so Low quality
+          falls back to a plain glossy pane. */}
       <mesh position={[0, py, t / 2 - 0.004]}>
         <planeGeometry args={[o.w - 0.09, ph]} />
-        <MeshReflectorMaterial
-          blur={[120, 40]}
-          resolution={384}
-          mixBlur={0.4}
-          mixStrength={2.2}
-          roughness={0.06}
-          metalness={0.5}
-          color={tint ?? o.color}
-        />
+        {reflect ? (
+          <MeshReflectorMaterial
+            mirror={1}
+            blur={[70, 25]}
+            resolution={512}
+            mixBlur={0.1}
+            mixStrength={1}
+            depthScale={0}
+            roughness={0.02}
+            metalness={0.9}
+            color={tint ?? '#eef2f5'}
+          />
+        ) : (
+          <meshStandardMaterial color={tint ?? '#c3ced6'} roughness={0.08} metalness={0.9} />
+        )}
       </mesh>
       {/* slim aluminium frame */}
       <Alu args={[o.w, 0.055, t]} pos={[0, 0.125, 0]} />
