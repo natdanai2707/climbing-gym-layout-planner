@@ -134,10 +134,23 @@ function loftGeometry(sections: Section[]): THREE.BufferGeometry {
 }
 
 // Joint angles per pose: [arm L/R, thigh L/R, shin L/R] as x/z swing.
-const POSES: Record<Pose, { aL: number[]; aR: number[]; tL: number[]; tR: number[]; sL: number[]; sR: number[] }> = {
+// dy drops the whole body in loft units — a seated figure has to come down
+// off its standing height, joint rotations alone cannot do that.
+const POSES: Record<Pose, { aL: number[]; aR: number[]; tL: number[]; tR: number[]; sL: number[]; sR: number[]; dy?: number }> = {
   stand: { aL: [0.06, 0, 0.1], aR: [-0.04, 0, -0.1], tL: [0, 0, 0.03], tR: [0, 0, -0.03], sL: [0, 0, 0], sR: [0, 0, 0] },
   walk: { aL: [0.62, 0, 0.07], aR: [-0.62, 0, -0.07], tL: [-0.52, 0, 0.03], tR: [0.46, 0, -0.03], sL: [0.66, 0, 0], sR: [0.22, 0, 0] },
-  sit: { aL: [-0.95, 0, 0.1], aR: [-0.95, 0, -0.1], tL: [-1.45, 0, 0.06], tR: [-1.45, 0, -0.06], sL: [1.4, 0, 0], sR: [1.4, 0, 0] },
+  // seated on a ~0.5 m chair with the feet flat on the floor at pos.y:
+  // thighs run forward and slightly down, shins drop vertically, arms
+  // reach forward onto a desk. dy puts the hip joint 0.565 m up.
+  sit: {
+    aL: [-1.0, 0, 0.13],
+    aR: [-1.0, 0, -0.13],
+    tL: [-1.338, 0, 0.1],
+    tR: [-1.338, 0, -0.1],
+    sL: [1.338, 0, 0],
+    sR: [1.338, 0, 0],
+    dy: -0.368,
+  },
   climb: { aL: [-0.5, 0, 2.75], aR: [-0.35, 0, -2.55], tL: [-0.95, 0, 0.42], tR: [-0.3, 0, -0.3], sL: [1.5, 0, 0], sR: [0.5, 0, 0] },
   push: { aL: [-1.35, 0, 0.08], aR: [-1.35, 0, -0.08], tL: [-0.35, 0, 0.05], tR: [0.3, 0, -0.05], sL: [0.5, 0, 0], sR: [0.2, 0, 0] },
   hang: { aL: [-0.2, 0, 2.95], aR: [-0.2, 0, -2.95], tL: [-0.35, 0, 0.1], tR: [-0.2, 0, -0.1], sL: [0.95, 0, 0], sR: [0.8, 0, 0] },
@@ -242,6 +255,8 @@ export function Figure({
   const K = 1.7 / 1.72
   return (
     <group position={pos} rotation-y={ry} scale={scale * K}>
+      {/* poses that leave the standing height (sitting) drop the whole body */}
+      <group position={[0, P.dy ?? 0, 0]}>
       {/* pelvis → shoulders */}
       <group position={[0, 0.94, 0]}>
         <mesh geometry={bodyGeo.torso} castShadow receiveShadow>
@@ -276,6 +291,7 @@ export function Figure({
           </group>
         </group>
       ))}
+      </group>
     </group>
   )
 }
@@ -750,7 +766,7 @@ function Mats({ o, tint }: { o: Placed; tint: string | null }) {
     <group>
       <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[o.w, h, o.d]} />
-        {o.material && o.material !== 'glass' ? (
+        {o.material && o.material !== 'glass' && o.material !== 'half' ? (
           <meshStandardMaterial
             key={o.material}
             color={tint ?? (SURFACE_TINTED[o.material] ? o.color : '#ffffff')}
@@ -874,15 +890,19 @@ function Mezzanine({ o, tint }: { o: Placed; tint: string | null }) {
   const westSegs = edgeSegs(-o.d / 2, o.d / 2, hole !== null && hole.x0 < -o.w / 2 + 0.2, hole?.z0 ?? 0, hole?.z1 ?? 0)
   const eastSegs = edgeSegs(-o.d / 2, o.d / 2, hole !== null && hole.x1 > o.w / 2 - 0.2, hole?.z0 ?? 0, hole?.z1 ?? 0)
 
-  // safety rails around the interior sides of the opening (the stair side stays open)
+  // Safety rails around the interior sides of the stair opening. `hole.open` is
+  // the direction the flight DESCENDS, so someone climbing it arrives on the
+  // deck at the OPPOSITE edge of the hole — that edge is the one that has to
+  // stay clear, otherwise the rail lands straight across the top of the stairs.
   const holeGuards = useMemo(() => {
     if (!hole) return []
     const res: Array<{ cx: number; cz: number; len: number; dir: 'x' | 'z' }> = []
     const near = (v: number, edge: number) => Math.abs(v - edge) < 0.2
-    if (hole.open !== 'z-' && !near(hole.z0, -o.d / 2)) res.push({ cx: (hole.x0 + hole.x1) / 2, cz: hole.z0, len: hole.x1 - hole.x0, dir: 'x' })
-    if (hole.open !== 'z+' && !near(hole.z1, o.d / 2)) res.push({ cx: (hole.x0 + hole.x1) / 2, cz: hole.z1, len: hole.x1 - hole.x0, dir: 'x' })
-    if (hole.open !== 'x-' && !near(hole.x0, -o.w / 2)) res.push({ cx: hole.x0, cz: (hole.z0 + hole.z1) / 2, len: hole.z1 - hole.z0, dir: 'z' })
-    if (hole.open !== 'x+' && !near(hole.x1, o.w / 2)) res.push({ cx: hole.x1, cz: (hole.z0 + hole.z1) / 2, len: hole.z1 - hole.z0, dir: 'z' })
+    const arrival = { 'z+': 'z0', 'z-': 'z1', 'x+': 'x0', 'x-': 'x1' }[hole.open]
+    if (arrival !== 'z0' && !near(hole.z0, -o.d / 2)) res.push({ cx: (hole.x0 + hole.x1) / 2, cz: hole.z0, len: hole.x1 - hole.x0, dir: 'x' })
+    if (arrival !== 'z1' && !near(hole.z1, o.d / 2)) res.push({ cx: (hole.x0 + hole.x1) / 2, cz: hole.z1, len: hole.x1 - hole.x0, dir: 'x' })
+    if (arrival !== 'x0' && !near(hole.x0, -o.w / 2)) res.push({ cx: hole.x0, cz: (hole.z0 + hole.z1) / 2, len: hole.z1 - hole.z0, dir: 'z' })
+    if (arrival !== 'x1' && !near(hole.x1, o.w / 2)) res.push({ cx: hole.x1, cz: (hole.z0 + hole.z1) / 2, len: hole.z1 - hole.z0, dir: 'z' })
     return res
   }, [hole, o.w, o.d])
 
@@ -965,6 +985,9 @@ function Stairs({ o, tint }: { o: Placed; tint: string | null }) {
   const color = tint ?? o.color
   const slope = Math.atan2(o.h, o.d)
   const run = Math.hypot(o.d, o.h)
+  // newel posts every ~1.1 m along the flight, as fractions from foot to head
+  const np = Math.max(2, Math.round(run / 1.1) + 1)
+  const posts = Array.from({ length: np }, (_, i) => i / (np - 1))
   return (
     <group>
       {/* treads */}
@@ -979,9 +1002,22 @@ function Stairs({ o, tint }: { o: Placed; tint: string | null }) {
       {/* sloped side stringers */}
       <Box args={[0.07, 0.32, run]} pos={[-o.w / 2 + 0.04, o.h / 2 - 0.12, 0]} rot={[slope, 0, 0]} color={tint ?? '#8f867a'} />
       <Box args={[0.07, 0.32, run]} pos={[o.w / 2 - 0.04, o.h / 2 - 0.12, 0]} rot={[slope, 0, 0]} color={tint ?? '#8f867a'} />
-      {/* handrails */}
-      <Box args={[0.05, 0.05, run]} pos={[-o.w / 2 + 0.05, o.h / 2 + 0.95, 0]} rot={[slope, 0, 0]} color={STEEL} />
-      <Box args={[0.05, 0.05, run]} pos={[o.w / 2 - 0.05, o.h / 2 + 0.95, 0]} rot={[slope, 0, 0]} color={STEEL} />
+      {/* handrails: top rail + knee rail carried on newel posts that stand on
+          the stringers, so the balustrade reads as built, not floating */}
+      {([-1, 1] as const).map((s) => (
+        <group key={s}>
+          <Box args={[0.05, 0.05, run]} pos={[(s * o.w) / 2 - s * 0.05, o.h / 2 + 0.95, 0]} rot={[slope, 0, 0]} color={STEEL} />
+          <Box args={[0.035, 0.035, run]} pos={[(s * o.w) / 2 - s * 0.05, o.h / 2 + 0.5, 0]} rot={[slope, 0, 0]} color={STEEL} />
+          {posts.map((u, i) => (
+            <Box
+              key={i}
+              args={[0.045, 1.02, 0.045]}
+              pos={[(s * o.w) / 2 - s * 0.05, u * o.h + 0.45, o.d / 2 - u * o.d]}
+              color={STEEL}
+            />
+          ))}
+        </group>
+      ))}
     </group>
   )
 }
@@ -1128,7 +1164,7 @@ function StoolMesh({ o, tint }: { o: Placed; tint: string | null }) {
 /* -------------------------------- zones -------------------------------- */
 
 function ZonePatch({ o, tint, opacity = 0.85 }: { o: Placed; tint: string | null; opacity?: number }) {
-  const surf = o.material && o.material !== 'glass' ? o.material : undefined
+  const surf = o.material && o.material !== 'glass' && o.material !== 'half' ? o.material : undefined
   if (surf) {
     // real surface finish (EPDM rubber / concrete / birch), tinted by the
     // item color where the material allows it
@@ -1441,7 +1477,11 @@ function HyroxZone({ o, tint }: { o: Placed; tint: string | null }) {
       {/* rowers + seated athlete */}
       <Rower pos={[-o.w / 2 + 4.6, 0.08, backZ + 1.0]} />
       {big && <Rower pos={[-o.w / 2 + 4.6, 0.08, backZ + 1.9]} />}
-      <Figure pose="sit" pos={[-o.w / 2 + 4.3, 0.28, backZ + 1.0]} ry={-Math.PI / 2} shirt="#3b82f6" idx={3} />
+      <group position={[-o.w / 2 + 4.3, 0, backZ + 1.0]} rotation-y={-Math.PI / 2}>
+        <Box args={[1.1, 0.44, 0.42]} pos={[0, 0.22, -0.06]} color="#3f4854" />
+        <Box args={[1.14, 0.07, 0.46]} pos={[0, 0.5, -0.06]} color="#22262c" />
+        <Figure pose="sit" pos={[0, 0, 0]} shirt="#3b82f6" idx={3} />
+      </group>
       {/* wall-ball target + balls */}
       <group position={[Math.min(o.w / 2 - 1.2, o.w / 4), 0, backZ + 0.6]}>
         <Box args={[0.14, 3.0, 0.14]} pos={[0, 1.5, 0]} color={STEEL} />
@@ -1486,6 +1526,7 @@ function CutWall({
   rotY = 0,
   glass = false,
   tint = null,
+  y0 = 0,
 }: {
   len: number
   h: number
@@ -1496,6 +1537,7 @@ function CutWall({
   rotY?: number
   glass?: boolean
   tint?: string | null
+  y0?: number // bottom of this band (a partition stacks a solid dado + glazing)
 }) {
   // merge overlapping cut intervals
   const cuts = openings
@@ -1526,8 +1568,10 @@ function CutWall({
     )
   return (
     <group position={pos} rotation-y={rotY}>
-      {segs.map(([x0, x1], i) => piece(x0, x1, 0, h, `s${i}`))}
-      {merged.map(([x0, x1, oh], i) => (oh < h - 0.04 ? piece(x0, x1, oh, h, `h${i}`) : null))}
+      {segs.map(([x0, x1], i) => piece(x0, x1, y0, h, `s${i}`))}
+      {merged.map(([x0, x1, oh], i) =>
+        oh < h - 0.04 ? piece(x0, x1, Math.max(oh, y0), h, `h${i}`) : null,
+      )}
     </group>
   )
 }
@@ -1548,6 +1592,35 @@ function PartitionWall({ o, tint }: { o: Placed; tint: string | null }) {
   const openings = wallOpenings(doors, o, { cx: 0, cz: 0, along: 'x', len: o.w, t })
   if (o.material === 'glass')
     return <CutWall len={o.w} h={o.h} t={t} openings={openings} color="" glass tint={tint} />
+  if (o.material === 'half') {
+    // solid dado up to solidH, clear glazing above, with an aluminium transom
+    // capping the join and a head rail at the top — the way an office screen
+    // or a gym studio divider is actually built.
+    const sh = Math.min(Math.max(0.1, o.solidH ?? 1), o.h - 0.1)
+    return (
+      <group>
+        <CutWall
+          len={o.w}
+          h={sh}
+          t={t}
+          openings={openings.map((op) => ({ ...op, h: Math.min(op.h, sh) }))}
+          color={tint ?? o.color}
+        />
+        <CutWall
+          len={o.w}
+          h={o.h - 0.05}
+          y0={sh + 0.05}
+          t={t * 0.6}
+          openings={openings.filter((op) => op.h > sh + 0.07)}
+          color=""
+          glass
+          tint={tint}
+        />
+        <Alu args={[o.w, 0.05, t + 0.02]} pos={[0, sh + 0.025, 0]} color={tint ?? '#8a9099'} />
+        <Alu args={[o.w, 0.05, t + 0.02]} pos={[0, o.h - 0.025, 0]} color={tint ?? '#8a9099'} />
+      </group>
+    )
+  }
   if (openings.length === 0)
     return (
       <mesh position={[0, o.h / 2, 0]} castShadow receiveShadow>
@@ -1848,8 +1921,25 @@ function Reception({ o, tint }: { o: Placed; tint: string | null }) {
       </group>
       {/* small card reader + bell on the guest side */}
       <Box args={[0.1, 0.09, 0.07]} pos={[o.w / 4, o.h + 0.045, o.d / 6]} color="#374151" />
-      {/* staff member on a stool behind the counter */}
-      <Figure pose="sit" pos={[-o.w / 5, 0.28, -o.d / 2 - 0.35]} shirt="#0e8f86" idx={3} />
+      {/* staff member on a stool behind the counter — the seated pose puts the
+          feet on the floor at pos.y, so the figure stands on the slab and the
+          stool comes up under it */}
+      <group position={[-o.w / 5, 0, -o.d / 2 - 0.45]}>
+        <mesh position={[0, 0.03, 0]} castShadow>
+          <cylinderGeometry args={[0.24, 0.27, 0.04, 12]} />
+          <meshStandardMaterial color="#2b2f35" roughness={0.5} metalness={0.4} />
+        </mesh>
+        <mesh position={[0, 0.25, 0]} castShadow>
+          <cylinderGeometry args={[0.028, 0.028, 0.42, 8]} />
+          <meshStandardMaterial color="#8f959c" roughness={0.35} metalness={0.6} />
+        </mesh>
+        <mesh position={[0, 0.48, 0]} castShadow>
+          <cylinderGeometry args={[0.21, 0.21, 0.07, 16]} />
+          <meshStandardMaterial color="#41505f" roughness={0.75} />
+        </mesh>
+        <Box args={[0.36, 0.42, 0.05]} pos={[0, 0.74, -0.19]} rot={[-0.14, 0, 0]} color="#41505f" />
+        <Figure pose="sit" pos={[0, 0, 0.06]} shirt="#0e8f86" idx={3} />
+      </group>
     </group>
   )
 }

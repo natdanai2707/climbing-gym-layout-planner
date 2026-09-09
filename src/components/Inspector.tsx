@@ -71,13 +71,23 @@ export function Inspector() {
         <label className="insp-field wide">
           <span>Finish</span>
           <select
-            value={selected.material === 'glass' ? 'glass' : ''}
+            value={selected.material === 'glass' || selected.material === 'half' ? selected.material : ''}
             onChange={(e) => set({ material: (e.target.value || undefined) as Placed['material'] })}
           >
             <option value="">Solid panel</option>
             <option value="glass">Clear glass</option>
+            {selected.category === 'partition' && <option value="half">Solid base + glass above</option>}
           </select>
         </label>
+      )}
+      {selected.category === 'partition' && selected.material === 'half' && (
+        <Field
+          label="Solid base height (m)"
+          value={selected.solidH ?? 1}
+          step={0.1}
+          min={0.1}
+          onChange={(v) => set({ solidH: v })}
+        />
       )}
       {selected.defId === 'bulkhead' && (
         <Field
