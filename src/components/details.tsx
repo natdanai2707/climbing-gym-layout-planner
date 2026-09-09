@@ -345,6 +345,7 @@ function ProfiledFace({
   seed?: number
 }) {
   const t = 0.22
+  const detail = useStore((s) => s.quality !== 'low') // normal maps cost a fetch per fragment
   return (
     <group>
       {profile.slice(0, -1).map((p0, i) => {
@@ -361,7 +362,7 @@ function ProfiledFace({
           >
             <mesh castShadow receiveShadow>
               <boxGeometry args={[w, len, t]} />
-              <meshStandardMaterial color={color} map={surfaceMap('plywood', w, len)} normalMap={surfaceNormal('plywood', w, len)} roughness={0.75} />
+              <meshStandardMaterial color={color} map={surfaceMap('plywood', w, len)} normalMap={detail ? surfaceNormal('plywood', w, len) : undefined} roughness={0.75} />
             </mesh>
             {len > 0.7 && (
               <group position={[0, 0, t / 2 + 0.03]}>
@@ -462,6 +463,7 @@ function ClimbingWall({ o, tint }: { o: Placed; tint: string | null }) {
 // outward (bottom tucked in, top flared) around a core, with holds all around.
 function IslandBoulder({ o, tint }: { o: Placed; tint: string | null }) {
   const color = tint ?? o.color
+  const detail = useStore((s) => s.quality !== 'low')
   const flare = clampN(Math.min(o.w, o.d) * 0.13, 0.25, 0.6)
   const face = (width: number, half: number, seed: number) => {
     const p0 = { y: 0, off: -flare } // bottom tucked toward center
@@ -479,7 +481,7 @@ function IslandBoulder({ o, tint }: { o: Placed; tint: string | null }) {
             <group key={i} position={[0, (a.y + b.y) / 2, half - 0.11 + (a.off + b.off) / 2]} rotation-x={ang}>
               <mesh castShadow receiveShadow>
                 <boxGeometry args={[width, len, 0.22]} />
-                <meshStandardMaterial color={color} map={surfaceMap('plywood', width, len)} normalMap={surfaceNormal('plywood', width, len)} roughness={0.75} />
+                <meshStandardMaterial color={color} map={surfaceMap('plywood', width, len)} normalMap={detail ? surfaceNormal('plywood', width, len) : undefined} roughness={0.75} />
               </mesh>
               <group position={[0, 0, 0.14]}>
                 <Holds w={width} len={len} seed={seed * 5 + i} />
@@ -2971,11 +2973,12 @@ function FaceGate({ o, tint }: { o: Placed; tint: string | null }) {
 // texture and a thin soil edge, for planning surface materials on the site.
 function GroundPatch({ o, tint, kind }: { o: Placed; tint: string | null; kind: 'grass' | 'gravel' }) {
   const h = Math.max(0.03, o.h)
+  const detail = useStore((s) => s.quality !== 'low')
   return (
     <group>
       <mesh position={[0, h / 2, 0]} receiveShadow>
         <boxGeometry args={[o.w, h, o.d]} />
-        <meshStandardMaterial color={tint ?? '#ffffff'} map={surfaceMap(kind, o.w, o.d)} normalMap={surfaceNormal(kind, o.w, o.d)} roughness={1} />
+        <meshStandardMaterial color={tint ?? '#ffffff'} map={surfaceMap(kind, o.w, o.d)} normalMap={detail ? surfaceNormal(kind, o.w, o.d) : undefined} roughness={1} />
       </mesh>
     </group>
   )

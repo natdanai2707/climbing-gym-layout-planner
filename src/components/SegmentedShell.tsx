@@ -104,10 +104,11 @@ export function designMaxHeight(design: ShellDesign): number {
 }
 
 function Cladding({ seg }: { seg: NormSeg }) {
+  const detail = useStore((s) => s.quality !== 'low')
   return seg.clear ? (
     <meshStandardMaterial {...CLEAR_MAT} />
   ) : (
-    <meshStandardMaterial color={seg.color} map={surfaceMapWorld('metalsheet')} normalMap={surfaceNormalWorld('metalsheet')} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />
+    <meshStandardMaterial color={seg.color} map={surfaceMapWorld('metalsheet')} normalMap={detail ? surfaceNormalWorld('metalsheet') : undefined} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />
   )
 }
 
@@ -228,6 +229,7 @@ export function SegmentedShell({ force = false }: { force?: boolean }) {
   const t = 0.15
   const off = building.centerZ
 
+  const detail = useStore((s) => s.quality !== 'low')
   const spans = useMemo(() => (design ? segmentSpans(design, L) : []), [design, L])
   const doors = useMemo(() => objects.filter((o) => o.category === 'door' && o.rule === 'edge'), [objects])
 
@@ -260,11 +262,11 @@ export function SegmentedShell({ force = false }: { force?: boolean }) {
             {/* side walls: left (-X) and right (+X) have independent heights */}
             <mesh position={[-W / 2 - t / 2, seg.eaveL / 2, zc]} castShadow>
               <boxGeometry args={[t, seg.eaveL, len]} />
-              {seg.clear ? <meshStandardMaterial {...CLEAR_MAT} /> : <meshStandardMaterial color={seg.color} map={surfaceMap('metalsheet', len, seg.eaveL)} normalMap={surfaceNormal('metalsheet', len, seg.eaveL)} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />}
+              {seg.clear ? <meshStandardMaterial {...CLEAR_MAT} /> : <meshStandardMaterial color={seg.color} map={surfaceMap('metalsheet', len, seg.eaveL)} normalMap={detail ? surfaceNormal('metalsheet', len, seg.eaveL) : undefined} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />}
             </mesh>
             <mesh position={[W / 2 + t / 2, seg.eaveR / 2, zc]} castShadow>
               <boxGeometry args={[t, seg.eaveR, len]} />
-              {seg.clear ? <meshStandardMaterial {...CLEAR_MAT} /> : <meshStandardMaterial color={seg.color} map={surfaceMap('metalsheet', len, seg.eaveR)} normalMap={surfaceNormal('metalsheet', len, seg.eaveR)} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />}
+              {seg.clear ? <meshStandardMaterial {...CLEAR_MAT} /> : <meshStandardMaterial color={seg.color} map={surfaceMap('metalsheet', len, seg.eaveR)} normalMap={detail ? surfaceNormal('metalsheet', len, seg.eaveR) : undefined} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />}
             </mesh>
             <SegmentRoof seg={seg} W={W} />
             {/* bulkhead face where the next zone has a different profile */}

@@ -446,7 +446,14 @@ function EnvLighting() {
   const gl = useThree((s) => s.gl)
   const scene = useThree((s) => s.scene)
   const mood = useStore((s) => s.lightMood)
+  // Low keeps the lights only: IBL costs a per-fragment cube lookup on every
+  // standard material, which is the wrong trade on a phone in walk mode.
+  const on = useStore((s) => s.quality !== 'low')
   useEffect(() => {
+    if (!on) {
+      scene.environment = null
+      return
+    }
     const pmrem = new THREE.PMREMGenerator(gl)
     const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
     scene.environment = env
@@ -455,10 +462,11 @@ function EnvLighting() {
       env.dispose()
       pmrem.dispose()
     }
-  }, [gl, scene])
+  }, [gl, scene, on])
   useEffect(() => {
-    scene.environmentIntensity = MOODS[mood].env
-  }, [scene, mood])
+    // without IBL the lights carry the whole exposure, so lift them a touch
+    scene.environmentIntensity = on ? MOODS[mood].env : 0
+  }, [scene, mood, on])
   return null
 }
 
@@ -1122,6 +1130,7 @@ export function Scene() {
   const walking = useStore((s) => s.viewMode === 'walk')
   const mood = useStore((s) => s.lightMood)
   const proj = useStore((s) => s.cameraProj)
+  const quality = useStore((s) => s.quality)
   // CSS fallback while the canvas boots; the scene's gradient takes over
   const bg = `linear-gradient(${MOODS[mood].bg[0]}, ${MOODS[mood].bg[1]})`
   return (
@@ -1129,7 +1138,7 @@ export function Scene() {
     // PCF soft shadows; pixel ratio capped at 2. No legacy lighting anywhere.
     <Canvas
       shadows="soft"
-      dpr={[1, 2]}
+      dpr={quality === 'low' ? [1, 1.5] : [1, 2]}
       gl={{
         preserveDrawingBuffer: true,
         antialias: true,

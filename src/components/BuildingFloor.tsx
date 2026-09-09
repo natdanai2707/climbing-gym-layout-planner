@@ -14,6 +14,7 @@ export function BuildingFloor() {
   const { width: W, length: L, apron, centerZ } = useStore((s) => s.building)
   const floor = useStore((s) => s.floor)
   const real = useStore((s) => s.quality === 'high')
+  const detail = useStore((s) => s.quality !== 'low')
   const map = floor.material === 'paint' ? null : surfaceMap(floor.material, W, L)
 
   return (
@@ -31,7 +32,7 @@ export function BuildingFloor() {
           key={floor.material} // map add/remove needs a fresh material
           color={floor.color}
           map={map ?? undefined}
-          normalMap={floor.material === 'paint' ? undefined : surfaceNormal(floor.material, W, L)}
+          normalMap={detail && floor.material !== 'paint' ? surfaceNormal(floor.material, W, L) : undefined}
           roughness={{ concrete: 0.35, paint: 0.5, birch: 0.45, epdm: 0.85 }[floor.material] ?? 0.6}
           metalness={0}
         />

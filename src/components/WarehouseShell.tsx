@@ -43,6 +43,7 @@ export function WarehouseShell() {
   const controls = useThree((s) => s.controls) as { enabled?: boolean } | null
   // no adjustment arrows while walking inside or measuring
   const presenting = useStore((s) => s.viewMode === 'walk' || s.measuring)
+  const detail = useStore((s) => s.quality !== 'low')
 
   const W = building.width
   const L = building.length
@@ -109,7 +110,7 @@ export function WarehouseShell() {
     : {
         color: '#ffffff',
         map: surfaceMap('metalsheet', L, eave),
-        normalMap: surfaceNormal('metalsheet', L, eave),
+        normalMap: detail ? surfaceNormal('metalsheet', L, eave) : undefined,
         roughness: 0.45,
         metalness: 0.35,
         side: THREE.DoubleSide,
@@ -119,7 +120,7 @@ export function WarehouseShell() {
     : {
         color: '#ffffff',
         map: surfaceMapWorld('metalsheet'),
-        normalMap: surfaceNormalWorld('metalsheet'),
+        normalMap: detail ? surfaceNormalWorld('metalsheet') : undefined,
         roughness: 0.45,
         metalness: 0.35,
         side: THREE.DoubleSide,
