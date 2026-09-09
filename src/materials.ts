@@ -354,3 +354,82 @@ export function surfaceNormalWorld(kind: SurfaceKind): THREE.CanvasTexture {
   }
   return t
 }
+
+/* ---- foliage: alpha-mapped leaf cards ---- */
+
+let leafTexCache: THREE.CanvasTexture | null = null
+
+/**
+ * A cluster of individual leaves drawn with transparency, used on small
+ * cards scattered through a tree's branches. This is how real-time foliage
+ * is done: hundreds of thin cards read as thousands of separate leaves,
+ * where a solid blob would only ever read as a lump of clay.
+ */
+export function leafTexture(): THREE.CanvasTexture {
+  if (leafTexCache) return leafTexCache
+  const N = 256
+  const c = document.createElement('canvas')
+  c.width = c.height = N
+  const g = c.getContext('2d')!
+  g.clearRect(0, 0, N, N)
+
+  // one leaf: pointed ellipse with a midrib and a short stem
+  const leaf = (x: number, y: number, len: number, ang: number, hue: number, light: number) => {
+    g.save()
+    g.translate(x, y)
+    g.rotate(ang)
+    const w = len * (0.5 + rnd() * 0.16)
+    const grad = g.createLinearGradient(0, -len / 2, 0, len / 2)
+    grad.addColorStop(0, `hsl(${hue} ${38 + rnd() * 14}% ${light + 6}%)`)
+    grad.addColorStop(1, `hsl(${hue} ${40 + rnd() * 14}% ${light - 7}%)`)
+    g.fillStyle = grad
+    g.beginPath()
+    g.moveTo(0, -len / 2) // tip
+    g.bezierCurveTo(w / 2, -len * 0.22, w / 2, len * 0.24, 0, len / 2)
+    g.bezierCurveTo(-w / 2, len * 0.24, -w / 2, -len * 0.22, 0, -len / 2)
+    g.fill()
+    // midrib + a couple of veins
+    g.strokeStyle = `hsla(${hue} 30% ${light - 16}% / 0.5)`
+    g.lineWidth = Math.max(0.6, len * 0.025)
+    g.beginPath()
+    g.moveTo(0, -len / 2)
+    g.lineTo(0, len / 2)
+    g.stroke()
+    g.lineWidth = Math.max(0.4, len * 0.016)
+    for (const t of [-0.16, 0.06, 0.26]) {
+      g.beginPath()
+      g.moveTo(0, len * t)
+      g.lineTo(w * 0.36, len * (t + 0.13))
+      g.moveTo(0, len * t)
+      g.lineTo(-w * 0.36, len * (t + 0.13))
+      g.stroke()
+    }
+    // stem
+    g.strokeStyle = `hsla(${hue - 8} 26% ${light - 20}% / 0.75)`
+    g.lineWidth = Math.max(0.7, len * 0.03)
+    g.beginPath()
+    g.moveTo(0, len / 2)
+    g.lineTo(0, len / 2 + len * 0.13)
+    g.stroke()
+    g.restore()
+  }
+
+  // a spray of leaves filling the card, denser in the middle
+  for (let i = 0; i < 54; i++) {
+    const a = rnd() * Math.PI * 2
+    const r = Math.pow(rnd(), 0.62) * N * 0.44
+    leaf(
+      N / 2 + Math.cos(a) * r,
+      N / 2 + Math.sin(a) * r * 0.86,
+      N * (0.13 + rnd() * 0.1),
+      rnd() * Math.PI * 2,
+      88 + rnd() * 26, // yellow-green .. green
+      30 + rnd() * 22,
+    )
+  }
+  const t = new THREE.CanvasTexture(c)
+  t.colorSpace = THREE.SRGBColorSpace
+  t.anisotropy = 4
+  leafTexCache = t
+  return t
+}

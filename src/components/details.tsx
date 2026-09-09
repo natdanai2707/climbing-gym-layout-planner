@@ -1,13 +1,14 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
-import type { ReactNode } from 'react'
+
 import * as THREE from 'three'
 import { Edges, MeshReflectorMaterial } from '@react-three/drei'
 import type { Placed } from '../types'
 import { useWallStore } from '../wall/wallStore'
 import { WallModel } from '../wall/WallModel'
 import { designDepth, designWidth } from '../wall/profile'
-import { ROUTE_COLORS, SURFACE_TINTED, surfaceMap, surfaceNormal } from '../materials'
+import { ROUTE_COLORS, SURFACE_TINTED, leafTexture, surfaceMap, surfaceNormal } from '../materials'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { wallOpenings } from '../placement'
 import type { Opening } from '../placement'
 import { useStore } from '../store'
@@ -78,55 +79,145 @@ function Box({
 /* ------------------------------ people ------------------------------ */
 
 const HOLD_COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#a855f7', '#eab308', '#ec4899', '#14b8a6']
-// Arch-viz figures: one desaturated grey family, slightly translucent, so
-// people give scale without stealing attention from the architecture.
-const FIG_ALPHA = 0.85
-const SKIN_COLORS = ['#c6cad0', '#bfc3c9', '#b7bbc2', '#c9ccd2']
-const HAIR_COLORS = ['#9298a0', '#878d95', '#9ba1a8', '#8d939b', '#959ba2']
-const PANTS_COLORS = ['#9aa0a8', '#93999f', '#a2a7ae', '#8f959d', '#9da2aa']
+// Arch-viz scale figures: faceted low-poly people in one neutral grey, the
+// way presentation renders show occupancy without competing with the
+// architecture. Slight value steps keep a crowd from looking cloned.
+const FIG_GREYS = ['#c2c6cb', '#b8bcc2', '#cbcfd4', '#aeb3b9', '#c6cad0']
 
 export type Pose = 'stand' | 'walk' | 'sit' | 'climb' | 'push' | 'hang'
 
-// A limb capsule pivoting from its top (the joint); rotating the group swings it.
-function Limb({
-  r,
-  len,
-  pos,
-  rot,
-  color,
-  children,
-}: {
-  r: number
-  len: number
-  pos: [number, number, number]
-  rot: [number, number, number]
-  color: string
-  children?: ReactNode
-}) {
-  return (
-    <group position={pos} rotation={rot}>
-      <mesh position={[0, -len / 2, 0]} castShadow>
-        <capsuleGeometry args={[r, len, 3, 8]} />
-        <meshStandardMaterial color={color} roughness={0.8} transparent opacity={FIG_ALPHA} />
-      </mesh>
-      {children}
-    </group>
-  )
+/**
+ * Lofted body part: a closed tube through a stack of elliptical cross
+ * sections. Few radial segments + flat shading give the faceted low-poly
+ * look of arch-viz figure packs, and real cross-section changes give the
+ * silhouette (shoulders, chest, waist, calves) that capsules never had.
+ */
+type Section = { y: number; rx: number; rz: number; x?: number; z?: number }
+
+const RADIAL = 8
+function loftGeometry(sections: Section[]): THREE.BufferGeometry {
+  const pos: number[] = []
+  const idx: number[] = []
+  const rings = sections.length
+  for (const s of sections) {
+    for (let k = 0; k < RADIAL; k++) {
+      const a = (k / RADIAL) * Math.PI * 2
+      pos.push((s.x ?? 0) + Math.cos(a) * s.rx, s.y, (s.z ?? 0) + Math.sin(a) * s.rz)
+    }
+  }
+  for (let r = 0; r < rings - 1; r++) {
+    for (let k = 0; k < RADIAL; k++) {
+      const a = r * RADIAL + k
+      const b = r * RADIAL + ((k + 1) % RADIAL)
+      const c = (r + 1) * RADIAL + k
+      const d = (r + 1) * RADIAL + ((k + 1) % RADIAL)
+      idx.push(a, c, b, b, c, d)
+    }
+  }
+  // caps
+  const capBottom = pos.length / 3
+  const s0 = sections[0]
+  pos.push(s0.x ?? 0, s0.y, s0.z ?? 0)
+  const capTop = pos.length / 3
+  const sN = sections[rings - 1]
+  pos.push(sN.x ?? 0, sN.y, sN.z ?? 0)
+  for (let k = 0; k < RADIAL; k++) {
+    idx.push(capBottom, k, (k + 1) % RADIAL)
+    const base = (rings - 1) * RADIAL
+    idx.push(capTop, base + ((k + 1) % RADIAL), base + k)
+  }
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  g.setIndex(idx)
+  g.computeVertexNormals()
+  return g
 }
 
-// Joint rotations per pose: [arms L/R, thighs L/R, shins L/R].
-// x-rotation swings forward(-)/backward(+); z-rotation swings out to the side.
+// Joint angles per pose: [arm L/R, thigh L/R, shin L/R] as x/z swing.
 const POSES: Record<Pose, { aL: number[]; aR: number[]; tL: number[]; tR: number[]; sL: number[]; sR: number[] }> = {
-  stand: { aL: [0, 0, 0.16], aR: [0, 0, -0.16], tL: [0, 0, 0.05], tR: [0, 0, -0.05], sL: [0, 0, 0], sR: [0, 0, 0] },
-  walk: { aL: [0.55, 0, 0.08], aR: [-0.55, 0, -0.08], tL: [-0.5, 0, 0.04], tR: [0.45, 0, -0.04], sL: [0.7, 0, 0], sR: [0.25, 0, 0] },
-  sit: { aL: [-0.95, 0, 0.12], aR: [-0.95, 0, -0.12], tL: [-1.4, 0, 0.08], tR: [-1.4, 0, -0.08], sL: [1.35, 0, 0], sR: [1.35, 0, 0] },
-  climb: { aL: [0, 0, 2.45], aR: [0, 0, -2.45], tL: [-0.45, 0, 0.5], tR: [-0.55, 0, -0.45], sL: [1.0, 0, 0], sR: [1.05, 0, 0] },
+  stand: { aL: [0.06, 0, 0.1], aR: [-0.04, 0, -0.1], tL: [0, 0, 0.03], tR: [0, 0, -0.03], sL: [0, 0, 0], sR: [0, 0, 0] },
+  walk: { aL: [0.62, 0, 0.07], aR: [-0.62, 0, -0.07], tL: [-0.52, 0, 0.03], tR: [0.46, 0, -0.03], sL: [0.66, 0, 0], sR: [0.22, 0, 0] },
+  sit: { aL: [-0.95, 0, 0.1], aR: [-0.95, 0, -0.1], tL: [-1.45, 0, 0.06], tR: [-1.45, 0, -0.06], sL: [1.4, 0, 0], sR: [1.4, 0, 0] },
+  climb: { aL: [-0.5, 0, 2.75], aR: [-0.35, 0, -2.55], tL: [-0.95, 0, 0.42], tR: [-0.3, 0, -0.3], sL: [1.5, 0, 0], sR: [0.5, 0, 0] },
   push: { aL: [-1.35, 0, 0.08], aR: [-1.35, 0, -0.08], tL: [-0.35, 0, 0.05], tR: [0.3, 0, -0.05], sL: [0.5, 0, 0], sR: [0.2, 0, 0] },
-  hang: { aL: [0, 0, 2.9], aR: [0, 0, -2.9], tL: [-0.3, 0, 0.08], tR: [-0.2, 0, -0.08], sL: [0.9, 0, 0], sR: [0.75, 0, 0] },
+  hang: { aL: [-0.2, 0, 2.95], aR: [-0.2, 0, -2.95], tL: [-0.35, 0, 0.1], tR: [-0.2, 0, -0.1], sL: [0.95, 0, 0], sR: [0.8, 0, 0] },
 }
 
-// Posed person with head, torso, arms and two-segment legs (~1.45 tall at scale 1).
-// Static — people are attached to their item; they do not wander.
+// cached body-part geometries — every figure shares the same meshes
+const bodyGeo = {
+  get torso() {
+    return (bodyGeo._torso ??= loftGeometry([
+      { y: 0.0, rx: 0.105, rz: 0.072 }, // hips
+      { y: 0.09, rx: 0.101, rz: 0.068 },
+      { y: 0.2, rx: 0.093, rz: 0.062 }, // waist
+      { y: 0.31, rx: 0.108, rz: 0.072 },
+      { y: 0.42, rx: 0.126, rz: 0.079 }, // chest
+      { y: 0.5, rx: 0.148, rz: 0.079 }, // shoulders
+      { y: 0.55, rx: 0.112, rz: 0.068 },
+      { y: 0.585, rx: 0.06, rz: 0.052 }, // neck base
+    ]))
+  },
+  get head() {
+    return (bodyGeo._head ??= loftGeometry([
+      { y: 0, rx: 0.042, rz: 0.042 }, // neck
+      { y: 0.05, rx: 0.055, rz: 0.056 },
+      { y: 0.1, rx: 0.076, rz: 0.083 }, // jaw
+      { y: 0.16, rx: 0.086, rz: 0.093 }, // cheeks
+      { y: 0.2, rx: 0.088, rz: 0.095 }, // cranium
+      { y: 0.245, rx: 0.078, rz: 0.084 },
+      { y: 0.275, rx: 0.052, rz: 0.056 },
+    ]))
+  },
+  get arm() {
+    // pivots at the shoulder, hangs down: upper arm → elbow → forearm → hand
+    return (bodyGeo._arm ??= loftGeometry([
+      { y: -0.62, rx: 0.036, rz: 0.03 }, // hand
+      { y: -0.57, rx: 0.031, rz: 0.026 },
+      { y: -0.53, rx: 0.026, rz: 0.024 }, // wrist
+      { y: -0.36, rx: 0.036, rz: 0.033 },
+      { y: -0.29, rx: 0.041, rz: 0.038 }, // elbow
+      { y: -0.16, rx: 0.047, rz: 0.044 },
+      { y: 0.0, rx: 0.072, rz: 0.066 }, // shoulder ball, buried in the torso
+    ]))
+  },
+  get thigh() {
+    return (bodyGeo._thigh ??= loftGeometry([
+      { y: -0.42, rx: 0.052, rz: 0.055 }, // knee
+      { y: -0.3, rx: 0.062, rz: 0.066 },
+      { y: -0.12, rx: 0.074, rz: 0.079 },
+      { y: 0.02, rx: 0.096, rz: 0.094 }, // hip ball, buried in the pelvis
+    ]))
+  },
+  get shin() {
+    return (bodyGeo._shin ??= loftGeometry([
+      { y: -0.42, rx: 0.035, rz: 0.036 }, // ankle
+      { y: -0.34, rx: 0.04, rz: 0.043 },
+      { y: -0.18, rx: 0.055, rz: 0.062 }, // calf
+      { y: -0.06, rx: 0.052, rz: 0.056 },
+      { y: 0.0, rx: 0.05, rz: 0.053 }, // knee
+    ]))
+  },
+  get shoe() {
+    return (bodyGeo._shoe ??= loftGeometry([
+      { y: -0.055, rx: 0.042, rz: 0.115, z: 0.03 },
+      { y: -0.02, rx: 0.045, rz: 0.118, z: 0.03 },
+      { y: 0.02, rx: 0.042, rz: 0.09, z: 0.012 },
+      { y: 0.06, rx: 0.038, rz: 0.055, z: -0.005 },
+    ]))
+  },
+  _torso: null as THREE.BufferGeometry | null,
+  _head: null as THREE.BufferGeometry | null,
+  _arm: null as THREE.BufferGeometry | null,
+  _thigh: null as THREE.BufferGeometry | null,
+  _shin: null as THREE.BufferGeometry | null,
+  _shoe: null as THREE.BufferGeometry | null,
+}
+
+/**
+ * A faceted grey scale figure, ~1.70 m tall, posed from POSES. Built from
+ * lofted cross-sections so the silhouette has real shoulders, waist and
+ * calves; flat-shaded and monochrome like an arch-viz people pack.
+ */
 export function Figure({
   pos = [0, 0, 0] as [number, number, number],
   ry = 0,
@@ -142,62 +233,49 @@ export function Figure({
   idx?: number
   scale?: number
 }) {
-  void shirt // arch-viz figures stay monochrome; callers' colors are ignored
-  const cShirt = ['#b3b8bf', '#adb2b9', '#b9bdc4'][idx % 3]
-  const cSkin = SKIN_COLORS[idx % SKIN_COLORS.length]
-  const cPants = PANTS_COLORS[(idx * 5 + 2) % PANTS_COLORS.length]
-  const cHair = HAIR_COLORS[(idx * 3 + 1) % HAIR_COLORS.length]
-  const cShoe = '#868c94'
+  void shirt // scale figures stay monochrome; callers' colors are ignored
+  const grey = FIG_GREYS[idx % FIG_GREYS.length]
   const P = POSES[pose]
   const rot3 = (a: number[]) => a as [number, number, number]
-  const hand = (
-    <mesh position={[0, -0.5, 0]} castShadow>
-      <sphereGeometry args={[0.042, 8, 6]} />
-      <meshStandardMaterial color={cSkin} roughness={0.7} transparent opacity={FIG_ALPHA} />
-    </mesh>
-  )
+  const mat = <meshStandardMaterial color={grey} roughness={0.92} metalness={0} flatShading />
+  // the loft is authored around a ~1.0 m torso-up body; scale to 1.70 m
+  const K = 1.7 / 1.72
   return (
-    <group position={pos} rotation-y={ry} scale={scale * (1.7 / 1.45)}>
-      {/* shirt torso (broader shoulders, flatter chest) over pants hips */}
-      <mesh position={[0, 0.8, 0]} scale={[1.12, 1, 0.76]} castShadow>
-        <capsuleGeometry args={[0.125, 0.28, 4, 10]} />
-        <meshStandardMaterial color={cShirt} roughness={0.85} transparent opacity={FIG_ALPHA} />
-      </mesh>
-      <mesh position={[0, 0.58, 0]} scale={[1.02, 1, 0.82]} castShadow>
-        <capsuleGeometry args={[0.108, 0.1, 3, 10]} />
-        <meshStandardMaterial color={cPants} roughness={0.85} transparent opacity={FIG_ALPHA} />
-      </mesh>
-      {/* neck and a slightly oval head with a hair cap */}
-      <mesh position={[0, 1.05, 0]}>
-        <cylinderGeometry args={[0.042, 0.05, 0.09, 8]} />
-        <meshStandardMaterial color={cSkin} roughness={0.7} transparent opacity={FIG_ALPHA} />
-      </mesh>
-      <mesh position={[0, 1.17, 0]} scale={[0.94, 1.08, 0.96]} castShadow>
-        <sphereGeometry args={[0.103, 14, 12]} />
-        <meshStandardMaterial color={cSkin} roughness={0.7} transparent opacity={FIG_ALPHA} />
-      </mesh>
-      <mesh position={[0, 1.2, -0.018]} scale={[1.05, 0.85, 1.05]} castShadow>
-        <sphereGeometry args={[0.106, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
-        <meshStandardMaterial color={cHair} roughness={0.95} transparent opacity={FIG_ALPHA} />
-      </mesh>
-      {/* arms from the shoulders, with hands */}
-      <Limb r={0.037} len={0.48} pos={[0.18, 0.94, 0]} rot={rot3(P.aL)} color={cShirt}>
-        {hand}
-      </Limb>
-      <Limb r={0.037} len={0.48} pos={[-0.18, 0.94, 0]} rot={rot3(P.aR)} color={cShirt}>
-        {hand}
-      </Limb>
-      {/* legs: thigh with nested shin (knee), shoes at the ankles */}
-      <Limb r={0.051} len={0.24} pos={[0.08, 0.55, 0]} rot={rot3(P.tL)} color={cPants}>
-        <Limb r={0.041} len={0.24} pos={[0, -0.28, 0]} rot={rot3(P.sL)} color={cPants}>
-          <Box args={[0.08, 0.055, 0.19]} pos={[0, -0.29, 0.045]} color={cShoe} />
-        </Limb>
-      </Limb>
-      <Limb r={0.051} len={0.24} pos={[-0.08, 0.55, 0]} rot={rot3(P.tR)} color={cPants}>
-        <Limb r={0.041} len={0.24} pos={[0, -0.28, 0]} rot={rot3(P.sR)} color={cPants}>
-          <Box args={[0.08, 0.055, 0.19]} pos={[0, -0.29, 0.045]} color={cShoe} />
-        </Limb>
-      </Limb>
+    <group position={pos} rotation-y={ry} scale={scale * K}>
+      {/* pelvis → shoulders */}
+      <group position={[0, 0.94, 0]}>
+        <mesh geometry={bodyGeo.torso} castShadow receiveShadow>
+          {mat}
+        </mesh>
+        {/* head on the neck */}
+        <mesh geometry={bodyGeo.head} position={[0, 0.55, 0]} castShadow>
+          {mat}
+        </mesh>
+        {/* arms hinge at the shoulders */}
+        {([1, -1] as const).map((s) => (
+          <group key={s} position={[s * 0.118, 0.47, 0]} rotation={rot3(s > 0 ? P.aL : P.aR)}>
+            <mesh geometry={bodyGeo.arm} castShadow>
+              {mat}
+            </mesh>
+          </group>
+        ))}
+      </group>
+      {/* legs hinge at the hips */}
+      {([1, -1] as const).map((s) => (
+        <group key={s} position={[s * 0.062, 0.95, 0]} rotation={rot3(s > 0 ? P.tL : P.tR)}>
+          <mesh geometry={bodyGeo.thigh} castShadow>
+            {mat}
+          </mesh>
+          <group position={[0, -0.42, 0]} rotation={rot3(s > 0 ? P.sL : P.sR)}>
+            <mesh geometry={bodyGeo.shin} castShadow>
+              {mat}
+            </mesh>
+            <mesh geometry={bodyGeo.shoe} position={[0, -0.42, 0]} castShadow>
+              {mat}
+            </mesh>
+          </group>
+        </group>
+      ))}
     </group>
   )
 }
@@ -225,16 +303,26 @@ function Climber({
 /* ------------------------------ climbing walls ------------------------------ */
 
 /**
- * Route-set holds over a w × len wall plane (local xy, +z out of the wall) —
- * the way real gyms set: each ROUTE is a wandering bottom-to-top line of
- * holds sharing ONE color, spaced roughly every 1.1 m across the wall, and
- * hold sizes mix like a real set: mostly small crimps and foot chips, some
- * mid-size holds, the occasional big jug. Plus a couple of plywood-style
- * screw-on volumes on larger faces. Deterministic per seed.
+ * Route-set holds over a w × len wall face. Real gyms set ROUTES: a wandering
+ * bottom-to-top line of holds sharing ONE color, roughly every 1.1 m across
+ * the wall, with the size and shape mix of a commercial set — mostly small
+ * crimps and foot chips, some mid-size, the occasional big jug or sloper —
+ * plus a couple of black fibreglass volumes on larger faces. When a surface
+ * sampler is supplied the holds sit on the faceted panel, not on a flat plane.
  */
-export function Holds({ w, len, count, seed = 1 }: { w: number; len: number; count?: number; seed?: number }) {
-  const ref = useRef<THREE.InstancedMesh>(null)
-  const { items, volumes } = useMemo(() => {
+export function Holds({
+  w,
+  len,
+  seed = 1,
+  surface,
+}: {
+  w: number
+  len: number
+  count?: number
+  seed?: number
+  surface?: (u: number, v: number) => THREE.Vector3
+}) {
+  const { holds, volumes } = useMemo(() => {
     let s = ((seed + 1) * 2654435761) >>> 0 || 7
     const rnd = () => {
       s = (s * 1103515245 + 12345) & 0x7fffffff
@@ -242,8 +330,12 @@ export function Holds({ w, len, count, seed = 1 }: { w: number; len: number; cou
     }
     const uw = Math.max(0.3, w - 0.3)
     const ul = Math.max(0.3, len - 0.2)
+    const at = (x: number, y: number) => {
+      if (!surface) return new THREE.Vector3(x, y, 0)
+      return surface(x / w + 0.5, y / len + 0.5)
+    }
     const nRoutes = Math.max(1, Math.min(10, Math.round(uw / 1.1)))
-    const list: Array<{ x: number; y: number; sx: number; sy: number; sz: number; rz: number; c: string }> = []
+    const list: Array<{ p: [number, number, number]; sc: [number, number, number]; rot: [number, number, number]; kind: number; c: string }> = []
     const colStart = Math.floor(rnd() * ROUTE_COLORS.length)
     for (let r = 0; r < nRoutes; r++) {
       const c = ROUTE_COLORS[(colStart + r) % ROUTE_COLORS.length]
@@ -251,73 +343,77 @@ export function Holds({ w, len, count, seed = 1 }: { w: number; len: number; cou
       let y = -ul / 2 + 0.05 + rnd() * 0.2
       while (y < ul / 2) {
         const roll = rnd()
-        // 50% crimps/foot chips, 35% mid-size, 15% jugs
-        const base = roll < 0.5 ? 0.032 + rnd() * 0.028 : roll < 0.85 ? 0.065 + rnd() * 0.04 : 0.11 + rnd() * 0.055
+        // 0 = crimp/chip (small wedge), 1 = mid pocket, 2 = jug, 3 = sloper
+        const kind = roll < 0.46 ? 0 : roll < 0.78 ? 1 : roll < 0.92 ? 2 : 3
+        const base = kind === 0 ? 0.035 + rnd() * 0.03 : kind === 1 ? 0.07 + rnd() * 0.035 : kind === 2 ? 0.11 + rnd() * 0.05 : 0.1 + rnd() * 0.04
+        const p = at(x, y)
         list.push({
-          x,
-          y,
-          sx: base * (1.1 + rnd() * 0.9), // wider than tall, like real shapes
-          sy: base * (0.7 + rnd() * 0.5),
-          sz: base * (0.5 + rnd() * 0.35), // low profile off the wall
-          rz: rnd() * Math.PI * 2,
+          p: [p.x, p.y, p.z + base * 0.42],
+          sc: [base * (1.05 + rnd() * 0.8), base * (0.8 + rnd() * 0.5), base * (kind === 3 ? 0.5 : 0.75 + rnd() * 0.4)],
+          rot: [(rnd() - 0.5) * 0.7, (rnd() - 0.5) * 0.7, rnd() * Math.PI * 2],
+          kind,
           c,
         })
         y += 0.3 + rnd() * 0.35
         x = Math.max(-uw / 2, Math.min(uw / 2, x + (rnd() - 0.5) * 0.55))
-        if (count && list.length >= count * 4) break
       }
     }
-    // large volumes on big faces (matte black / plywood, like fiberglass macros)
-    const vols: Array<{ x: number; y: number; r: number; h: number; ry: number; c: string }> = []
+    // big angular fibreglass volumes, as in a real setting
+    const vols: Array<{ p: [number, number, number]; r: number; h: number; rot: [number, number, number]; c: string }> = []
     const nVol = uw > 2 && ul > 2 ? 1 + Math.floor(rnd() * 2) : 0
     for (let i = 0; i < nVol; i++) {
+      const x = (rnd() - 0.5) * (uw - 0.9)
+      const y = (rnd() - 0.5) * (ul - 1.1)
+      const p = at(x, y)
       vols.push({
-        x: (rnd() - 0.5) * (uw - 0.9),
-        y: (rnd() - 0.5) * (ul - 1.1),
-        r: 0.32 + rnd() * 0.26,
-        h: 0.16 + rnd() * 0.14,
-        ry: rnd() * Math.PI,
-        c: rnd() < 0.5 ? '#23262c' : rnd() < 0.5 ? '#cfc4ae' : '#3a6ea5',
+        p: [p.x, p.y, p.z + 0.05],
+        r: 0.3 + rnd() * 0.3,
+        h: 0.18 + rnd() * 0.16,
+        rot: [(rnd() - 0.5) * 0.4, (rnd() - 0.5) * 0.4, rnd() * Math.PI],
+        c: rnd() < 0.62 ? '#1c1f24' : '#e8e3d6',
       })
     }
-    return { items: list, volumes: vols }
-  }, [w, len, seed, count])
-  useLayoutEffect(() => {
-    const mesh = ref.current
-    if (!mesh) return
-    const M = new THREE.Matrix4()
-    const P = new THREE.Vector3()
-    const Q = new THREE.Quaternion()
-    const S = new THREE.Vector3()
-    const E = new THREE.Euler()
-    const c = new THREE.Color()
-    const hsl = { h: 0, s: 0, l: 0 }
-    items.forEach((it, i) => {
-      P.set(it.x, it.y, 0)
-      E.set(0, 0, it.rz)
-      Q.setFromEuler(E)
-      S.set(it.sx, it.sy, it.sz)
-      M.compose(P, Q, S)
-      mesh.setMatrixAt(i, M)
-      // resin holds: colorful but ~15% less saturated than pure catalog hues
-      c.set(it.c).getHSL(hsl)
-      c.setHSL(hsl.h, hsl.s * 0.85, hsl.l)
-      mesh.setColorAt(i, c)
-    })
-    mesh.instanceMatrix.needsUpdate = true
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-  }, [items])
-  if (items.length === 0) return null
+    return { holds: list, volumes: vols }
+  }, [w, len, seed, surface])
+
+  // one resin material per route color, shared across that route's holds
+  const mats = useMemo(() => {
+    const m = new Map<string, THREE.Material>()
+    for (const h of holds) {
+      if (m.has(h.c)) continue
+      const col = new THREE.Color(h.c)
+      const hsl = { h: 0, s: 0, l: 0 }
+      col.getHSL(hsl)
+      col.setHSL(hsl.h, hsl.s * 0.85, hsl.l) // resin, slightly desaturated
+      m.set(
+        h.c,
+        new THREE.MeshPhysicalMaterial({ color: col, roughness: 0.32, clearcoat: 0.45, clearcoatRoughness: 0.3, flatShading: true }),
+      )
+    }
+    return m
+  }, [holds])
+
+  if (holds.length === 0) return null
   return (
     <group>
-      <instancedMesh key={items.length} ref={ref} args={[undefined, undefined, items.length]} frustumCulled={false}>
-        <icosahedronGeometry args={[1, 1]} />
-        <meshPhysicalMaterial roughness={0.3} clearcoat={0.4} clearcoatRoughness={0.3} flatShading />
-      </instancedMesh>
+      {holds.map((h, i) => (
+        <mesh key={i} position={h.p} rotation={h.rot} scale={h.sc} material={mats.get(h.c)} castShadow>
+          {/* crimps and pockets are wedge-like, jugs and slopers rounder */}
+          {h.kind === 0 ? (
+            <coneGeometry args={[1, 1.5, 4]} />
+          ) : h.kind === 1 ? (
+            <dodecahedronGeometry args={[1, 0]} />
+          ) : h.kind === 2 ? (
+            <icosahedronGeometry args={[1, 1]} />
+          ) : (
+            <sphereGeometry args={[1, 8, 5]} />
+          )}
+        </mesh>
+      ))}
       {volumes.map((v, i) => (
-        <mesh key={`v${i}`} position={[v.x, v.y, v.h / 2]} rotation={[-Math.PI / 2, v.ry, 0]} castShadow>
-          <coneGeometry args={[v.r, v.h, 4]} />
-          <meshStandardMaterial color={v.c} roughness={0.85} flatShading />
+        <mesh key={`v${i}`} position={v.p} rotation={v.rot} castShadow>
+          <coneGeometry args={[v.r, v.h, 3]} />
+          <meshStandardMaterial color={v.c} roughness={0.86} flatShading />
         </mesh>
       ))}
     </group>
@@ -329,8 +425,148 @@ interface ProfilePoint {
   off: number // forward offset from the back plane at this height
 }
 
-// One face strip built from an arbitrary height/offset polyline — each segment is
-// an angled panel, so a face can go slab → vertical → overhang → roof like a real wall.
+/**
+ * A faceted climbing face: the panel plane is triangulated on an irregular
+ * grid and every vertex is pushed in or out, so the surface breaks into big
+ * flat triangles that catch light separately — the way real ply-panel walls
+ * are built out of angular facets, instead of one smooth slab.
+ */
+function facetedFace(
+  w: number,
+  len: number,
+  profile: ProfilePoint[],
+  seed: number,
+): { geo: THREE.BufferGeometry; sample: (u: number, v: number) => THREE.Vector3 } {
+  let s = ((seed + 3) * 2654435761) >>> 0 || 11
+  const rnd = () => {
+    s = (s * 1103515245 + 12345) & 0x7fffffff
+    return s / 0x7fffffff
+  }
+  const NX = Math.max(3, Math.min(7, Math.round(w / 1.6)))
+  const NY = Math.max(3, Math.min(8, Math.round(len / 1.4)))
+  // profile lookup: forward offset at a height fraction
+  const offAt = (t: number) => {
+    const y = profile[0].y + t * (profile[profile.length - 1].y - profile[0].y)
+    for (let i = 0; i < profile.length - 1; i++) {
+      const a = profile[i]
+      const b = profile[i + 1]
+      if (y >= a.y && y <= b.y) {
+        const f = (y - a.y) / Math.max(1e-4, b.y - a.y)
+        return a.off + (b.off - a.off) * f
+      }
+    }
+    return profile[profile.length - 1].off
+  }
+  const grid: THREE.Vector3[][] = []
+  for (let j = 0; j <= NY; j++) {
+    const row: THREE.Vector3[] = []
+    const v = j / NY
+    for (let i = 0; i <= NX; i++) {
+      const u = i / NX
+      const edge = i === 0 || i === NX || j === 0 || j === NY
+      // jitter interior vertices in-plane, and push every vertex out by a
+      // random amount so neighbouring triangles never stay coplanar
+      const jx = edge ? 0 : (rnd() - 0.5) * (w / NX) * 0.55
+      const jy = edge ? 0 : (rnd() - 0.5) * (len / NY) * 0.55
+      const bulge = (edge ? 0.35 : 1) * (rnd() - 0.35) * Math.min(0.42, w * 0.06)
+      row.push(new THREE.Vector3((u - 0.5) * w + jx, (v - 0.5) * len + jy, offAt(v) + bulge))
+    }
+    grid.push(row)
+  }
+  const pos: number[] = []
+  const tri = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => {
+    pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z)
+  }
+  const t = 0.14 // panel thickness, closed at the rim
+  const back = (p: THREE.Vector3) => new THREE.Vector3(p.x, p.y, p.z - t)
+  for (let j = 0; j < NY; j++) {
+    for (let i = 0; i < NX; i++) {
+      const a = grid[j][i]
+      const b = grid[j][i + 1]
+      const c = grid[j + 1][i]
+      const d = grid[j + 1][i + 1]
+      // alternate the diagonal so facets read as an irregular triangulation
+      if ((i + j) % 2 === 0) {
+        tri(a, b, d)
+        tri(a, d, c)
+      } else {
+        tri(a, b, c)
+        tri(b, d, c)
+      }
+      // back shell (reversed winding)
+      const A = back(a)
+      const B = back(b)
+      const C = back(c)
+      const D = back(d)
+      tri(A, D, B)
+      tri(A, C, D)
+    }
+  }
+  // rim
+  for (let i = 0; i < NX; i++) {
+    for (const [row, flip] of [[0, true], [NY, false]] as const) {
+      const a = grid[row][i]
+      const b = grid[row][i + 1]
+      const A = back(a)
+      const B = back(b)
+      if (flip) {
+        tri(a, A, b)
+        tri(b, A, B)
+      } else {
+        tri(a, b, A)
+        tri(b, B, A)
+      }
+    }
+  }
+  for (let j = 0; j < NY; j++) {
+    for (const [col, flip] of [[0, false], [NX, true]] as const) {
+      const a = grid[j][col]
+      const b = grid[j + 1][col]
+      const A = back(a)
+      const B = back(b)
+      if (flip) {
+        tri(a, A, b)
+        tri(b, A, B)
+      } else {
+        tri(a, b, A)
+        tri(b, B, A)
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  geo.computeVertexNormals()
+  // UVs in meters so the T-nut grid keeps its real spacing
+  const p = geo.getAttribute('position')
+  const uv = new Float32Array(p.count * 2)
+  for (let i = 0; i < p.count; i++) {
+    uv[i * 2] = (p.getX(i) + w / 2) / 1.5
+    uv[i * 2 + 1] = (p.getY(i) + len / 2) / 1.5
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2))
+
+  // bilinear sample of the front surface, for placing holds ON the facets
+  const sample = (u: number, v: number) => {
+    const fx = Math.min(NX - 1e-6, Math.max(0, u * NX))
+    const fy = Math.min(NY - 1e-6, Math.max(0, v * NY))
+    const i = Math.floor(fx)
+    const j = Math.floor(fy)
+    const s1 = fx - i
+    const s2 = fy - j
+    const a = grid[j][i]
+    const b = grid[j][i + 1]
+    const c = grid[j + 1][i]
+    const d = grid[j + 1][i + 1]
+    return new THREE.Vector3(
+      a.x * (1 - s1) * (1 - s2) + b.x * s1 * (1 - s2) + c.x * (1 - s1) * s2 + d.x * s1 * s2,
+      a.y * (1 - s1) * (1 - s2) + b.y * s1 * (1 - s2) + c.y * (1 - s1) * s2 + d.y * s1 * s2,
+      a.z * (1 - s1) * (1 - s2) + b.z * s1 * (1 - s2) + c.z * (1 - s1) * s2 + d.z * s1 * s2,
+    )
+  }
+  return { geo, sample }
+}
+
+// One faceted panel plus its route-set holds and fibreglass volumes.
 function ProfiledFace({
   w,
   profile,
@@ -344,34 +580,23 @@ function ProfiledFace({
   backZ: number
   seed?: number
 }) {
-  const t = 0.22
-  const detail = useStore((s) => s.quality !== 'low') // normal maps cost a fetch per fragment
+  const detail = useStore((s) => s.quality !== 'low')
+  const len = profile[profile.length - 1].y - profile[0].y
+  const midY = (profile[0].y + profile[profile.length - 1].y) / 2
+  const { geo, sample } = useMemo(() => facetedFace(w, len, profile, seed), [w, len, profile, seed])
   return (
-    <group>
-      {profile.slice(0, -1).map((p0, i) => {
-        const p1 = profile[i + 1]
-        const dy = p1.y - p0.y
-        const doff = p1.off - p0.off
-        const len = Math.hypot(dy, doff) + 0.18 // slight overlap hides seams at joints
-        const ang = Math.atan2(doff, dy)
-        return (
-          <group
-            key={i}
-            position={[0, (p0.y + p1.y) / 2, backZ + t / 2 + (p0.off + p1.off) / 2]}
-            rotation-x={ang}
-          >
-            <mesh castShadow receiveShadow>
-              <boxGeometry args={[w, len, t]} />
-              <meshStandardMaterial color={color} map={surfaceMap('plywood', w, len)} normalMap={detail ? surfaceNormal('plywood', w, len) : undefined} roughness={0.75} />
-            </mesh>
-            {len > 0.7 && (
-              <group position={[0, 0, t / 2 + 0.03]}>
-                <Holds w={w} len={len} seed={seed * 13 + i} />
-              </group>
-            )}
-          </group>
-        )
-      })}
+    <group position={[0, midY, backZ + 0.11]}>
+      <mesh geometry={geo} castShadow receiveShadow>
+        <meshStandardMaterial
+          color={color}
+          map={surfaceMap('plywood', w, len)}
+          normalMap={detail ? surfaceNormal('plywood', w, len) : undefined}
+          roughness={0.82}
+          metalness={0}
+          flatShading
+        />
+      </mesh>
+      <Holds w={w} len={len} seed={seed} surface={sample} />
     </group>
   )
 }
@@ -2037,140 +2262,208 @@ function seededRnd(id: string) {
   }
 }
 
-type Clump = { p: [number, number, number]; s: number; e: [number, number, number]; c: THREE.Color }
+/* ------------------------------ real foliage ------------------------------ */
 
-// Instanced flat-shaded leaf tufts: squashed, randomly rotated low-poly blobs
-// with per-instance shading read as foliage rather than clay balls.
-function LeafClumps({ list }: { list: Clump[] }) {
+type LeafCard = { p: [number, number, number]; q: THREE.Quaternion; s: number; tone: number }
+type Limb = { p0: THREE.Vector3; p1: THREE.Vector3; r0: number; r1: number }
+
+// Instanced alpha-cut leaf cards. Hundreds of small textured quads read as
+// thousands of individual leaves — the thing that separates a real tree from
+// a green lump. alphaTest (not blending) keeps them sortless and shadow-safe.
+function LeafCards({ list }: { list: LeafCard[] }) {
   const ref = useRef<THREE.InstancedMesh>(null)
+  const tex = useMemo(() => leafTexture(), [])
   useLayoutEffect(() => {
     const m = ref.current
     if (!m) return
     const M = new THREE.Matrix4()
     const P = new THREE.Vector3()
-    const Q = new THREE.Quaternion()
     const S = new THREE.Vector3()
-    const E = new THREE.Euler()
+    const c = new THREE.Color()
     list.forEach((l, i) => {
       P.set(...l.p)
-      E.set(...l.e)
-      Q.setFromEuler(E)
-      S.set(l.s, l.s * 0.62, l.s)
-      M.compose(P, Q, S)
+      S.set(l.s, l.s, l.s)
+      M.compose(P, l.q, S)
       m.setMatrixAt(i, M)
-      m.setColorAt(i, l.c)
+      // sun-lit gradient plus per-card variation, applied to the leaf texture
+      c.setHSL(0.25, 0.1, l.tone)
+      m.setColorAt(i, c)
     })
     m.instanceMatrix.needsUpdate = true
     if (m.instanceColor) m.instanceColor.needsUpdate = true
   }, [list])
+  if (list.length === 0) return null
   return (
-    <instancedMesh key={list.length} ref={ref} args={[undefined, undefined, list.length]} castShadow>
-      <icosahedronGeometry args={[1, 1]} />
-      <meshStandardMaterial color="#ffffff" roughness={0.92} flatShading />
+    <instancedMesh key={list.length} ref={ref} args={[undefined, undefined, list.length]} castShadow frustumCulled={false}>
+      <planeGeometry args={[1, 1]} />
+      <meshStandardMaterial
+        map={tex}
+        alphaTest={0.42}
+        transparent={false}
+        side={THREE.DoubleSide}
+        roughness={0.85}
+        color="#ffffff"
+      />
     </instancedMesh>
   )
 }
 
-// A tapered branch cylinder between two points
-function BranchSeg({ p0, p1, r0, r1 }: { p0: [number, number, number]; p1: [number, number, number]; r0: number; r1: number }) {
-  const d = new THREE.Vector3(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2])
-  const len = d.length()
+// All of a tree's branches merged into ONE geometry: a real tree's silhouette
+// comes from its branching, and merging keeps that structure free at runtime.
+function BranchMesh({ limbs, color = '#6b5744' }: { limbs: Limb[]; color?: string }) {
+  const geo = useMemo(() => {
+    const parts: THREE.BufferGeometry[] = []
+    const up = new THREE.Vector3(0, 1, 0)
+    const d = new THREE.Vector3()
+    const q = new THREE.Quaternion()
+    for (const l of limbs) {
+      d.subVectors(l.p1, l.p0)
+      const len = d.length()
+      if (len < 1e-4) continue
+      const seg = l.r0 > 0.05 ? 8 : 5
+      const g = new THREE.CylinderGeometry(l.r1, l.r0, len, seg, 1, true)
+      q.setFromUnitVectors(up, d.clone().normalize())
+      g.applyQuaternion(q)
+      g.translate((l.p0.x + l.p1.x) / 2, (l.p0.y + l.p1.y) / 2, (l.p0.z + l.p1.z) / 2)
+      parts.push(g)
+    }
+    if (parts.length === 0) return null
+    const merged = mergeGeometries(parts, false)
+    parts.forEach((p) => p.dispose())
+    return merged
+  }, [limbs])
+  if (!geo) return null
   return (
-    <mesh
-      position={[(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, (p0[2] + p1[2]) / 2]}
-      quaternion={new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize())}
-      castShadow
-    >
-      <cylinderGeometry args={[r1, r0, len, 7]} />
-      <meshStandardMaterial color="#66513a" roughness={0.92} />
+    <mesh geometry={geo} castShadow receiveShadow>
+      <meshStandardMaterial color={color} roughness={0.94} metalness={0} />
     </mesh>
   )
 }
 
-// Tree with a real branch skeleton: trunk → primary limbs → secondary twigs,
-// with separate leaf clusters hanging at the branch TIPS, so the branching
-// structure stays visible through the crown instead of one solid blob.
+/**
+ * Recursively grown broadleaf tree: a tapered trunk forks into primary limbs,
+ * those into secondaries and twigs, and leaf cards hang off the finest twigs —
+ * so light passes through the crown and the branching stays readable, the way
+ * a photographed tree looks.
+ */
 function Tree({ o, tint }: { o: Placed; tint: string | null }) {
   const big = o.defId === 'tree_big'
   const h = o.h
-  const r = Math.min(o.w, o.d) / 2
+  const spread = Math.min(o.w, o.d) / 2
 
-  const { limbs, leaves, trunkH } = useMemo(() => {
+  const { limbs, leaves } = useMemo(() => {
     const rnd = seededRnd(o.id)
-    const base = new THREE.Color(tint ?? o.color)
-    const tH = h * (big ? 0.34 : 0.3)
-    type LimbT = { p0: [number, number, number]; p1: [number, number, number]; r0: number; r1: number }
-    const limbList: LimbT[] = []
-    const tips: Array<{ p: [number, number, number]; R: number }> = []
-    const nP = big ? 5 : 4
-    for (let i = 0; i < nP; i++) {
-      const a = (i / nP) * Math.PI * 2 + rnd() * 0.9
-      const tilt = 0.5 + rnd() * 0.5 // 29°–57° off vertical
-      const len1 = (h - tH) * (0.5 + rnd() * 0.28)
-      const d1 = [Math.sin(tilt) * Math.cos(a), Math.cos(tilt), Math.sin(tilt) * Math.sin(a)]
-      const p0: [number, number, number] = [(rnd() - 0.5) * r * 0.12, tH * (0.7 + rnd() * 0.28), (rnd() - 0.5) * r * 0.12]
-      const p1: [number, number, number] = [p0[0] + d1[0] * len1, p0[1] + d1[1] * len1, p0[2] + d1[2] * len1]
-      limbList.push({ p0, p1, r0: r * 0.06, r1: r * 0.026 })
-      tips.push({ p: p1, R: r * (big ? 0.4 : 0.44) })
-      // two twigs branching off each limb, each carrying a smaller cluster
-      for (let k = 0; k < 2; k++) {
-        const t0 = 0.45 + rnd() * 0.35
-        const q0: [number, number, number] = [p0[0] + d1[0] * len1 * t0, p0[1] + d1[1] * len1 * t0, p0[2] + d1[2] * len1 * t0]
-        const a2 = a + (rnd() - 0.5) * 2.4
-        const tilt2 = Math.min(1.3, tilt + 0.2 + rnd() * 0.45)
-        const dv = new THREE.Vector3(Math.sin(tilt2) * Math.cos(a2), Math.cos(tilt2) * (0.7 + rnd() * 0.5), Math.sin(tilt2) * Math.sin(a2)).normalize()
-        const len2 = len1 * (0.45 + rnd() * 0.3)
-        const q1: [number, number, number] = [q0[0] + dv.x * len2, q0[1] + dv.y * len2, q0[2] + dv.z * len2]
-        limbList.push({ p0: q0, p1: q1, r0: r * 0.024, r1: r * 0.011 })
-        tips.push({ p: q1, R: r * (big ? 0.28 : 0.3) })
-      }
-    }
-    // leaf clusters at the branch tips (flattened, shaded darker underneath)
-    const yTop = Math.max(...tips.map((t) => t.p[1] + t.R))
-    const yBot = Math.min(...tips.map((t) => t.p[1] - t.R))
-    const list: Clump[] = []
-    for (const tip of tips) {
-      const n = Math.round(tip.R * (big ? 62 : 55))
-      for (let i = 0; i < n; i++) {
-        const th = rnd() * Math.PI * 2
-        const ph = Math.acos(2 * rnd() - 1)
-        const rad = tip.R * (0.35 + 0.65 * Math.sqrt(rnd()))
-        const p: [number, number, number] = [
-          tip.p[0] + rad * Math.sin(ph) * Math.cos(th),
-          tip.p[1] + rad * Math.cos(ph) * 0.6,
-          tip.p[2] + rad * Math.sin(ph) * Math.sin(th),
-        ]
-        const t = Math.min(1, Math.max(0, (p[1] - yBot) / Math.max(0.1, yTop - yBot)))
-        list.push({
-          p,
-          s: r * (0.075 + rnd() * 0.065),
-          e: [rnd() * 0.9 - 0.45, rnd() * Math.PI * 2, rnd() * 0.9 - 0.45],
-          c: base.clone().offsetHSL((rnd() - 0.5) * 0.035, -0.06 + rnd() * 0.08, -0.17 + t * 0.22 + rnd() * 0.06),
-        })
-      }
-    }
-    return { limbs: limbList, leaves: list, trunkH: tH }
-  }, [o.id, o.color, tint, big, h, r])
+    const limbList: Limb[] = []
+    const leafList: LeafCard[] = []
+    const trunkH = h * (big ? 0.36 : 0.32)
+    const trunkR = spread * (big ? 0.1 : 0.085)
+    const yTop = h
+    const yBot = trunkH * 0.8
+    const leafScale = spread * (big ? 0.3 : 0.26)
+    const Q = new THREE.Quaternion()
+    const E = new THREE.Euler()
 
+    // trunk: a few stacked, slightly wandering sections so it isn't a pole
+    const nT = 3
+    let base = new THREE.Vector3(0, 0, 0)
+    for (let i = 0; i < nT; i++) {
+      const t0 = i / nT
+      const t1 = (i + 1) / nT
+      const tip = new THREE.Vector3(
+        (rnd() - 0.5) * spread * 0.16 * t1,
+        trunkH * t1,
+        (rnd() - 0.5) * spread * 0.16 * t1,
+      )
+      limbList.push({ p0: base.clone(), p1: tip.clone(), r0: trunkR * (1 - t0 * 0.35), r1: trunkR * (1 - t1 * 0.35) })
+      base = tip
+    }
+    // root flare
+    limbList.push({ p0: new THREE.Vector3(0, -0.05, 0), p1: new THREE.Vector3(0, 0.22, 0), r0: trunkR * 1.55, r1: trunkR * 1.02 })
+
+    // grow: split into children, each shorter and thinner, until twigs carry leaves
+    const grow = (from: THREE.Vector3, dir: THREE.Vector3, len: number, r: number, depth: number) => {
+      const to = from.clone().addScaledVector(dir, len)
+      limbList.push({ p0: from.clone(), p1: to.clone(), r0: r, r1: r * 0.62 })
+      if (depth === 0) {
+        // twig tip: a small spray of leaf cards along the last stretch
+        const n = big ? 13 : 9
+        for (let i = 0; i < n; i++) {
+          const t = 0.05 + rnd() * 1.05
+          const p = from.clone().addScaledVector(dir, len * t)
+          p.x += (rnd() - 0.5) * len * 0.85
+          p.y += (rnd() - 0.5) * len * 0.6
+          p.z += (rnd() - 0.5) * len * 0.85
+          E.set(rnd() * Math.PI, rnd() * Math.PI * 2, rnd() * Math.PI)
+          Q.setFromEuler(E)
+          const shade = Math.min(1, Math.max(0, (p.y - yBot) / Math.max(0.5, yTop - yBot)))
+          leafList.push({
+            p: [p.x, p.y, p.z],
+            q: Q.clone(),
+            s: leafScale * (0.68 + rnd() * 0.6),
+            tone: 0.2 + shade * 0.2 + rnd() * 0.07,
+          })
+        }
+        return
+      }
+      if (depth === 1) {
+        // leaves also cling along the second-to-last order, filling the crown
+        for (let i = 0; i < (big ? 5 : 4); i++) {
+          const t = 0.4 + rnd() * 0.7
+          const p = from.clone().addScaledVector(dir, len * t)
+          p.x += (rnd() - 0.5) * len * 0.6
+          p.y += (rnd() - 0.5) * len * 0.45
+          p.z += (rnd() - 0.5) * len * 0.6
+          E.set(rnd() * Math.PI, rnd() * Math.PI * 2, rnd() * Math.PI)
+          Q.setFromEuler(E)
+          const shade = Math.min(1, Math.max(0, (p.y - yBot) / Math.max(0.5, yTop - yBot)))
+          leafList.push({
+            p: [p.x, p.y, p.z],
+            q: Q.clone(),
+            s: leafScale * (0.7 + rnd() * 0.55),
+            tone: 0.19 + shade * 0.2 + rnd() * 0.07,
+          })
+        }
+      }
+      const kids = depth >= 2 ? (rnd() < 0.35 ? 3 : 2) : 2
+      for (let k = 0; k < kids; k++) {
+        // fork away from the parent direction, with a slight upward bias
+        const axis = new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize()
+        const nd = dir.clone().applyAxisAngle(axis, 0.42 + rnd() * 0.5)
+        nd.y = Math.max(-0.25, nd.y * (0.82 + rnd() * 0.3) + 0.12)
+        nd.normalize()
+        grow(to, nd, len * (0.62 + rnd() * 0.16), r * 0.62, depth - 1)
+      }
+    }
+
+    const nPrimary = big ? 5 : 4
+    const crown = h - trunkH
+    for (let i = 0; i < nPrimary; i++) {
+      const a = (i / nPrimary) * Math.PI * 2 + rnd() * 0.7
+      const tilt = 0.55 + rnd() * 0.45 // lean out from the trunk
+      const dir = new THREE.Vector3(Math.sin(tilt) * Math.cos(a), Math.cos(tilt), Math.sin(tilt) * Math.sin(a)).normalize()
+      grow(base.clone(), dir, crown * (0.34 + rnd() * 0.12), trunkR * 0.62, big ? 3 : 2)
+    }
+    return { limbs: limbList, leaves: leafList }
+  }, [o.id, big, h, spread])
+
+  // the item color still tints the canopy so themes keep working
+  const tone = new THREE.Color(tint ?? o.color)
   return (
     <group>
-      {/* trunk with a root flare */}
-      <mesh position={[0, trunkH / 2, 0]} castShadow>
-        <cylinderGeometry args={[r * 0.075, r * 0.13, trunkH, 9]} />
-        <meshStandardMaterial color="#66513a" roughness={0.92} />
+      <BranchMesh limbs={limbs} />
+      <group>
+        <LeafCards list={leaves} />
+      </group>
+      {/* a faint colored core keeps very distant trees reading as green */}
+      <mesh position={[0, h * 0.72, 0]} visible={false}>
+        <sphereGeometry args={[spread * 0.5, 6, 5]} />
+        <meshStandardMaterial color={tone} />
       </mesh>
-      <mesh position={[0, 0.06, 0]} castShadow>
-        <cylinderGeometry args={[r * 0.13, r * 0.2, 0.12, 9]} />
-        <meshStandardMaterial color="#5c4933" roughness={0.95} />
-      </mesh>
-      {limbs.map((l, i) => (
-        <BranchSeg key={i} {...l} />
-      ))}
-      <LeafClumps list={leaves} />
     </group>
   )
 }
 
+// Open picket / bar fence for the site boundary.
 function Fence({ o, tint }: { o: Placed; tint: string | null }) {
   const posts = useMemo(() => spread(Math.max(2, Math.round(o.w / 1.5)), o.w - 0.1), [o.w])
   const c = tint ?? o.color
@@ -2189,47 +2482,49 @@ function Fence({ o, tint }: { o: Placed; tint: string | null }) {
   )
 }
 
-// Trimmed hedge: a dark leafy core with hundreds of small leaf tufts scattered
-// over the clipped faces, so it reads as foliage rather than a painted box.
+// Trimmed hedge: a dark clipped core wrapped in real leaf cards, so the
+// surface reads as dense foliage instead of a painted box.
 function Hedge({ o, tint }: { o: Placed; tint: string | null }) {
-  const list = useMemo(() => {
+  const leaves = useMemo(() => {
     const rnd = seededRnd(o.id)
-    const base = new THREE.Color(tint ?? o.color)
     const hw = o.w / 2
     const hd = o.d / 2
-    const out: Clump[] = []
-    // spread tufts over the faces, weighted by face area (top, sides, ends)
+    const out: LeafCard[] = []
+    const Q = new THREE.Quaternion()
+    const E = new THREE.Euler()
     const aTop = o.w * o.d
     const aSide = o.w * o.h * 2
     const aEnd = o.d * o.h * 2
     const aSum = aTop + aSide + aEnd
-    const n = Math.round(clampN((aTop + aSide / 2 + aEnd / 2) * 55, 80, 420))
+    const n = Math.round(clampN(aSum * 26, 90, 460))
     for (let i = 0; i < n; i++) {
       const f = rnd() * aSum
       let p: [number, number, number]
-      if (f < aTop) p = [(rnd() - 0.5) * o.w, o.h - 0.03, (rnd() - 0.5) * o.d]
-      else if (f < aTop + aSide) p = [(rnd() - 0.5) * o.w, 0.08 + rnd() * (o.h - 0.14), (rnd() > 0.5 ? 1 : -1) * hd]
-      else p = [(rnd() > 0.5 ? 1 : -1) * hw, 0.08 + rnd() * (o.h - 0.14), (rnd() - 0.5) * o.d]
-      const t = p[1] / o.h
+      if (f < aTop) p = [(rnd() - 0.5) * o.w, o.h - 0.02, (rnd() - 0.5) * o.d]
+      else if (f < aTop + aSide) p = [(rnd() - 0.5) * o.w, 0.06 + rnd() * (o.h - 0.1), (rnd() > 0.5 ? 1 : -1) * hd]
+      else p = [(rnd() > 0.5 ? 1 : -1) * hw, 0.06 + rnd() * (o.h - 0.1), (rnd() - 0.5) * o.d]
+      E.set(rnd() * Math.PI, rnd() * Math.PI * 2, rnd() * Math.PI)
+      Q.setFromEuler(E)
       out.push({
         p,
-        s: 0.08 + rnd() * 0.06,
-        e: [rnd() * 0.9 - 0.45, rnd() * Math.PI * 2, rnd() * 0.9 - 0.45],
-        c: base.clone().offsetHSL((rnd() - 0.5) * 0.03, -0.04 + rnd() * 0.06, -0.14 + t * 0.18 + rnd() * 0.06),
+        q: Q.clone(),
+        s: 0.2 + rnd() * 0.14,
+        tone: 0.17 + (p[1] / o.h) * 0.16 + rnd() * 0.05,
       })
     }
     return out
-  }, [o.id, o.w, o.d, o.h, o.color, tint])
+  }, [o.id, o.w, o.d, o.h])
   return (
     <group>
       <mesh position={[0, o.h / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[o.w - 0.08, o.h - 0.06, o.d - 0.08]} />
-        <meshStandardMaterial color={new THREE.Color(tint ?? o.color).offsetHSL(0, 0, -0.12)} roughness={0.95} />
+        <boxGeometry args={[o.w - 0.14, o.h - 0.1, o.d - 0.14]} />
+        <meshStandardMaterial color={new THREE.Color(tint ?? o.color).offsetHSL(0, -0.06, -0.06)} roughness={0.96} />
       </mesh>
-      <LeafClumps list={list} />
+      <LeafCards list={leaves} />
     </group>
   )
 }
+
 
 // Site light: pole + arm + lamp head; glows and casts real light at night.
 function LightPole({ o, tint }: { o: Placed; tint: string | null }) {
@@ -2279,26 +2574,105 @@ function Wheel({ pos, r }: { pos: [number, number, number]; r: number }) {
 const CAR_PAINTS = ['#d8dadd', '#c4c8cd', '#22262b', '#3a4552', '#711f26', '#20344d', '#e9e7e1', '#8b939c']
 const CAR_DEFAULT_COLORS = new Set(['#5b7fb4', '#60a5fa'])
 
-function CarWheel({ pos }: { pos: [number, number, number] }) {
+/**
+ * Lofted car body. Each cross-section is a rounded box outline in the (z, y)
+ * plane whose width, sill height, shoulder height and tumblehome all change
+ * along the length — that is what gives a car its real double-curved sheet
+ * metal, which a straight extrusion can never have.
+ */
+type CarSection = { x: number; hw: number; yBot: number; yTop: number; tumble: number; round: number }
+
+const CAR_RADIAL = 22
+function carLoft(sections: CarSection[]): THREE.BufferGeometry {
+  const pos: number[] = []
+  const idx: number[] = []
+  const ring = (s: CarSection) => {
+    // superellipse-ish outline: rounded bottom corners, rounded shoulder,
+    // top narrower than the sill by `tumble`
+    const pts: Array<[number, number]> = []
+    for (let k = 0; k < CAR_RADIAL; k++) {
+      const a = (k / CAR_RADIAL) * Math.PI * 2
+      const c = Math.cos(a)
+      const sn = Math.sin(a)
+      const n = s.round
+      const zx = Math.sign(c) * Math.pow(Math.abs(c), 2 / n)
+      const zy = Math.sign(sn) * Math.pow(Math.abs(sn), 2 / n)
+      const midY = (s.yTop + s.yBot) / 2
+      const halfH = (s.yTop - s.yBot) / 2
+      const y = midY + zy * halfH
+      // narrow the section toward the roof
+      const t = (y - s.yBot) / Math.max(1e-4, s.yTop - s.yBot)
+      const w = s.hw * (1 - s.tumble * t * t)
+      pts.push([zx * w, y])
+    }
+    return pts
+  }
+  for (const s of sections) for (const [z, y] of ring(s)) pos.push(s.x, y, z)
+  for (let r = 0; r < sections.length - 1; r++) {
+    for (let k = 0; k < CAR_RADIAL; k++) {
+      const a = r * CAR_RADIAL + k
+      const b = r * CAR_RADIAL + ((k + 1) % CAR_RADIAL)
+      const c = (r + 1) * CAR_RADIAL + k
+      const d = (r + 1) * CAR_RADIAL + ((k + 1) % CAR_RADIAL)
+      idx.push(a, b, c, b, d, c)
+    }
+  }
+  // flat caps at both ends
+  for (const [ri, flip] of [[0, true], [sections.length - 1, false]] as const) {
+    const s = sections[ri]
+    const center = pos.length / 3
+    pos.push(s.x, (s.yTop + s.yBot) / 2, 0)
+    for (let k = 0; k < CAR_RADIAL; k++) {
+      const a = ri * CAR_RADIAL + k
+      const b = ri * CAR_RADIAL + ((k + 1) % CAR_RADIAL)
+      if (flip) idx.push(center, b, a)
+      else idx.push(center, a, b)
+    }
+  }
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  g.setIndex(idx)
+  g.computeVertexNormals()
+  return g
+}
+
+// Alloy wheel: rounded tire carcass, dished rim face and five spokes.
+function CarWheel({ pos, r = 0.33 }: { pos: [number, number, number]; r?: number }) {
+  const w = r * 0.62 // tread width
   return (
-    <group position={pos} rotation-x={Math.PI / 2}>
+    // torus and the rim discs all spin about Z, which is the car's axle axis
+    <group position={pos}>
       <mesh castShadow>
-        <cylinderGeometry args={[0.3, 0.3, 0.23, 20]} />
-        <meshStandardMaterial color="#17191c" roughness={0.95} />
+        <torusGeometry args={[r * 0.8, r * 0.2, 10, 24]} />
+        <meshStandardMaterial color="#1b1d21" roughness={0.97} metalness={0} />
       </mesh>
-      {[0.1, -0.1].map((y, i) => (
-        <mesh key={i} position={[0, y, 0]}>
-          <cylinderGeometry args={[0.17, 0.17, 0.05, 16]} />
-          <meshStandardMaterial color="#b7bdc4" metalness={0.75} roughness={0.35} />
-        </mesh>
+      <mesh rotation-x={Math.PI / 2} castShadow>
+        <cylinderGeometry args={[r * 0.82, r * 0.82, w, 24]} />
+        <meshStandardMaterial color="#1b1d21" roughness={0.97} metalness={0} />
+      </mesh>
+      {([1, -1] as const).map((s) => (
+        <group key={s} position={[0, 0, (s * w) / 2]}>
+          <mesh rotation-x={Math.PI / 2}>
+            <cylinderGeometry args={[r * 0.6, r * 0.6, 0.02, 22]} />
+            <meshStandardMaterial color="#aeb4bb" metalness={0.85} roughness={0.32} />
+          </mesh>
+          <mesh position={[0, 0, s * 0.02]} rotation-x={Math.PI / 2}>
+            <cylinderGeometry args={[r * 0.17, r * 0.17, 0.03, 14]} />
+            <meshStandardMaterial color="#8f959c" metalness={0.8} roughness={0.35} />
+          </mesh>
+          {Array.from({ length: 5 }, (_, i) => (
+            <mesh key={i} position={[0, 0, s * 0.012]} rotation-z={(i / 5) * Math.PI * 2}>
+              <boxGeometry args={[r * 0.13, r * 1.02, 0.02]} />
+              <meshStandardMaterial color="#b8bec5" metalness={0.85} roughness={0.28} />
+            </mesh>
+          ))}
+        </group>
       ))}
     </group>
   )
 }
 
-// Parked car — rotate in 45° steps to angle-park it. The body is a rounded
-// extrusion of a real side silhouette (bumpers, hood, belt line, wheel arches)
-// with an inset dark glasshouse on top, instead of stacked boxes.
+// Parked car — rotate in 45° steps to angle-park it.
 function Car({ o, tint }: { o: Placed; tint: string | null }) {
   let body = tint ?? o.color
   if (!tint && CAR_DEFAULT_COLORS.has(o.color)) {
@@ -2308,74 +2682,120 @@ function Car({ o, tint }: { o: Placed; tint: string | null }) {
   }
   const L = o.w
   const W = o.d
-  const wx = L * 0.3 // wheel positions along the length
-  const { bodyGeo, glassGeo } = useMemo(() => {
-    const archR = 0.37
-    const belt = 0.86
-    // side profile: x = along the car (front at +x), y = up — gentle curves
-    // everywhere so the massing reads like pressed sheet metal, not slabs
-    const b = new THREE.Shape()
-    b.moveTo(-L * 0.44, 0.26)
-    b.lineTo(-wx - archR, 0.26)
-    b.absarc(-wx, 0.26, archR, Math.PI, 0, true)
-    b.lineTo(wx - archR, 0.26)
-    b.absarc(wx, 0.26, archR, Math.PI, 0, true)
-    b.lineTo(L * 0.46, 0.26)
-    b.quadraticCurveTo(L * 0.5, 0.28, L * 0.5, 0.44) // front bumper
-    b.lineTo(L * 0.5, 0.56)
-    b.quadraticCurveTo(L * 0.5, 0.68, L * 0.42, 0.73) // nose rounds over
-    b.quadraticCurveTo(L * 0.28, 0.79, L * 0.14, belt) // curved hood to the cowl
-    b.quadraticCurveTo(-L * 0.15, belt + 0.035, -L * 0.42, belt) // belt line with a slight arc
-    b.quadraticCurveTo(-L * 0.5, belt - 0.01, -L * 0.5, 0.72) // trunk edge
-    b.lineTo(-L * 0.5, 0.42)
-    b.quadraticCurveTo(-L * 0.5, 0.3, -L * 0.44, 0.26)
-    b.closePath()
-    // glasshouse: raked windscreen → curved roof → fastback rear window
-    const g = new THREE.Shape()
-    g.moveTo(L * 0.13, belt - 0.03)
-    g.lineTo(-L * 0.03, 1.22)
-    g.quadraticCurveTo(-L * 0.15, 1.26, -L * 0.26, 1.22)
-    g.lineTo(-L * 0.41, belt - 0.03)
-    g.closePath()
-    const opts = (depth: number, bev: number) => ({
-      depth,
-      bevelEnabled: true,
-      bevelThickness: bev,
-      bevelSize: bev,
-      bevelSegments: 3,
-      curveSegments: 10,
-    })
-    const bg = new THREE.ExtrudeGeometry(b, opts(W - 0.34, 0.09))
-    bg.translate(0, 0, -(W - 0.34) / 2)
-    const gg = new THREE.ExtrudeGeometry(g, opts(W - 0.62, 0.06))
-    gg.translate(0, 0, -(W - 0.62) / 2)
-    return { bodyGeo: bg, glassGeo: gg }
-  }, [L, W, wx])
+  const wx = L * 0.31 // wheel centres along the length
+  const wr = Math.min(0.35, W * 0.2)
+
+  const { bodyGeo, cabinGeo, roofGeo } = useMemo(() => {
+    const hw = W / 2
+    const sill = 0.3
+    // t: 0 = tail, 1 = nose. Width swells over the wheels, tapers at both ends.
+    const secs: CarSection[] = []
+    const N = 26
+    for (let i = 0; i < N; i++) {
+      const t = i / (N - 1)
+      const x = -L / 2 + t * L
+      // plan-view taper: full width across the doors, narrower at nose and tail
+      const plan = 0.8 + 0.2 * Math.sin(Math.PI * Math.min(1, Math.max(0, (t - 0.02) / 0.96)))
+      const endPinch = t < 0.06 ? 0.82 + t * 3 : t > 0.94 ? 0.82 + (1 - t) * 3 : 1
+      // side view: hood rises from the nose to the cowl, beltline runs back
+      let top: number
+      if (t > 0.78) top = 0.74 + (1 - t) * 0.5 // nose and hood
+      else if (t > 0.62) top = 0.85 + (0.78 - t) * 0.35 // cowl
+      else if (t > 0.14) top = 0.9
+      else top = 0.9 - (0.14 - t) * 0.5 // boot lid falls away
+      const bot = sill - (t < 0.08 || t > 0.92 ? 0.05 : 0) // slight lift at the bumpers
+      secs.push({
+        x,
+        hw: hw * plan * Math.min(1, endPinch),
+        yBot: bot,
+        yTop: top,
+        tumble: 0.12,
+        round: 3.4, // fuller than an ellipse, softer than a box
+      })
+    }
+    // cabin: windscreen → roof → rear glass, inset from the body sides
+    const cab: CarSection[] = []
+    const M = 16
+    for (let i = 0; i < M; i++) {
+      const t = i / (M - 1) // 0 = rear glass base, 1 = windscreen base
+      const x = -L * 0.42 + t * L * 0.6
+      // roof arc: low at both glass bases, tallest over the B-pillar
+      const roof = 0.92 + Math.sin(Math.PI * t) * 0.52 * Math.sin(Math.PI * 0.5 + (t - 0.5) * 0.5)
+      cab.push({
+        x,
+        hw: hw * (0.78 + 0.1 * Math.sin(Math.PI * t)),
+        yBot: 0.86,
+        yTop: Math.max(0.95, roof),
+        tumble: 0.3, // strong tumblehome: glass leans in toward the roof
+        round: 3,
+      })
+    }
+    // painted roof skin: the same run, capping the glass
+    const roof: CarSection[] = cab.map((c) => ({
+      ...c,
+      hw: c.hw * (1 - c.tumble) * 1.01,
+      yBot: c.yTop - 0.1,
+      yTop: c.yTop + 0.012,
+      tumble: 0.1,
+      round: 4,
+    }))
+    return { bodyGeo: carLoft(secs), cabinGeo: carLoft(cab), roofGeo: carLoft(roof) }
+  }, [L, W])
+
   return (
     <group>
-      <mesh geometry={bodyGeo} castShadow>
-        <meshPhysicalMaterial color={body} roughness={0.32} metalness={0.25} clearcoat={0.9} clearcoatRoughness={0.15} />
+      <mesh geometry={bodyGeo} castShadow receiveShadow>
+        <meshPhysicalMaterial color={body} roughness={0.28} metalness={0.15} clearcoat={1} clearcoatRoughness={0.08} />
       </mesh>
-      <mesh geometry={glassGeo} castShadow>
-        <meshStandardMaterial color="#141d26" roughness={0.06} metalness={0.35} />
+      {/* dark glasshouse wrapping the cabin */}
+      <mesh geometry={cabinGeo} castShadow>
+        <meshPhysicalMaterial color="#181e26" roughness={0.08} metalness={0.2} clearcoat={1} clearcoatRoughness={0.05} />
       </mesh>
-      {/* painted roof panel on top of the glasshouse */}
-      <Box args={[L * 0.22, 0.035, W - 0.54]} pos={[-L * 0.145, 1.285, 0]} color={body} />
-      <CarWheel pos={[wx, 0.3, W / 2 - 0.2]} />
-      <CarWheel pos={[wx, 0.3, -W / 2 + 0.2]} />
-      <CarWheel pos={[-wx, 0.3, W / 2 - 0.2]} />
-      <CarWheel pos={[-wx, 0.3, -W / 2 + 0.2]} />
-      {/* grille, plates, lights, mirrors, door handles */}
-      <Box args={[0.04, 0.13, W * 0.42]} pos={[L / 2 + 0.05, 0.5, 0]} color="#1c1f24" />
-      <Box args={[0.02, 0.11, 0.32]} pos={[L / 2 + 0.08, 0.35, 0]} color="#e7e9ec" />
-      <Box args={[0.02, 0.11, 0.32]} pos={[-L / 2 - 0.08, 0.35, 0]} color="#e7e9ec" />
-      {[1, -1].map((s) => (
+      {/* painted roof skin over the glass */}
+      <mesh geometry={roofGeo} castShadow>
+        <meshPhysicalMaterial color={body} roughness={0.28} metalness={0.15} clearcoat={1} clearcoatRoughness={0.08} />
+      </mesh>
+      {/* wheels tucked into the arches */}
+      {([1, -1] as const).map((s) =>
+        [wx, -wx].map((x) => <CarWheel key={`${s}${x}`} pos={[x, wr, s * (W / 2 - wr * 0.42)]} r={wr} />),
+      )}
+      {/* dark arch liners so the wheels sit in a recess, not on the surface */}
+      {([1, -1] as const).map((s) =>
+        [wx, -wx].map((x) => (
+          <mesh key={`a${s}${x}`} position={[x, wr, s * (W / 2 - wr * 0.42)]} rotation-x={Math.PI / 2}>
+            <cylinderGeometry args={[wr * 1.04, wr * 1.04, wr * 0.66, 18, 1, true]} />
+            <meshStandardMaterial color="#15171a" roughness={1} side={THREE.DoubleSide} />
+          </mesh>
+        )),
+      )}
+      {/* bumpers, grille, plates, lamps, mirrors, handles */}
+      <mesh position={[L / 2 - 0.02, 0.62, 0]} rotation-y={Math.PI / 2}>
+        <planeGeometry args={[W * 0.52, 0.14]} />
+        <meshStandardMaterial color="#15171a" roughness={0.7} />
+      </mesh>
+      <Box args={[0.03, 0.1, 0.3]} pos={[L / 2 + 0.02, 0.42, 0]} color="#e7e9ec" />
+      <Box args={[0.03, 0.1, 0.3]} pos={[-L / 2 - 0.02, 0.44, 0]} color="#e7e9ec" />
+      {([1, -1] as const).map((s) => (
         <group key={s}>
-          <Box args={[0.06, 0.09, 0.36]} pos={[L / 2 + 0.05, 0.66, s * W * 0.27]} color="#eef3f7" />
-          <Box args={[0.06, 0.08, 0.3]} pos={[-L / 2 - 0.06, 0.7, s * W * 0.27]} color="#8f1f1a" />
-          <Box args={[0.1, 0.06, 0.16]} pos={[L * 0.11, 0.92, s * (W / 2 + 0.03)]} color={body} />
-          <Box args={[0.15, 0.03, 0.03]} pos={[0, 0.76, s * (W / 2 - 0.035)]} color="#33383e" />
-          <Box args={[0.15, 0.03, 0.03]} pos={[-L * 0.24, 0.76, s * (W / 2 - 0.035)]} color="#33383e" />
+          {/* headlamp + tail lamp wrapped onto the corners */}
+          <mesh position={[L * 0.47, 0.74, s * W * 0.3]} rotation-y={-s * 0.35}>
+            <boxGeometry args={[0.1, 0.09, W * 0.24]} />
+            <meshPhysicalMaterial color="#eef4fa" roughness={0.1} metalness={0.2} clearcoat={1} />
+          </mesh>
+          <mesh position={[-L * 0.475, 0.82, s * W * 0.31]} rotation-y={s * 0.3}>
+            <boxGeometry args={[0.08, 0.1, W * 0.22]} />
+            <meshPhysicalMaterial color="#8f1f1a" roughness={0.15} metalness={0.15} clearcoat={1} />
+          </mesh>
+          {/* door mirror on a stalk */}
+          <mesh position={[L * 0.12, 0.98, s * (W / 2 + 0.02)]}>
+            <boxGeometry args={[0.13, 0.06, 0.11]} />
+            <meshStandardMaterial color={body} roughness={0.3} metalness={0.15} />
+          </mesh>
+          {/* flush door handles */}
+          <Box args={[0.16, 0.028, 0.02]} pos={[L * 0.02, 0.84, s * (W / 2 - 0.02)]} color="#9aa1a9" />
+          <Box args={[0.16, 0.028, 0.02]} pos={[-L * 0.22, 0.84, s * (W / 2 - 0.02)]} color="#9aa1a9" />
+          {/* rocker shadow line */}
+          <Box args={[L * 0.62, 0.05, 0.03]} pos={[0, 0.33, s * (W / 2 - 0.03)]} color="#2a2e33" />
         </group>
       ))}
     </group>
@@ -2547,56 +2967,66 @@ function SpeakerBox({ o, tint }: { o: Placed; tint: string | null }) {
 
 /* ------------------------------ garden items ------------------------------ */
 
-// Conifer (stacked cones) and columnar cypress tree shapes.
-// Conifer + columnar cypress: dense leaf tufts hugging a cone / teardrop
-// envelope instead of smooth solids, so the needle mass reads as foliage.
+// Conifer and columnar cypress: a real trunk with whorled branch tiers, and
+// short needle sprays (leaf cards angled downward) hanging off every tier —
+// the drooping needle mass that makes a conifer read as a conifer.
 function Conifer({ o, tint }: { o: Placed; tint: string | null }) {
   const slim = o.defId === 'tree_slim'
   const r = Math.min(o.w, o.d) / 2
   const h = o.h
 
-  const list = useMemo(() => {
+  const { limbs, leaves } = useMemo(() => {
     const rnd = seededRnd(o.id)
-    const base = new THREE.Color(tint ?? o.color)
-    const y0 = slim ? 0.22 : h * 0.14
-    const n = slim ? 160 : 240
-    const out: Clump[] = []
-    for (let i = 0; i < n; i++) {
-      // conifers are denser at the bottom; the cypress fills its column evenly
-      const t = slim ? rnd() : Math.pow(rnd(), 0.72)
-      const y = y0 + (h - y0 - 0.08) * t
-      const tt = (y - y0) / (h - y0)
-      // envelope radius at this height
-      const R = slim ? r * 0.82 * Math.pow(Math.sin(Math.PI * (0.12 + tt * 0.86)), 0.6) : r * (1 - tt * 0.92)
-      const a = rnd() * Math.PI * 2
-      const rr = R * (0.45 + 0.55 * rnd())
-      out.push({
-        p: [Math.cos(a) * rr, y, Math.sin(a) * rr],
-        s: (slim ? r * 0.34 : r * 0.2) * (0.65 + rnd() * 0.55),
-        e: [rnd() * 0.9 - 0.45, rnd() * Math.PI * 2, rnd() * 0.9 - 0.45],
-        c: base.clone().offsetHSL((rnd() - 0.5) * 0.025, -0.04 + rnd() * 0.06, -0.14 + tt * 0.16 + rnd() * 0.06),
-      })
-    }
-    // tip tuft so the silhouette ends in a point
-    out.push({
-      p: [0, h - 0.06, 0],
-      s: slim ? r * 0.22 : r * 0.12,
-      e: [0, rnd() * Math.PI, 0],
-      c: base.clone().offsetHSL(0, 0, 0.05),
-    })
-    return out
-  }, [o.id, o.color, tint, slim, h, r])
+    const limbList: Limb[] = []
+    const leafList: LeafCard[] = []
+    const Q = new THREE.Quaternion()
+    const E = new THREE.Euler()
+    const y0 = slim ? 0.2 : h * 0.12
+    const trunkR = r * (slim ? 0.09 : 0.075)
+    // straight leader
+    limbList.push({ p0: new THREE.Vector3(0, -0.05, 0), p1: new THREE.Vector3(0, h * 0.98, 0), r0: trunkR * 1.5, r1: trunkR * 0.2 })
 
+    const tiers = slim ? 14 : 11
+    for (let i = 0; i < tiers; i++) {
+      const t = i / (tiers - 1)
+      const y = y0 + (h - y0 - 0.15) * t
+      // envelope: a column for the cypress, a cone for the conifer
+      const R = slim ? r * 0.8 * Math.pow(Math.sin(Math.PI * (0.16 + t * 0.8)), 0.45) : r * (1 - t * 0.9)
+      const nB = slim ? 5 : 6
+      for (let k = 0; k < nB; k++) {
+        const a = (k / nB) * Math.PI * 2 + i * 1.1 + rnd() * 0.5
+        const len = R * (0.72 + rnd() * 0.3)
+        const droop = slim ? 0.1 : 0.26 + t * 0.12
+        const tip = new THREE.Vector3(Math.cos(a) * len, y - len * droop, Math.sin(a) * len)
+        limbList.push({ p0: new THREE.Vector3(0, y, 0), p1: tip, r0: trunkR * 0.42, r1: trunkR * 0.14 })
+        // needle sprays along the branch
+        const nS = slim ? 3 : 4
+        for (let s = 0; s < nS; s++) {
+          const f = 0.25 + (s / nS) * 0.8 + rnd() * 0.14
+          const p = new THREE.Vector3(tip.x * f, y - len * droop * f + (rnd() - 0.5) * 0.1, tip.z * f)
+          E.set(rnd() * Math.PI, a + (rnd() - 0.5) * 0.8, rnd() * Math.PI)
+          Q.setFromEuler(E)
+          leafList.push({
+            p: [p.x, p.y, p.z],
+            q: Q.clone(),
+            s: (slim ? r * 0.5 : r * 0.42) * (0.7 + rnd() * 0.5),
+            tone: 0.14 + t * 0.13 + rnd() * 0.05,
+          })
+        }
+      }
+    }
+    return { limbs: limbList, leaves: leafList }
+  }, [o.id, slim, h, r])
+
+  void tint
   return (
     <group>
-      <mesh position={[0, (slim ? 0.3 : h * 0.3) / 2, 0]} castShadow>
-        <cylinderGeometry args={[r * (slim ? 0.12 : 0.1), r * 0.16, slim ? 0.3 : h * 0.3, 8]} />
-        <meshStandardMaterial color="#6e5335" roughness={0.9} />
-      </mesh>
-      <LeafClumps list={list} />
+      <BranchMesh limbs={limbs} color="#5d4b3a" />
+      <LeafCards list={leaves} />
     </group>
   )
 }
+
 
 // Garden pond: stone ring around still water.
 function Pond({ o, tint }: { o: Placed; tint: string | null }) {
