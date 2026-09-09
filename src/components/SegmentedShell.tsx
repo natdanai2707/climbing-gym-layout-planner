@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
+import { Edges } from '@react-three/drei'
 import { useStore } from '../store'
 import type { CanopyDef, FacadePanel, ShellDesign, ShellSegment } from '../types'
 import { surfaceMap, surfaceMapWorld, surfaceNormal, surfaceNormalWorld } from '../materials'
@@ -16,6 +17,11 @@ import { ROOF_PITCH } from './WarehouseShell'
 
 const GLASS_MAT = { color: '#9fc8e0', transparent: true, opacity: 0.45, roughness: 0.12, metalness: 0.2, side: THREE.DoubleSide, depthWrite: false }
 const CLEAR_MAT = { color: '#f2f7fa', transparent: true, opacity: 0.5, roughness: 0.3, emissive: '#dfeaf2', emissiveIntensity: 0.2, side: THREE.DoubleSide, depthWrite: false }
+// Shell mode 1 ("Clear"): the whole designed building becomes a ghost so the
+// layout inside stays readable, exactly like the simple warehouse shell does.
+const GHOST_MAT = { color: '#8fb0cc', transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide }
+const GHOST_ROOF = { color: '#7fa3c4', transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide }
+const GHOST_EDGE = '#5c7fa6'
 
 // fully-resolved zone: legacy fields (eave / slopeL / slopeR / flat) migrated
 export interface NormSeg {
@@ -103,8 +109,9 @@ export function designMaxHeight(design: ShellDesign): number {
   return Math.max(...design.segments.map((s) => segTop(normalizeSegment(s))), 3)
 }
 
-function Cladding({ seg }: { seg: NormSeg }) {
+function Cladding({ seg, ghost }: { seg: NormSeg; ghost?: boolean }) {
   const detail = useStore((s) => s.quality !== 'low')
+  if (ghost) return <meshStandardMaterial {...GHOST_MAT} />
   return seg.clear ? (
     <meshStandardMaterial {...CLEAR_MAT} />
   ) : (
@@ -123,7 +130,7 @@ function endShape(seg: NormSeg, W: number): THREE.Shape {
   return s
 }
 
-function SegmentRoof({ seg, W }: { seg: SegSpan; W: number }) {
+function SegmentRoof({ seg, W, ghost }: { seg: SegSpan; W: number; ghost?: boolean }) {
   const len = seg.z1 - seg.z0
   const zc = (seg.z0 + seg.z1) / 2
   const prof = roofProfile(seg, W)
@@ -134,16 +141,21 @@ function SegmentRoof({ seg, W }: { seg: SegSpan; W: number }) {
         const planeLen = Math.hypot(x1 - x0, y1 - y0) + 0.3
         const ang = Math.atan2(y1 - y0, x1 - x0)
         return (
-          <mesh key={i} position={[(x0 + x1) / 2, (y0 + y1) / 2 + 0.05, 0]} rotation-z={ang} castShadow>
+          <mesh key={i} position={[(x0 + x1) / 2, (y0 + y1) / 2 + 0.05, 0]} rotation-z={ang} castShadow={!ghost}>
             <boxGeometry args={[planeLen, 0.12, len + 0.1]} />
-            <meshStandardMaterial color="#cfd6dd" roughness={0.5} metalness={0.3} side={THREE.DoubleSide} />
+            {ghost ? (
+              <meshStandardMaterial {...GHOST_ROOF} />
+            ) : (
+              <meshStandardMaterial color="#cfd6dd" roughness={0.5} metalness={0.3} side={THREE.DoubleSide} />
+            )}
+            {ghost && <Edges color={GHOST_EDGE} />}
           </mesh>
         )
       })}
       {seg.roof === 'gable' && (
         <mesh position={[seg.ridgeX * W - W / 2, segTop(seg) + 0.1, 0]}>
           <boxGeometry args={[0.3, 0.14, len + 0.1]} />
-          <meshStandardMaterial color="#aab3bc" />
+          <meshStandardMaterial color={ghost ? '#5c7fa6' : '#aab3bc'} transparent={ghost} opacity={ghost ? 0.5 : 1} />
         </mesh>
       )}
     </group>
@@ -151,13 +163,14 @@ function SegmentRoof({ seg, W }: { seg: SegSpan; W: number }) {
 }
 
 // canopy in its local frame: x = 0..len along the wall, +z = outward
-function Canopy({ c }: { c: CanopyDef }) {
+function Canopy({ c, ghost }: { c: CanopyDef; ghost?: boolean }) {
   const tilt = Math.atan(0.18)
   const attach = c.h + c.depth * 0.18 // wall-side edge sits higher
   const slopeLen = Math.hypot(c.depth, c.depth * 0.18) + 0.1
   const posts = Math.max(2, Math.ceil(c.len / 3))
-  const mat =
-    c.material === 'clear' ? (
+  const mat = ghost ? (
+    <meshStandardMaterial {...GHOST_MAT} />
+  ) : c.material === 'clear' ? (
       <meshStandardMaterial {...CLEAR_MAT} />
     ) : c.material === 'canvas' ? (
       <meshStandardMaterial color={c.color} roughness={0.95} side={THREE.DoubleSide} />
@@ -174,7 +187,13 @@ function Canopy({ c }: { c: CanopyDef }) {
         {/* front fascia / canvas valance */}
         <mesh position={[0, -0.09, slopeLen / 2 - 0.02]}>
           <boxGeometry args={[c.len, c.material === 'canvas' ? 0.22 : 0.12, 0.03]} />
-          {c.material === 'canvas' ? <meshStandardMaterial color={c.color} roughness={0.95} /> : <meshStandardMaterial color="#7c828a" metalness={0.5} roughness={0.4} />}
+          {ghost ? (
+            <meshStandardMaterial {...GHOST_MAT} />
+          ) : c.material === 'canvas' ? (
+            <meshStandardMaterial color={c.color} roughness={0.95} />
+          ) : (
+            <meshStandardMaterial color="#7c828a" metalness={0.5} roughness={0.4} />
+          )}
         </mesh>
       </group>
       {/* wall attachment ledger */}
@@ -251,6 +270,8 @@ export function SegmentedShell({ force = false }: { force?: boolean }) {
   }, [design, L, W])
 
   if (!design || (!force && mode === 0)) return null
+  // Clear mode ghosts the whole building; the designer preview is never ghosted
+  const ghost = !force && mode === 1
 
   return (
     <group position={[0, 0, off]}>
@@ -260,15 +281,29 @@ export function SegmentedShell({ force = false }: { force?: boolean }) {
         return (
           <group key={i}>
             {/* side walls: left (-X) and right (+X) have independent heights */}
-            <mesh position={[-W / 2 - t / 2, seg.eaveL / 2, zc]} castShadow>
+            <mesh position={[-W / 2 - t / 2, seg.eaveL / 2, zc]} castShadow={!ghost}>
               <boxGeometry args={[t, seg.eaveL, len]} />
-              {seg.clear ? <meshStandardMaterial {...CLEAR_MAT} /> : <meshStandardMaterial color={seg.color} map={surfaceMap('metalsheet', len, seg.eaveL)} normalMap={detail ? surfaceNormal('metalsheet', len, seg.eaveL) : undefined} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />}
+              {ghost ? (
+                <meshStandardMaterial {...GHOST_MAT} />
+              ) : seg.clear ? (
+                <meshStandardMaterial {...CLEAR_MAT} />
+              ) : (
+                <meshStandardMaterial color={seg.color} map={surfaceMap('metalsheet', len, seg.eaveL)} normalMap={detail ? surfaceNormal('metalsheet', len, seg.eaveL) : undefined} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />
+              )}
+              {ghost && <Edges color={GHOST_EDGE} />}
             </mesh>
-            <mesh position={[W / 2 + t / 2, seg.eaveR / 2, zc]} castShadow>
+            <mesh position={[W / 2 + t / 2, seg.eaveR / 2, zc]} castShadow={!ghost}>
               <boxGeometry args={[t, seg.eaveR, len]} />
-              {seg.clear ? <meshStandardMaterial {...CLEAR_MAT} /> : <meshStandardMaterial color={seg.color} map={surfaceMap('metalsheet', len, seg.eaveR)} normalMap={detail ? surfaceNormal('metalsheet', len, seg.eaveR) : undefined} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />}
+              {ghost ? (
+                <meshStandardMaterial {...GHOST_MAT} />
+              ) : seg.clear ? (
+                <meshStandardMaterial {...CLEAR_MAT} />
+              ) : (
+                <meshStandardMaterial color={seg.color} map={surfaceMap('metalsheet', len, seg.eaveR)} normalMap={detail ? surfaceNormal('metalsheet', len, seg.eaveR) : undefined} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />
+              )}
+              {ghost && <Edges color={GHOST_EDGE} />}
             </mesh>
-            <SegmentRoof seg={seg} W={W} />
+            <SegmentRoof seg={seg} W={W} ghost={ghost} />
             {/* bulkhead face where the next zone has a different profile */}
             {i < spans.length - 1 &&
               (Math.abs(segTop(spans[i + 1]) - segTop(seg)) > 0.1 ||
@@ -276,7 +311,7 @@ export function SegmentedShell({ force = false }: { force?: boolean }) {
                 Math.abs(spans[i + 1].eaveR - seg.eaveR) > 0.1) && (
                 <mesh position={[0, 0, seg.z1]}>
                   <shapeGeometry args={[endShape(segTop(seg) >= segTop(spans[i + 1]) ? seg : spans[i + 1], W)]} />
-                  <Cladding seg={segTop(seg) >= segTop(spans[i + 1]) ? seg : spans[i + 1]} />
+                  <Cladding seg={segTop(seg) >= segTop(spans[i + 1]) ? seg : spans[i + 1]} ghost={ghost} />
                 </mesh>
               )}
           </group>
@@ -287,26 +322,29 @@ export function SegmentedShell({ force = false }: { force?: boolean }) {
         <>
           <mesh position={[0, 0, -L / 2 - t / 2]}>
             <shapeGeometry args={[endShape(spans[0], W)]} />
-            <Cladding seg={spans[0]} />
+            <Cladding seg={spans[0]} ghost={ghost} />
+            {ghost && <Edges color={GHOST_EDGE} />}
           </mesh>
           <mesh position={[0, 0, L / 2 + t / 2]}>
             <shapeGeometry args={[endShape(spans[spans.length - 1], W)]} />
-            <Cladding seg={spans[spans.length - 1]} />
+            <Cladding seg={spans[spans.length - 1]} ghost={ghost} />
+            {ghost && <Edges color={GHOST_EDGE} />}
           </mesh>
         </>
       )}
       {/* free-shape glazing / cladding panels per facade */}
-      {panelShapes.map(({ p, sh }, i) => {
+      {!ghost &&
+        panelShapes.map(({ p, sh }, i) => {
         const pos: [number, number, number] =
           p.side === 'E' ? [W / 2 + t + 0.03, 0, 0] : p.side === 'W' ? [-W / 2 - t - 0.03, 0, 0] : p.side === 'N' ? [0, 0, -L / 2 - t - 0.03] : [0, 0, L / 2 + t + 0.03]
         const rotY = p.side === 'E' ? -Math.PI / 2 : p.side === 'W' ? Math.PI / 2 : 0
-        return (
-          <mesh key={`p${i}`} position={pos} rotation-y={rotY}>
-            <shapeGeometry args={[sh]} />
-            {panelMat(p)}
-          </mesh>
-        )
-      })}
+          return (
+            <mesh key={`p${i}`} position={pos} rotation-y={rotY}>
+              <shapeGeometry args={[sh]} />
+              {panelMat(p)}
+            </mesh>
+          )
+        })}
       {/* canopies: local x along the wall, +z outward */}
       {design.canopies.map((c, i) => {
         const anchor: Record<string, { pos: [number, number, number]; rot: number }> = {
@@ -318,7 +356,7 @@ export function SegmentedShell({ force = false }: { force?: boolean }) {
         const a = anchor[c.side]
         return (
           <group key={`c${i}`} position={a.pos} rotation-y={a.rot}>
-            <Canopy c={c} />
+            <Canopy c={c} ghost={ghost} />
           </group>
         )
       })}
