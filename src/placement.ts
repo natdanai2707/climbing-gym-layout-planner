@@ -160,13 +160,18 @@ export function usedStrip(objects: Placed[], b: Building): { length: number; are
 export interface Opening {
   c: number // center along the wall (wall-local x)
   w: number
-  h: number
+  y0: number // bottom of the hole above the host's floor (0 for a door)
+  y1: number // top of the hole
+  glass?: boolean // a glazed opening, not a walk-through doorway
 }
 
-// Doors (room / glass doors) placed on a wall cut an opening automatically.
+// Doors and glass openings placed on a wall cut a hole automatically. A door
+// is a hole down to the floor; a window is a band starting at its sill, so
+// the wall keeps a spandrel below it and a head above.
 // The wall is described in the HOST's local frame: center (cx,cz), running
 // along local 'x' or 'z', length len, thickness t. Shared by the renderers
-// (walls open up around doors) and the walk-mode collision (walk through them).
+// (walls open up around them) and the walk-mode collision (doorways let you
+// through, glazing does not).
 export function wallOpenings(
   doors: Placed[],
   host: Placed,
@@ -190,7 +195,76 @@ export function wallOpenings(
     const v = wall.along === 'x' ? lz - wall.cz : lx - wall.cx
     if (Math.abs(v) > wall.t / 2 + d.d / 2 + 0.15) continue // not on this wall
     if (Math.abs(u) > wall.len / 2 + d.w / 2 - 0.08) continue
-    res.push({ c: u, w: d.w + 0.02, h: Math.min(d.h, host.h - 0.02) })
+    const glass = d.category === 'window'
+    const y0 = glass ? clamp(d.sill ?? 0.9, 0, Math.max(0, host.h - 0.2)) : 0
+    res.push({ c: u, w: d.w + 0.02, y0, y1: Math.min(y0 + d.h, host.h - 0.02), glass })
+  }
+  return res
+}
+
+/**
+ * Entrance steps and ramps end on a level landing at the door, not on the last
+ * tread. This is how much of their depth that landing takes — kept in one
+ * place so the renderers and the walk-mode support test agree.
+ */
+export function landingDepth(d: number): number {
+  return clamp(Math.min(1.4, d * 0.4), 0.6, Math.max(0.3, d - 0.6))
+}
+
+/**
+ * Split a wall (length `len`, height `h`) into the solid rectangles that are
+ * left after cutting `openings` out of it: the full-height runs between the
+ * holes, plus the spandrel under and head over each raised hole. Shared by the
+ * interior walls and the building shell so both open up the same way.
+ */
+export function wallPanels(
+  len: number,
+  h: number,
+  openings: Opening[],
+): Array<{ u0: number; u1: number; y0: number; y1: number }> {
+  const cuts = openings
+    .map((o) => [Math.max(-len / 2, o.c - o.w / 2), Math.min(len / 2, o.c + o.w / 2), o.y0, Math.min(o.y1, h)] as const)
+    .filter((c) => c[1] - c[0] > 0.02 && c[3] - c[2] > 0.05) // misses this wall entirely
+    .map((c) => [...c] as [number, number, number, number])
+    .sort((p, q) => p[0] - q[0])
+  // overlapping holes open over the union of their bands, so the wall is never
+  // left with a sliver wedged between two windows
+  const merged: Array<[number, number, number, number]> = []
+  for (const c of cuts) {
+    const last = merged[merged.length - 1]
+    if (last && c[0] <= last[1] + 0.01) {
+      last[1] = Math.max(last[1], c[1])
+      last[2] = Math.min(last[2], c[2])
+      last[3] = Math.max(last[3], c[3])
+    } else merged.push(c)
+  }
+  const res: Array<{ u0: number; u1: number; y0: number; y1: number }> = []
+  let cursor = -len / 2
+  for (const [x0, x1] of merged) {
+    if (x0 - cursor > 0.04) res.push({ u0: cursor, u1: x0, y0: 0, y1: h })
+    cursor = Math.max(cursor, x1)
+  }
+  if (len / 2 - cursor > 0.04) res.push({ u0: cursor, u1: len / 2, y0: 0, y1: h })
+  for (const [x0, x1, y0, y1] of merged) {
+    if (y0 > 0.04) res.push({ u0: x0, u1: x1, y0: 0, y1: y0 })
+    if (y1 < h - 0.04) res.push({ u0: x0, u1: x1, y0: y1, y1: h })
+  }
+  return res
+}
+
+/**
+ * Glass openings and doors placed on the building perimeter, resolved onto one
+ * shell wall. `rotWant` is the rotation an edge item takes on that wall
+ * (0 = north/-z, 4 = south/+z, 2 = west/-x, 6 = east/+x) and `centerZ` shifts
+ * the long walls into the shell's local frame.
+ */
+export function shellOpenings(objects: Placed[], rotWant: number, centerZ: number, wallH: number): Opening[] {
+  const res: Opening[] = []
+  for (const o of objects) {
+    if (o.category !== 'window' || o.rule !== 'edge' || o.rot !== rotWant) continue
+    const c = rotWant === 0 || rotWant === 4 ? o.x : o.z - centerZ
+    const y0 = clamp(o.sill ?? 0.9, 0, Math.max(0, wallH - 0.2))
+    res.push({ c, w: o.w, y0, y1: Math.min(y0 + o.h, wallH - 0.02), glass: true })
   }
   return res
 }

@@ -7,22 +7,11 @@ import { useThree } from '@react-three/fiber'
 import { useStore } from '../store'
 import { ArrowHandle } from './gizmo'
 import { surfaceMap, surfaceMapWorld, surfaceNormal, surfaceNormalWorld } from '../materials'
+import { shellOpenings, wallPanels } from '../placement'
 
 // Roof pitch of the gable (rise over half-width). ~15°.
 export const ROOF_PITCH = Math.tan((15 * Math.PI) / 180)
 
-const GLASS = { color: '#9fc8e0', roughness: 0.25, metalness: 0.15 }
-// the wrap-around window band is really see-through (walk mode looks out)
-const BAND_GLASS = {
-  color: '#aed3e4',
-  transparent: true,
-  opacity: 0.35,
-  roughness: 0.1,
-  metalness: 0.2,
-  depthWrite: false,
-  side: THREE.DoubleSide,
-}
-const MULLION = { color: '#8f979f', roughness: 0.4, metalness: 0.55 }
 
 const spread = (n: number, size: number) => Array.from({ length: n }, (_, i) => ((i + 0.5) / n - 0.5) * size)
 
@@ -63,34 +52,37 @@ export function WarehouseShell() {
     return s
   }, [W, eave, ridge])
 
-  // continuous glazing band around all four sides, 0.5 m – 2.5 m
-  const bandBot = 0.5
-  const bandTop = Math.min(2.5, eave - 0.4)
-  const bandH = bandTop - bandBot
-  // gable cladding above the band (the band replaces the wall below it)
-  const gableUpper = useMemo(() => {
-    const s = new THREE.Shape()
-    s.moveTo(-W / 2, bandTop)
-    s.lineTo(W / 2, bandTop)
-    s.lineTo(W / 2, eave)
-    s.lineTo(0, ridge)
-    s.lineTo(-W / 2, eave)
-    s.closePath()
-    return s
-  }, [W, eave, ridge, bandTop])
-  const sideMullions = useMemo(() => spread(Math.max(2, Math.round(L / 2.2)), L - 0.3), [L])
-  const endMullions = useMemo(() => spread(Math.max(2, Math.round(W / 2.2)), W - 0.3), [W])
-
-  // window band segments along the long walls, high near the eave
-  const sideWindows = useMemo(() => {
-    const y = Math.max(2.2, eave - 1.4)
-    const segW = 2.2
-    const gap = 0.6
-    const usable = L - 3
-    const n = Math.max(0, Math.floor(usable / (segW + gap)))
-    const startZ = (-(n * (segW + gap)) + gap) / 2
-    return Array.from({ length: n }, (_, i) => ({ z: startZ + i * (segW + gap) + segW / 2, y, segW, h: 1.1 }))
-  }, [L, eave])
+  // Glazing is not automatic any more: the facade is solid cladding until a
+  // "Glass Opening" item is dropped on a wall, which cuts a hole there. One
+  // opening list per wall, in that wall's own local coordinates.
+  const northGlass = useMemo(() => shellOpenings(objects, 0, building.centerZ, eave), [objects, building.centerZ, eave])
+  const southGlass = useMemo(() => shellOpenings(objects, 4, building.centerZ, eave), [objects, building.centerZ, eave])
+  const westGlass = useMemo(() => shellOpenings(objects, 2, building.centerZ, eave), [objects, building.centerZ, eave])
+  const eastGlass = useMemo(() => shellOpenings(objects, 6, building.centerZ, eave), [objects, building.centerZ, eave])
+  // the gable is a pentagon; a hole in it is a rectangular path punched out
+  const gableWith = (ops: typeof northGlass) =>
+    (() => {
+      const sh = new THREE.Shape()
+      sh.moveTo(-W / 2, 0)
+      sh.lineTo(W / 2, 0)
+      sh.lineTo(W / 2, eave)
+      sh.lineTo(0, ridge)
+      sh.lineTo(-W / 2, eave)
+      sh.closePath()
+      for (const o of ops) {
+        const x0 = Math.max(-W / 2 + 0.02, o.c - o.w / 2)
+        const x1 = Math.min(W / 2 - 0.02, o.c + o.w / 2)
+        if (x1 - x0 < 0.05) continue
+        const p = new THREE.Path()
+        p.moveTo(x0, o.y0)
+        p.lineTo(x1, o.y0)
+        p.lineTo(x1, o.y1)
+        p.lineTo(x0, o.y1)
+        p.closePath()
+        sh.holes.push(p)
+      }
+      return sh
+    })()
 
   // only perimeter doors show on the facade — interior room doors stay inside
   const doors = useMemo(() => objects.filter((o) => o.category === 'door' && o.rule === 'edge'), [objects])
@@ -207,67 +199,24 @@ export function WarehouseShell() {
         </>
       ) : (
         <>
-          {/* long side walls: cladding below/above a see-through glazing band */}
-          {[-1, 1].map((sx) => (
+          {/* long side walls: solid cladding, opened where glass is placed */}
+          {([-1, 1] as const).map((sx) => (
             <group key={sx} position={[sx * (W / 2 + t / 2), 0, 0]}>
-              <mesh position={[0, bandBot / 2, 0]}>
-                <boxGeometry args={[t, bandBot, L]} />
-                <meshStandardMaterial {...wallMat} />
-              </mesh>
-              <mesh position={[0, (bandTop + eave) / 2, 0]}>
-                <boxGeometry args={[t, Math.max(0.05, eave - bandTop), L]} />
-                <meshStandardMaterial {...wallMat} />
-              </mesh>
-              <mesh position={[0, bandBot + bandH / 2, 0]}>
-                <boxGeometry args={[t * 0.35, bandH, L]} />
-                <meshStandardMaterial {...BAND_GLASS} />
-              </mesh>
-              {/* sill + head rails and mullions */}
-              <mesh position={[0, bandBot - 0.03, 0]}>
-                <boxGeometry args={[t + 0.02, 0.07, L]} />
-                <meshStandardMaterial {...MULLION} />
-              </mesh>
-              <mesh position={[0, bandTop + 0.03, 0]}>
-                <boxGeometry args={[t + 0.02, 0.07, L]} />
-                <meshStandardMaterial {...MULLION} />
-              </mesh>
-              {sideMullions.map((z, i) => (
-                <mesh key={i} position={[0, bandBot + bandH / 2, z]}>
-                  <boxGeometry args={[t * 0.7, bandH, 0.09]} />
-                  <meshStandardMaterial {...MULLION} />
+              {wallPanels(L, eave, sx < 0 ? westGlass : eastGlass).map((p, i) => (
+                <mesh key={i} position={[0, (p.y0 + p.y1) / 2, (p.u0 + p.u1) / 2]} castShadow receiveShadow>
+                  <boxGeometry args={[t, p.y1 - p.y0, p.u1 - p.u0]} />
+                  <meshStandardMaterial {...wallMat} />
                 </mesh>
               ))}
             </group>
           ))}
-          {/* gable ends: cladding above the band, band + base below */}
-          {[-1, 1].map((sz) => (
+          {/* gable ends: one pentagon per end with the glazing punched out */}
+          {([-1, 1] as const).map((sz) => (
             <group key={`e${sz}`} position={[0, 0, sz * (L / 2 + t / 2)]}>
               <mesh>
-                <shapeGeometry args={[gableUpper]} />
+                <shapeGeometry args={[gableWith(sz < 0 ? northGlass : southGlass)]} />
                 <meshStandardMaterial {...gableMat} />
               </mesh>
-              <mesh position={[0, bandBot / 2, 0]}>
-                <boxGeometry args={[W, bandBot, t]} />
-                <meshStandardMaterial {...gableMat} />
-              </mesh>
-              <mesh position={[0, bandBot + bandH / 2, 0]}>
-                <boxGeometry args={[W, bandH, t * 0.35]} />
-                <meshStandardMaterial {...BAND_GLASS} />
-              </mesh>
-              <mesh position={[0, bandBot - 0.03, 0]}>
-                <boxGeometry args={[W, 0.07, t + 0.02]} />
-                <meshStandardMaterial {...MULLION} />
-              </mesh>
-              <mesh position={[0, bandTop + 0.03, 0]}>
-                <boxGeometry args={[W, 0.07, t + 0.02]} />
-                <meshStandardMaterial {...MULLION} />
-              </mesh>
-              {endMullions.map((x, i) => (
-                <mesh key={i} position={[x, bandBot + bandH / 2, 0]}>
-                  <boxGeometry args={[0.09, bandH, t * 0.7]} />
-                  <meshStandardMaterial {...MULLION} />
-                </mesh>
-              ))}
             </group>
           ))}
         </>
@@ -307,36 +256,10 @@ export function WarehouseShell() {
         <meshStandardMaterial color={transparent ? '#5c7fa6' : '#aab3bc'} transparent={transparent} opacity={transparent ? 0.5 : 1} />
       </mesh>
 
-      {/* solid mode: facade openings — placed doors + window bands */}
+      {/* solid mode: the placed entrance / fire-exit doors on the facade */}
       {!transparent && (
         <group>
           {doorPanels()}
-          {/* high window strips on both long walls */}
-          {sideWindows.map((wd, i) => (
-            <group key={i}>
-              <mesh position={[-W / 2 - t - 0.02, wd.y, wd.z]}>
-                <boxGeometry args={[0.06, wd.h, wd.segW]} />
-                <meshStandardMaterial {...GLASS} />
-              </mesh>
-              <mesh position={[W / 2 + t + 0.02, wd.y, wd.z]}>
-                <boxGeometry args={[0.06, wd.h, wd.segW]} />
-                <meshStandardMaterial {...GLASS} />
-              </mesh>
-            </group>
-          ))}
-          {/* windows flanking the gable centers, above door height */}
-          {[-L / 2 - t - 0.02, L / 2 + t + 0.02].map((z, i) => (
-            <group key={`g${i}`}>
-              <mesh position={[-W / 4, Math.max(2.6, eave - 1.4), z]}>
-                <boxGeometry args={[2.4, 1.1, 0.06]} />
-                <meshStandardMaterial {...GLASS} />
-              </mesh>
-              <mesh position={[W / 4, Math.max(2.6, eave - 1.4), z]}>
-                <boxGeometry args={[2.4, 1.1, 0.06]} />
-                <meshStandardMaterial {...GLASS} />
-              </mesh>
-            </group>
-          ))}
         </group>
       )}
 

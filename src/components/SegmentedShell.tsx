@@ -5,6 +5,8 @@ import { useStore } from '../store'
 import type { CanopyDef, FacadePanel, ShellDesign, ShellSegment } from '../types'
 import { surfaceMap, surfaceMapWorld, surfaceNormal, surfaceNormalWorld } from '../materials'
 import { ROOF_PITCH } from './WarehouseShell'
+import { shellOpenings, wallPanels } from '../placement'
+import type { Opening } from '../placement'
 
 /**
  * Freeform designed building shell. The building is a run of ZONES along its
@@ -119,14 +121,28 @@ function Cladding({ seg, ghost }: { seg: NormSeg; ghost?: boolean }) {
   )
 }
 
-// end-wall cross-section: floor, both eaves and the roof profile between them
-function endShape(seg: NormSeg, W: number): THREE.Shape {
+// end-wall cross-section: floor, both eaves and the roof profile between them.
+// Glass openings placed on that facade are punched straight out of the shape.
+function endShape(seg: NormSeg, W: number, ops: Opening[] = []): THREE.Shape {
   const s = new THREE.Shape()
   s.moveTo(-W / 2, 0)
   s.lineTo(W / 2, 0)
   const prof = roofProfile(seg, W)
   for (let i = prof.length - 1; i >= 0; i--) s.lineTo(prof[i][0], prof[i][1])
   s.closePath()
+  for (const o of ops) {
+    const x0 = Math.max(-W / 2 + 0.02, o.c - o.w / 2)
+    const x1 = Math.min(W / 2 - 0.02, o.c + o.w / 2)
+    const top = Math.min(o.y1, segTop(seg) - 0.05)
+    if (x1 - x0 < 0.05 || top - o.y0 < 0.05) continue
+    const p = new THREE.Path()
+    p.moveTo(x0, o.y0)
+    p.lineTo(x1, o.y0)
+    p.lineTo(x1, top)
+    p.lineTo(x0, top)
+    p.closePath()
+    s.holes.push(p)
+  }
   return s
 }
 
@@ -272,6 +288,12 @@ export function SegmentedShell({ force = false }: { force?: boolean }) {
   if (!design || (!force && mode === 0)) return null
   // Clear mode ghosts the whole building; the designer preview is never ghosted
   const ghost = !force && mode === 1
+  // Glass Opening items dropped on the perimeter cut real holes in the facade
+  const northGlass = ghost ? [] : shellOpenings(objects, 0, off, 1e3)
+  const southGlass = ghost ? [] : shellOpenings(objects, 4, off, 1e3)
+  const westGlass = ghost ? [] : shellOpenings(objects, 2, off, 1e3)
+  const eastGlass = ghost ? [] : shellOpenings(objects, 6, off, 1e3)
+  const shift = (ops: Opening[], zc: number) => ops.map((o) => ({ ...o, c: o.c - zc }))
 
   return (
     <group position={[0, 0, off]}>
@@ -280,29 +302,28 @@ export function SegmentedShell({ force = false }: { force?: boolean }) {
         const zc = (seg.z0 + seg.z1) / 2
         return (
           <group key={i}>
-            {/* side walls: left (-X) and right (+X) have independent heights */}
-            <mesh position={[-W / 2 - t / 2, seg.eaveL / 2, zc]} castShadow={!ghost}>
-              <boxGeometry args={[t, seg.eaveL, len]} />
-              {ghost ? (
-                <meshStandardMaterial {...GHOST_MAT} />
-              ) : seg.clear ? (
-                <meshStandardMaterial {...CLEAR_MAT} />
-              ) : (
-                <meshStandardMaterial color={seg.color} map={surfaceMap('metalsheet', len, seg.eaveL)} normalMap={detail ? surfaceNormal('metalsheet', len, seg.eaveL) : undefined} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />
-              )}
-              {ghost && <Edges color={GHOST_EDGE} />}
-            </mesh>
-            <mesh position={[W / 2 + t / 2, seg.eaveR / 2, zc]} castShadow={!ghost}>
-              <boxGeometry args={[t, seg.eaveR, len]} />
-              {ghost ? (
-                <meshStandardMaterial {...GHOST_MAT} />
-              ) : seg.clear ? (
-                <meshStandardMaterial {...CLEAR_MAT} />
-              ) : (
-                <meshStandardMaterial color={seg.color} map={surfaceMap('metalsheet', len, seg.eaveR)} normalMap={detail ? surfaceNormal('metalsheet', len, seg.eaveR) : undefined} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />
-              )}
-              {ghost && <Edges color={GHOST_EDGE} />}
-            </mesh>
+            {/* side walls: left (-X) and right (+X) have independent heights,
+                split into panels around any glass openings placed on them */}
+            {([-1, 1] as const).map((sx) => {
+              const eh = sx < 0 ? seg.eaveL : seg.eaveR
+              return wallPanels(len, eh, shift(sx < 0 ? westGlass : eastGlass, zc)).map((pn, k) => (
+                <mesh
+                  key={`${sx}:${k}`}
+                  position={[sx * (W / 2 + t / 2), (pn.y0 + pn.y1) / 2, zc + (pn.u0 + pn.u1) / 2]}
+                  castShadow={!ghost}
+                >
+                  <boxGeometry args={[t, pn.y1 - pn.y0, pn.u1 - pn.u0]} />
+                  {ghost ? (
+                    <meshStandardMaterial {...GHOST_MAT} />
+                  ) : seg.clear ? (
+                    <meshStandardMaterial {...CLEAR_MAT} />
+                  ) : (
+                    <meshStandardMaterial color={seg.color} map={surfaceMap('metalsheet', len, eh)} normalMap={detail ? surfaceNormal('metalsheet', len, eh) : undefined} roughness={0.45} metalness={0.35} side={THREE.DoubleSide} />
+                  )}
+                  {ghost && <Edges color={GHOST_EDGE} />}
+                </mesh>
+              ))
+            })}
             <SegmentRoof seg={seg} W={W} ghost={ghost} />
             {/* bulkhead face where the next zone has a different profile */}
             {i < spans.length - 1 &&
@@ -321,12 +342,12 @@ export function SegmentedShell({ force = false }: { force?: boolean }) {
       {spans.length > 0 && (
         <>
           <mesh position={[0, 0, -L / 2 - t / 2]}>
-            <shapeGeometry args={[endShape(spans[0], W)]} />
+            <shapeGeometry args={[endShape(spans[0], W, northGlass)]} />
             <Cladding seg={spans[0]} ghost={ghost} />
             {ghost && <Edges color={GHOST_EDGE} />}
           </mesh>
           <mesh position={[0, 0, L / 2 + t / 2]}>
-            <shapeGeometry args={[endShape(spans[spans.length - 1], W)]} />
+            <shapeGeometry args={[endShape(spans[spans.length - 1], W, southGlass)]} />
             <Cladding seg={spans[spans.length - 1]} ghost={ghost} />
             {ghost && <Edges color={GHOST_EDGE} />}
           </mesh>

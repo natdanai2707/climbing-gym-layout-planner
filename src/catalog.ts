@@ -7,6 +7,11 @@ export const CATALOG: ObjectDef[] = [
   { id: 'door_room', label: 'Room Door', category: 'door', w: 0.9, d: 0.15, h: 2.1, color: '#c9a06c', rule: 'floor' },
   // interior glass door: pairs with partitions and room walls
   { id: 'door_glass', label: 'Glass Door (interior)', category: 'door', w: 1.8, d: 0.15, h: 2.2, color: '#2f3237', rule: 'floor' },
+  // Glass openings: dropped on a wall like a door, but with a sill height, so
+  // glazing can be placed exactly where it is wanted — around the building
+  // facade or in an interior partition.
+  { id: 'window_wall', label: 'Glass Opening (facade)', category: 'window', w: 4.0, d: 0.3, h: 2.0, color: '#9ec8d8', rule: 'edge' },
+  { id: 'window_part', label: 'Glass Opening (interior)', category: 'window', w: 2.0, d: 0.15, h: 1.4, color: '#9ec8d8', rule: 'floor' },
   { id: 'parking', label: 'Parking (1 car)', category: 'parking', w: 5.0, d: 2.5, h: 0.05, color: '#8ea0b5', rule: 'outdoor' },
   { id: 'reception', label: 'Reception Counter', category: 'reception', w: 3.0, d: 1.5, h: 1.1, color: '#d9995f', rule: 'floor' },
   { id: 'storage', label: 'Storage Room', category: 'room', w: 4.0, d: 3.0, h: 2.6, color: '#b9b2a6', rule: 'floor' },
@@ -64,8 +69,8 @@ export const CATALOG: ObjectDef[] = [
   { id: 'moto', label: 'Motorcycle', category: 'site', w: 2.1, d: 0.8, h: 1.2, color: '#c2452f', rule: 'outdoor' },
   { id: 'carport', label: 'Carport Roof', category: 'site', w: 5.5, d: 5.5, h: 2.7, color: '#9aa3ad', rule: 'outdoor' },
   // entrance access onto the raised floor slab — place at a door
-  { id: 'steps', label: 'Concrete Steps (to entrance)', category: 'site', w: 3.0, d: 1.6, h: 1.0, color: '#c2beb4', rule: 'outdoor' },
-  { id: 'ramp', label: 'Concrete Ramp / Slope', category: 'site', w: 2.0, d: 6.0, h: 1.0, color: '#c2beb4', rule: 'outdoor' },
+  { id: 'steps', label: 'Concrete Steps (to entrance)', category: 'site', w: 3.0, d: 3.0, h: 1.0, color: '#c2beb4', rule: 'outdoor' },
+  { id: 'ramp', label: 'Concrete Ramp / Slope', category: 'site', w: 2.0, d: 7.4, h: 1.0, color: '#c2beb4', rule: 'outdoor' },
   // garden set
   { id: 'tree_cone', label: 'Conifer Tree', category: 'site', w: 2.2, d: 2.2, h: 4.5, color: '#3f6d3a', rule: 'outdoor' },
   { id: 'tree_slim', label: 'Cypress (columnar)', category: 'site', w: 1.2, d: 1.2, h: 5.0, color: '#4a7a42', rule: 'outdoor' },
@@ -83,6 +88,7 @@ export const CATALOG: ObjectDef[] = [
 
 export const CATEGORY_LABELS: Record<Category, string> = {
   door: 'Doors',
+  window: 'Glass Openings',
   parking: 'Parking',
   reception: 'Reception',
   room: 'Rooms',

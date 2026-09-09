@@ -19,7 +19,7 @@ import { PlacedObject } from './PlacedObject'
 import { WarehouseShell, ROOF_PITCH } from './WarehouseShell'
 import { SegmentedShell } from './SegmentedShell'
 import { ArrowHandle } from './gizmo'
-import { GROUND_Y, elevationFor, fp, getWarningIds, wallOpenings } from '../placement'
+import { GROUND_Y, elevationFor, fp, getWarningIds, landingDepth, wallOpenings } from '../placement'
 import type { Opening } from '../placement'
 
 // Exposed so the toolbar can grab a PNG of the canvas
@@ -307,7 +307,10 @@ function WalkRig() {
           const lx = dx * Math.cos(th) - dz * Math.sin(th)
           const lz = dx * Math.sin(th) + dz * Math.cos(th)
           if (Math.abs(lx) < o.w / 2 + 0.12 && Math.abs(lz) < o.d / 2 + 0.25) {
-            const t = Math.max(0, Math.min(1, (o.d / 2 - lz) / o.d))
+            // the last stretch before the door is a level landing at floor height
+            const land = landingDepth(o.d)
+            const run = Math.max(0.3, o.d - land) // the sloped part; past it the landing is flat
+            const t = Math.max(0, Math.min(1, (o.d / 2 - lz) / run))
             cand = GROUND_Y + o.h * t
           }
         } else if (o.category === 'mezzanine') {
@@ -372,7 +375,10 @@ function WalkRig() {
         }
         return false
       }
-      const passes = (ops: Opening[], u: number) => ops.some((op) => op.h > 1.5 && Math.abs(u - op.c) < op.w / 2 - 0.06)
+      // only a doorway lets you walk through: it has to reach the floor and be
+      // tall enough to step through. A glazed opening is still a wall.
+      const passes = (ops: Opening[], u: number) =>
+        ops.some((op) => !op.glass && op.y0 < 0.3 && op.y1 > 1.5 && Math.abs(u - op.c) < op.w / 2 - 0.06)
       const blocked = (x: number, z: number) => {
         if (perimeterBlocked(x, z)) return true
         for (const o of s.objects) {
@@ -408,7 +414,7 @@ function WalkRig() {
               if (!isTennis && front && ops.length === 0) {
                 // RoomShell's built-in doorway near the right corner
                 const doorW = Math.min(0.95, o.w * 0.4)
-                ops.push({ c: o.w / 2 - 0.35 - doorW / 2, w: doorW, h: Math.min(2.05, o.h - 0.2) })
+                ops.push({ c: o.w / 2 - 0.35 - doorW / 2, w: doorW, y0: 0, y1: Math.min(2.05, o.h - 0.2) })
               }
               pass = passes(ops, lx)
             }
@@ -418,7 +424,7 @@ function WalkRig() {
               if (isTennis && east && ops.length === 0) {
                 // tennis room's built-in doorway on the end opposite the screen
                 const doorW = Math.min(1.0, o.d * 0.35)
-                ops.push({ c: o.d / 2 - 0.4 - doorW / 2, w: doorW, h: Math.min(2.05, o.h - 0.3) })
+                ops.push({ c: o.d / 2 - 0.4 - doorW / 2, w: doorW, y0: 0, y1: Math.min(2.05, o.h - 0.3) })
               }
               pass = passes(ops, lz)
             }

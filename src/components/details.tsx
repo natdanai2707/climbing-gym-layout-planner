@@ -9,7 +9,7 @@ import { designDepth, designWidth } from '../wall/profile'
 import { ROUTE_COLORS, SURFACE_TINTED, leafTexture, surfaceMap, surfaceNormal } from '../materials'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { wallOpenings } from '../placement'
+import { landingDepth, wallOpenings, wallPanels } from '../placement'
 import type { Opening } from '../placement'
 import { useStore } from '../store'
 
@@ -766,7 +766,7 @@ function Mats({ o, tint }: { o: Placed; tint: string | null }) {
     <group>
       <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[o.w, h, o.d]} />
-        {o.material && o.material !== 'glass' && o.material !== 'half' ? (
+        {o.material && o.material !== 'glass' ? (
           <meshStandardMaterial
             key={o.material}
             color={tint ?? (SURFACE_TINTED[o.material] ? o.color : '#ffffff')}
@@ -1164,7 +1164,7 @@ function StoolMesh({ o, tint }: { o: Placed; tint: string | null }) {
 /* -------------------------------- zones -------------------------------- */
 
 function ZonePatch({ o, tint, opacity = 0.85 }: { o: Placed; tint: string | null; opacity?: number }) {
-  const surf = o.material && o.material !== 'glass' && o.material !== 'half' ? o.material : undefined
+  const surf = o.material && o.material !== 'glass' ? o.material : undefined
   if (surf) {
     // real surface finish (EPDM rubber / concrete / birch), tinted by the
     // item color where the material allows it
@@ -1526,7 +1526,6 @@ function CutWall({
   rotY = 0,
   glass = false,
   tint = null,
-  y0 = 0,
 }: {
   len: number
   h: number
@@ -1537,50 +1536,37 @@ function CutWall({
   rotY?: number
   glass?: boolean
   tint?: string | null
-  y0?: number // bottom of this band (a partition stacks a solid dado + glazing)
 }) {
-  // merge overlapping cut intervals
-  const cuts = openings
-    .map((o) => [Math.max(-len / 2, o.c - o.w / 2), Math.min(len / 2, o.c + o.w / 2), o.h] as [number, number, number])
-    .sort((p, q) => p[0] - q[0])
-  const merged: Array<[number, number, number]> = []
-  for (const c of cuts) {
-    const last = merged[merged.length - 1]
-    if (last && c[0] <= last[1] + 0.01) {
-      last[1] = Math.max(last[1], c[1])
-      last[2] = Math.max(last[2], c[2])
-    } else merged.push([...c])
-  }
-  const segs: Array<[number, number]> = []
-  let cursor = -len / 2
-  for (const [x0, x1] of merged) {
-    if (x0 - cursor > 0.04) segs.push([cursor, x0])
-    cursor = Math.max(cursor, x1)
-  }
-  if (len / 2 - cursor > 0.04) segs.push([cursor, len / 2])
-  const piece = (x0: number, x1: number, y0: number, y1: number, k: string) =>
-    glass ? (
-      <group key={k} position={[(x0 + x1) / 2, (y0 + y1) / 2, 0]}>
-        <GlassPanel w={x1 - x0} h={y1 - y0} t={t} tint={tint} />
-      </group>
-    ) : (
-      <Box key={k} args={[x1 - x0, y1 - y0, t]} pos={[(x0 + x1) / 2, (y0 + y1) / 2, 0]} color={color} />
-    )
+  const panels = wallPanels(len, h, openings)
   return (
     <group position={pos} rotation-y={rotY}>
-      {segs.map(([x0, x1], i) => piece(x0, x1, y0, h, `s${i}`))}
-      {merged.map(([x0, x1, oh], i) =>
-        oh < h - 0.04 ? piece(x0, x1, Math.max(oh, y0), h, `h${i}`) : null,
+      {panels.map((p, i) =>
+        glass ? (
+          <group key={i} position={[(p.u0 + p.u1) / 2, (p.y0 + p.y1) / 2, 0]}>
+            <GlassPanel w={p.u1 - p.u0} h={p.y1 - p.y0} t={t} tint={tint} />
+          </group>
+        ) : (
+          <Box
+            key={i}
+            args={[p.u1 - p.u0, p.y1 - p.y0, t]}
+            pos={[(p.u0 + p.u1) / 2, (p.y0 + p.y1) / 2, 0]}
+            color={color}
+          />
+        ),
       )}
     </group>
   )
 }
 
-// doors that can sit in interior walls (edge doors live on the building shell)
+// doors and glass openings that sit in interior walls (edge ones live on the
+// building shell)
 function useWallDoors(hostId: string): Placed[] {
   const objects = useStore((s) => s.objects)
   return useMemo(
-    () => objects.filter((d) => d.category === 'door' && d.rule === 'floor' && d.id !== hostId),
+    () =>
+      objects.filter(
+        (d) => (d.category === 'door' || d.category === 'window') && d.rule === 'floor' && d.id !== hostId,
+      ),
     [objects, hostId],
   )
 }
@@ -1592,35 +1578,6 @@ function PartitionWall({ o, tint }: { o: Placed; tint: string | null }) {
   const openings = wallOpenings(doors, o, { cx: 0, cz: 0, along: 'x', len: o.w, t })
   if (o.material === 'glass')
     return <CutWall len={o.w} h={o.h} t={t} openings={openings} color="" glass tint={tint} />
-  if (o.material === 'half') {
-    // solid dado up to solidH, clear glazing above, with an aluminium transom
-    // capping the join and a head rail at the top — the way an office screen
-    // or a gym studio divider is actually built.
-    const sh = Math.min(Math.max(0.1, o.solidH ?? 1), o.h - 0.1)
-    return (
-      <group>
-        <CutWall
-          len={o.w}
-          h={sh}
-          t={t}
-          openings={openings.map((op) => ({ ...op, h: Math.min(op.h, sh) }))}
-          color={tint ?? o.color}
-        />
-        <CutWall
-          len={o.w}
-          h={o.h - 0.05}
-          y0={sh + 0.05}
-          t={t * 0.6}
-          openings={openings.filter((op) => op.h > sh + 0.07)}
-          color=""
-          glass
-          tint={tint}
-        />
-        <Alu args={[o.w, 0.05, t + 0.02]} pos={[0, sh + 0.025, 0]} color={tint ?? '#8a9099'} />
-        <Alu args={[o.w, 0.05, t + 0.02]} pos={[0, o.h - 0.025, 0]} color={tint ?? '#8a9099'} />
-      </group>
-    )
-  }
   if (openings.length === 0)
     return (
       <mesh position={[0, o.h / 2, 0]} castShadow receiveShadow>
@@ -1986,6 +1943,39 @@ function Parking({ o, tint }: { o: Placed; tint: string | null }) {
       </mesh>
       {/* concrete wheel stop near the head of the stall */}
       <Box args={[Math.min(1.7, o.w * 0.35), 0.12, 0.16]} pos={[-o.w / 2 + Math.min(1.7, o.w * 0.35) / 2 + 0.3, 0.12, 0]} color="#cfcbc2" />
+    </group>
+  )
+}
+
+/**
+ * Glass opening: a glazed panel dropped into a wall the way a door is, but
+ * carried on a sill so it can sit anywhere up the wall. `h` is the height of
+ * the glass itself and `sill` where its bottom edge starts; the host wall (a
+ * partition, a room wall, or the building shell) opens up around it.
+ */
+function WindowPane({ o, tint }: { o: Placed; tint: string | null }) {
+  const t = Math.max(0.05, Math.min(o.d, 0.35))
+  const sill = Math.max(0, o.sill ?? 0.9)
+  const posts = useMemo(() => {
+    const n = Math.max(0, Math.round(o.w / 1.6) - 1)
+    return spread(n, (o.w * (n - 1 + 1e-6)) / Math.max(1, n + 1))
+  }, [o.w])
+  const frame = tint ?? '#8a9099'
+  return (
+    <group position={[0, sill, 0]}>
+      {/* glazing, inset into the reveal so the frame reads as a real jamb */}
+      <mesh position={[0, o.h / 2, 0]}>
+        <boxGeometry args={[o.w - 0.1, o.h - 0.1, Math.max(0.02, t * 0.3)]} />
+        <PaneGlass tint={tint} />
+      </mesh>
+      {/* jambs, head and sill */}
+      <Alu args={[0.06, o.h, t]} pos={[-o.w / 2 + 0.03, o.h / 2, 0]} color={frame} />
+      <Alu args={[0.06, o.h, t]} pos={[o.w / 2 - 0.03, o.h / 2, 0]} color={frame} />
+      <Alu args={[o.w, 0.06, t]} pos={[0, o.h - 0.03, 0]} color={frame} />
+      <Alu args={[o.w, 0.07, t + 0.04]} pos={[0, 0.035, 0.01]} color={frame} />
+      {posts.map((x, i) => (
+        <Alu key={i} args={[0.05, o.h - 0.1, t * 0.8]} pos={[x, o.h / 2, 0]} color={frame} />
+      ))}
     </group>
   )
 }
@@ -2666,74 +2656,142 @@ function Wheel({ pos, r }: { pos: [number, number, number]; r: number }) {
  */
 function EntranceSteps({ o, tint }: { o: Placed; tint: string | null }) {
   const rise = Math.max(0.2, o.h)
-  const n = Math.max(2, Math.round(rise / 0.17))
   const c = tint ?? o.color
   const map = surfaceMap('concrete', o.w, o.d)
+  // A flight never runs straight into the door: the top of the steps is a
+  // level landing at floor height, deep enough to stand on and open the door,
+  // and the treads take up whatever depth is left.
+  const landing = landingDepth(o.d)
+  const run = o.d - landing
+  const n = Math.max(2, Math.round(rise / 0.17))
   return (
     <group>
-      {Array.from({ length: n }, (_, i) => {
-        const y = (rise * (i + 1)) / n
-        const dz = (o.d * (n - i)) / n
-        return (
-          <mesh key={i} position={[0, y / 2, o.d / 2 - dz / 2]} castShadow receiveShadow>
-            <boxGeometry args={[o.w, y, dz]} />
-            <meshStandardMaterial color={c} map={map} roughness={0.9} metalness={0} />
-          </mesh>
-        )
-      })}
-      {/* cheek walls and a handrail down each side */}
-      {([1, -1] as const).map((s) => (
-        <group key={s}>
-          <mesh position={[s * (o.w / 2 + 0.06), rise / 2, 0]} castShadow>
-            <boxGeometry args={[0.12, rise, o.d]} />
-            <meshStandardMaterial color={c} map={map} roughness={0.9} />
-          </mesh>
-          <mesh
-            position={[s * (o.w / 2 + 0.06), rise / 2 + 0.95, 0]}
-            rotation-x={Math.atan2(rise, o.d)}
-            castShadow
-          >
-            <cylinderGeometry args={[0.025, 0.025, Math.hypot(o.d, rise), 8]} />
-            <meshStandardMaterial color="#6b7280" metalness={0.85} roughness={0.35} />
-          </mesh>
-        </group>
-      ))}
+      {/* flight, occupying what is left after the landing */}
+      <group position={[0, 0, landing / 2]}>
+        {Array.from({ length: n }, (_, i) => {
+          const y = (rise * (i + 1)) / n
+          const dz = (run * (n - i)) / n
+          return (
+            <mesh key={i} position={[0, y / 2, run / 2 - dz / 2]} castShadow receiveShadow>
+              <boxGeometry args={[o.w, y, dz]} />
+              <meshStandardMaterial color={c} map={map} roughness={0.9} metalness={0} />
+            </mesh>
+          )
+        })}
+      </group>
+      {/* the landing itself, flush with the floor slab */}
+      <mesh position={[0, rise / 2, -o.d / 2 + landing / 2]} castShadow receiveShadow>
+        <boxGeometry args={[o.w, rise, landing]} />
+        <meshStandardMaterial color={c} map={map} roughness={0.9} metalness={0} />
+      </mesh>
+      <AccessRail w={o.w} d={o.d} rise={rise} landing={landing} c={c} map={map} />
     </group>
   )
 }
 
-// Concrete access ramp: one sloped slab from the site up to the floor slab,
-// with kerbs and handrails. Low end at local +d/2, top landing at -d/2.
+/**
+ * Kerb + handrail running down one entrance flight or ramp: a sloped concrete
+ * upstand beside the incline, a solid one beside the landing, and a steel rail
+ * carried on posts at ~1 m centres so it is visibly held up rather than
+ * floating alongside.
+ */
+function AccessRail({
+  w,
+  d,
+  rise,
+  landing,
+  c,
+  map,
+}: {
+  w: number
+  d: number
+  rise: number
+  landing: number
+  c: string
+  map: THREE.Texture
+}) {
+  const run = Math.max(0.3, d - landing)
+  const slope = Math.atan2(rise, run)
+  const slabLen = Math.hypot(run, rise)
+  const RAIL = '#6b7280'
+  const np = Math.max(2, Math.round(slabLen / 1.1) + 1)
+  const posts = Array.from({ length: np }, (_, i) => i / (np - 1))
+  return (
+    <>
+      {([1, -1] as const).map((s) => {
+        const x = (s * w) / 2 + s * 0.06
+        return (
+          <group key={s}>
+            {/* kerb following the incline, then the landing upstand */}
+            <mesh position={[x, rise / 2 - 0.04, landing / 2]} rotation-x={slope} castShadow>
+              <boxGeometry args={[0.12, 0.3, slabLen]} />
+              <meshStandardMaterial color={c} map={map} roughness={0.9} />
+            </mesh>
+            <mesh position={[x, rise / 2, -d / 2 + landing / 2]} castShadow receiveShadow>
+              <boxGeometry args={[0.12, rise, landing]} />
+              <meshStandardMaterial color={c} map={map} roughness={0.9} />
+            </mesh>
+            {/* rail: sloped over the incline, level over the landing */}
+            {/* a cylinder's axis is Y, so the tilt is measured off vertical */}
+            <mesh position={[x, rise / 2 + 0.95, landing / 2]} rotation-x={slope - Math.PI / 2} castShadow>
+              <cylinderGeometry args={[0.025, 0.025, slabLen, 8]} />
+              <meshStandardMaterial color={RAIL} metalness={0.85} roughness={0.35} />
+            </mesh>
+            <mesh position={[x, rise + 0.95, -d / 2 + landing / 2]} rotation-x={Math.PI / 2} castShadow>
+              <cylinderGeometry args={[0.025, 0.025, landing, 8]} />
+              <meshStandardMaterial color={RAIL} metalness={0.85} roughness={0.35} />
+            </mesh>
+            {/* posts standing on the incline, plus one at the landing corner */}
+            {posts.map((u, i) => (
+              <mesh key={i} position={[x, u * rise + 0.46, d / 2 - u * run]} castShadow>
+                <cylinderGeometry args={[0.026, 0.026, 1.0, 8]} />
+                <meshStandardMaterial color={RAIL} metalness={0.85} roughness={0.35} />
+              </mesh>
+            ))}
+            <mesh position={[x, rise + 0.47, -d / 2 + 0.1]} castShadow>
+              <cylinderGeometry args={[0.028, 0.028, 0.96, 8]} />
+              <meshStandardMaterial color={RAIL} metalness={0.85} roughness={0.35} />
+            </mesh>
+          </group>
+        )
+      })}
+    </>
+  )
+}
+
+// Concrete access ramp: one sloped slab from the site up to a level landing at
+// the door, with kerbs and handrails. Low end at local +d/2, landing at -d/2 —
+// the same way round as the steps, so both read and walk identically.
 function EntranceRamp({ o, tint }: { o: Placed; tint: string | null }) {
   const rise = Math.max(0.2, o.h)
-  const run = Math.max(0.6, o.d)
+  const landing = landingDepth(o.d)
+  const run = Math.max(0.6, o.d - landing)
   const c = tint ?? o.color
   const map = surfaceMap('concrete', o.w, run)
-  const ang = Math.atan2(rise, run)
-  const slabLen = Math.hypot(run, rise)
+  // right-angled wedge: ground at the low (+z) end, floor height at the top
+  const wedge = useMemo(() => {
+    const sh = new THREE.Shape()
+    sh.moveTo(-run / 2, 0)
+    sh.lineTo(run / 2, 0)
+    sh.lineTo(run / 2, rise)
+    sh.closePath()
+    const g = new THREE.ExtrudeGeometry(sh, { depth: o.w, bevelEnabled: false })
+    g.translate(0, 0, -o.w / 2)
+    g.rotateY(Math.PI / 2) // shape x → world -z, extrusion → world x
+    return g
+  }, [run, rise, o.w])
   return (
     <group>
-      <mesh position={[0, rise / 2, 0]} rotation-x={-ang} castShadow receiveShadow>
-        <boxGeometry args={[o.w, 0.16, slabLen]} />
+      {/* the incline is a solid wedge of fill, not a floating plank */}
+      <mesh geometry={wedge} position={[0, 0, landing / 2]} castShadow receiveShadow>
         <meshStandardMaterial color={c} map={map} roughness={0.92} metalness={0} />
       </mesh>
-      {/* fill under the deck so it reads as a built ramp, not a floating plank */}
-      <mesh position={[0, rise / 4, 0]} castShadow receiveShadow>
-        <boxGeometry args={[o.w - 0.02, rise / 2, run * 0.98]} />
-        <meshStandardMaterial color={c} map={map} roughness={0.95} metalness={0} />
+      {/* level landing at the top, so the ramp doesn't run into the door */}
+      <mesh position={[0, rise / 2, -o.d / 2 + landing / 2]} castShadow receiveShadow>
+        <boxGeometry args={[o.w, rise, landing]} />
+        <meshStandardMaterial color={c} map={map} roughness={0.92} metalness={0} />
       </mesh>
-      {([1, -1] as const).map((s) => (
-        <group key={s}>
-          <mesh position={[s * (o.w / 2 + 0.05), rise / 2 + 0.1, 0]} rotation-x={-ang} castShadow>
-            <boxGeometry args={[0.1, 0.22, slabLen]} />
-            <meshStandardMaterial color={c} map={map} roughness={0.9} />
-          </mesh>
-          <mesh position={[s * (o.w / 2 + 0.05), rise / 2 + 0.95, 0]} rotation-x={-ang} castShadow>
-            <cylinderGeometry args={[0.025, 0.025, slabLen, 8]} />
-            <meshStandardMaterial color="#6b7280" metalness={0.85} roughness={0.35} />
-          </mesh>
-        </group>
-      ))}
+      <AccessRail w={o.w} d={o.d} rise={rise} landing={landing} c={c} map={map} />
     </group>
   )
 }
@@ -3889,6 +3947,8 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
       )
     case 'door':
       return <Door o={o} tint={tint} />
+    case 'window':
+      return <WindowPane o={o} tint={tint} />
     case 'parking':
       return <Parking o={o} tint={tint} />
     default:

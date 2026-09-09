@@ -15,6 +15,7 @@ export type Category =
   | 'wall_custom'
   | 'column'
   | 'partition'
+  | 'window'
   | 'person'
   | 'ceiling'
   | 'hvac'
@@ -48,10 +49,8 @@ export interface Placed {
   color: string
   rule: Rule
   level?: 'ground' | 'upper' // 'upper' = sits on a mezzanine floor
-  // surface finish (zones/mats), or the make-up of a partition: 'glass' is
-  // glazed full height, 'half' is a solid dado up to solidH with glass above.
-  material?: 'epdm' | 'concrete' | 'birch' | 'glass' | 'half'
-  solidH?: number // partition with material 'half': height of the solid base (m)
+  material?: 'epdm' | 'concrete' | 'birch' | 'glass' // surface finish (zones/mats) or glass partitions
+  sill?: number // glass opening: height of the bottom edge above the floor (m)
   drop?: number // vertical ceiling (bulkhead): panel extent hanging below its top hangers (m)
 }
 
