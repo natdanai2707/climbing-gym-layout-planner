@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Scene, canvasCapture, walkInput, walkLook } from './components/Scene'
+import { Scene, captureStill, walkInput, walkLook } from './components/Scene'
 import { ThumbnailFactory } from './components/Thumbnails'
 import { Toolbar } from './components/Toolbar'
 import { Palette } from './components/Palette'
@@ -104,10 +104,7 @@ export default function App() {
   const addShot = useStore((s) => s.addShot)
   const clearShots = useStore((s) => s.clearShots)
 
-  const takeShot = () => {
-    const el = canvasCapture.el
-    if (el) addShot(el.toDataURL('image/png'))
-  }
+  const takeShot = () => captureStill((url) => addShot(url))
   const downloadShot = (url: string, i: number) => {
     const a = document.createElement('a')
     a.href = url

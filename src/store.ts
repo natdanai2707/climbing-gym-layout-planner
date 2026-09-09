@@ -175,6 +175,13 @@ export interface GymState {
   setQuality: (q: 'low' | 'medium' | 'high') => void
   exposure: number // tone-mapping exposure, user-adjustable
   setExposure: (v: number) => void
+  // 3D orbit camera projection: orthographic (default) or a two-point
+  // perspective (~28 mm) with verticals kept perfectly parallel
+  cameraProj: 'ortho' | 'persp'
+  toggleCameraProj: () => void
+  // one-shot depth of field applied only while a snapshot is being taken
+  snapDof: boolean
+  setSnapDof: (v: boolean) => void
 
   // whole-hall floor finish + one-tap color/material themes
   floor: FloorFinish
@@ -751,6 +758,10 @@ export const useStore = create<GymState>()(
         localStorage.setItem(QUALITY_KEY, q)
       } catch { /* ignore */ }
     },
+    cameraProj: 'ortho',
+    toggleCameraProj: () => set({ cameraProj: get().cameraProj === 'ortho' ? 'persp' : 'ortho' }),
+    snapDof: false,
+    setSnapDof: (v) => set({ snapDof: v }),
     exposure: loadExposure(),
     setExposure: (v) => {
       const e = Math.max(0.5, Math.min(2, v))

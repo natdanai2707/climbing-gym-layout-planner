@@ -3,7 +3,7 @@ import { exportLayout, useStore } from '../store'
 import { NumInput } from './NumInput'
 import type { ThemeName } from '../store'
 import type { LayoutFile } from '../types'
-import { canvasCapture } from './Scene'
+import { canvasCapture, captureStill } from './Scene'
 
 function download(filename: string, url: string) {
   const a = document.createElement('a')
@@ -64,6 +64,8 @@ export function Toolbar() {
   const setLightMood = useStore((s) => s.setLightMood)
   const quality = useStore((s) => s.quality)
   const setQuality = useStore((s) => s.setQuality)
+  const cameraProj = useStore((s) => s.cameraProj)
+  const toggleCameraProj = useStore((s) => s.toggleCameraProj)
   const exposure = useStore((s) => s.exposure)
   const setExposure = useStore((s) => s.setExposure)
   const applyTheme = useStore((s) => s.applyTheme)
@@ -74,10 +76,7 @@ export function Toolbar() {
   const addShot = useStore((s) => s.addShot)
   const clearAll = useStore((s) => s.clearAll)
 
-  const takeShot = () => {
-    const el = canvasCapture.el
-    if (el) addShot(el.toDataURL('image/png'))
-  }
+  const takeShot = () => captureStill((url) => addShot(url))
   const importLayout = useStore((s) => s.importLayout)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -158,6 +157,13 @@ export function Toolbar() {
             🚶 Walk
           </button>
         </div>
+        <button
+          className={cameraProj === 'persp' ? 'on' : ''}
+          onClick={toggleCameraProj}
+          title="3D camera: orthographic, or a ~28 mm two-point perspective with verticals kept straight (arch-viz render look)"
+        >
+          📷 {cameraProj === 'persp' ? 'Persp' : 'Ortho'}
+        </button>
         <label className="tb-field">
           <span>Light</span>
           <select value={lightMood} onChange={(e) => setLightMood(e.target.value as 'day' | 'golden' | 'night')}>

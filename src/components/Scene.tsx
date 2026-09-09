@@ -5,7 +5,7 @@ import type { ThreeEvent } from '@react-three/fiber'
 import { Html, Line, OrbitControls, OrthographicCamera, PerspectiveCamera, Sky, SoftShadows, Stars } from '@react-three/drei'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js'
-import { EffectComposer } from '@react-three/postprocessing'
+import { DepthOfField, EffectComposer } from '@react-three/postprocessing'
 import { N8AOPostPass } from 'n8ao'
 import { ContactShadows } from '@react-three/drei'
 import { useStore } from '../store'
@@ -24,6 +24,23 @@ import type { Opening } from '../placement'
 // Exposed so the toolbar can grab a PNG of the canvas
 export const canvasCapture: { el: HTMLCanvasElement | null } = { el: null }
 
+// Take a still with a touch of depth of field: the DOF pass is enabled for a
+// few frames (snap only — it never runs while navigating), then captured.
+export function captureStill(after: (dataUrl: string) => void) {
+  const s = useStore.getState()
+  if (s.quality === 'low') {
+    const el = canvasCapture.el
+    if (el) after(el.toDataURL('image/png'))
+    return
+  }
+  s.setSnapDof(true)
+  setTimeout(() => {
+    const el = canvasCapture.el
+    if (el) after(el.toDataURL('image/png'))
+    useStore.getState().setSnapDof(false)
+  }, 220)
+}
+
 function CaptureBinder() {
   const gl = useThree((s) => s.gl)
   useEffect(() => {
@@ -38,10 +55,60 @@ function CaptureBinder() {
 // Orbit camera with view presets (iso / top / front / side). Remounted (via
 // key) whenever a preset is chosen or the view is reset. The scroll wheel /
 // pinch zooms toward the cursor or finger position (zoomToCursor).
+// Two-point perspective orbit camera (~28 mm): after the controls move the
+// camera, it is re-leveled and re-aimed with a vertical frustum shift, so
+// vertical edges stay perfectly parallel like an architectural render.
+function PerspRig() {
+  const size = useThree((s) => s.size)
+  const camRef = useRef<THREE.PerspectiveCamera>(null)
+  const ctlRef = useRef<{ target: THREE.Vector3 } | null>(null)
+  const b = useStore.getState().building
+  const dist = Math.max(38, b.length * 0.9)
+  // priority 0 runs after drei's OrbitControls update (priority -1), so the
+  // levelling below is never overwritten by the controls' own lookAt
+  useFrame(() => {
+    const cam = camRef.current
+    const ctl = ctlRef.current
+    if (!cam || !ctl) return
+    const t = ctl.target
+    const hd = Math.hypot(t.x - cam.position.x, t.z - cam.position.z) || 1e-4
+    // how far the target sits below (or above) the camera's level sight line
+    const phi = Math.atan2(t.y - cam.position.y, hd)
+    cam.lookAt(t.x, cam.position.y, t.z) // level the camera: verticals stay parallel
+    // shift the frustum instead of tilting — positive offsetY reveals what is
+    // below the sight line, which is where the building sits when looking down
+    const shift = Math.max(-0.45, Math.min(0.45, Math.tan(phi) / (2 * Math.tan((cam.fov * Math.PI) / 360))))
+    cam.setViewOffset(size.width, size.height, 0, -shift * size.height, size.width, size.height)
+    cam.updateProjectionMatrix()
+  })
+  return (
+    <>
+      <PerspectiveCamera
+        ref={camRef}
+        makeDefault
+        fov={46} // ~28 mm equivalent on full frame
+        position={[dist * 0.62, Math.max(14, b.length * 0.32), b.centerZ + dist]}
+        near={0.4}
+        far={900}
+      />
+      <OrbitControls
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ref={ctlRef as any}
+        makeDefault
+        target={[0, 3, b.centerZ]}
+        maxPolarAngle={Math.PI / 2.05}
+        zoomToCursor
+        mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN }}
+      />
+    </>
+  )
+}
+
 function CameraRig() {
   const size = useThree((s) => s.size)
   const preset = useStore((s) => s.viewPreset)
   const plan = useStore((s) => s.planMode)
+  const persp = useStore((s) => s.cameraProj === 'persp')
   const cfg = useMemo(() => {
     const s = useStore.getState()
     const { width, length, apron, centerZ } = s.building
@@ -76,6 +143,9 @@ function CameraRig() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preset])
+  // two-point perspective applies to the free 3D view only; the flat presets
+  // (top/front/side) and the 2D plan stay orthographic
+  if (persp && preset === 'iso' && !plan) return <PerspRig />
   return (
     <>
       <OrthographicCamera makeDefault position={cfg.pos} zoom={cfg.zoom} near={-500} far={1000} />
@@ -355,7 +425,7 @@ function WalkRig() {
     camera.rotation.set(v.pitch, v.yaw, 0)
   })
 
-  return <PerspectiveCamera makeDefault fov={72} near={0.08} far={400} />
+  return <PerspectiveCamera makeDefault fov={60} near={0.08} far={400} />
 }
 
 /* ------------------------- lighting moods & render style ------------------------- */
@@ -652,10 +722,12 @@ function AOEffects() {
     return p
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, quality, scene, camera, size.width, size.height])
+  const dof = useStore((s) => s.snapDof)
   if (!pass) return null
   return (
     <EffectComposer multisampling={4}>
       <primitive object={pass} />
+      {dof ? <DepthOfField focusDistance={0.012} focalLength={0.035} bokehScale={2.2} /> : <></>}
     </EffectComposer>
   )
 }
@@ -1049,6 +1121,7 @@ export function Scene() {
   const viewKey = useStore((s) => s.viewKey)
   const walking = useStore((s) => s.viewMode === 'walk')
   const mood = useStore((s) => s.lightMood)
+  const proj = useStore((s) => s.cameraProj)
   // CSS fallback while the canvas boots; the scene's gradient takes over
   const bg = `linear-gradient(${MOODS[mood].bg[0]}, ${MOODS[mood].bg[1]})`
   return (
@@ -1067,7 +1140,7 @@ export function Scene() {
     >
       <ExposureBinder />
       <CaptureBinder />
-      <group key={`rig-${viewKey}-${walking ? 'walk' : 'orbit'}`}>{walking ? <WalkRig /> : <CameraRig />}</group>
+      <group key={`rig-${viewKey}-${walking ? 'walk' : 'orbit'}-${proj}`}>{walking ? <WalkRig /> : <CameraRig />}</group>
       <DragController />
       <ArrowPriorityPicker />
       <MeasureController />
