@@ -9,6 +9,7 @@ import { DepthOfField, EffectComposer } from '@react-three/postprocessing'
 import { N8AOPostPass } from 'n8ao'
 import { ContactShadows } from '@react-three/drei'
 import { useStore } from '../store'
+import { viewAxis } from '../viewAxis'
 import type { ResizeAxis, ResizeState } from '../store'
 import type { Placed } from '../types'
 import { BuildingFloor } from './BuildingFloor'
@@ -1088,6 +1089,24 @@ function ResizeGizmo({ o, elev }: { o: Placed; elev: number }) {
   )
 }
 
+// Keeps viewAxis in step with the orbit camera so arrow-key nudges move an
+// item the way the screen looks, not the way the world happens to be oriented.
+function ViewAxisTracker() {
+  const camera = useThree((st) => st.camera)
+  useFrame(() => {
+    const d = new THREE.Vector3()
+    camera.getWorldDirection(d)
+    if (Math.abs(d.x) > Math.abs(d.z)) {
+      viewAxis.fx = Math.sign(d.x) || 1
+      viewAxis.fz = 0
+    } else {
+      viewAxis.fx = 0
+      viewAxis.fz = Math.sign(d.z) || -1
+    }
+  })
+  return null
+}
+
 function SceneContent() {
   const objects = useStore((s) => s.objects)
   const building = useStore((s) => s.building)
@@ -1104,6 +1123,7 @@ function SceneContent() {
 
   return (
     <>
+      <ViewAxisTracker />
       <MoodLights />
       <EnvLighting />
       <BackgroundGradient />

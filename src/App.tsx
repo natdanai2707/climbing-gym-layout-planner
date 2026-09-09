@@ -8,6 +8,7 @@ import { StatsPanel } from './components/StatsPanel'
 import { WallDesigner } from './components/WallDesigner'
 import { BuildingDesigner } from './components/BuildingDesigner'
 import { useStore } from './store'
+import { viewAxis, screenRight } from './viewAxis'
 import { useWallStore } from './wall/wallStore'
 import { fp } from './placement'
 
@@ -163,6 +164,23 @@ export default function App() {
         s.redo()
         return
       }
+      // Arrow keys nudge the selected item once Move is armed (or while a
+      // freshly dropped item is still pending). Steps follow the screen, not
+      // the world: ↑ pushes away from the camera whichever way it is orbited.
+      if (e.key.startsWith('Arrow') && s.selectedId && (s.moveArmed || s.pendingId === s.selectedId)) {
+        e.preventDefault()
+        const step = e.shiftKey ? 0.1 : s.building.cell
+        const f = viewAxis
+        const r = screenRight()
+        const d = {
+          ArrowUp: [f.fx, f.fz],
+          ArrowDown: [-f.fx, -f.fz],
+          ArrowRight: [r.x, r.z],
+          ArrowLeft: [-r.x, -r.z],
+        }[e.key]
+        if (d) s.nudge(d[0] * step, d[1] * step)
+        return
+      }
       switch (e.key) {
         case 'r':
         case 'R':
@@ -262,7 +280,7 @@ export default function App() {
             </div>
           )}
           {!walking && moveArmed && selectedId && !pending && (
-            <div className="move-hint">Drag the highlighted item to move it</div>
+            <div className="move-hint">Drag the highlighted item — or nudge it with ← ↑ → ↓ (Shift = 10 cm)</div>
           )}
           {/* pending placement: adjust with the arrows, then confirm (all devices) */}
           {!walking && pending && (

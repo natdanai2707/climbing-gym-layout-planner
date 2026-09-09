@@ -148,6 +148,7 @@ export interface GymState {
   rotate: () => void
   removeSelected: () => void
   updateObject: (id: string, patch: Partial<Placed>) => void
+  nudge: (dx: number, dz: number) => void // arrow-key move of the selection
   syncDesignDims: (
     defId: string,
     oldDims: { w: number; d: number; h: number },
@@ -657,6 +658,20 @@ export const useStore = create<GymState>()(
         selectedId: null,
         pendingId: pendingId === selectedId ? null : pendingId,
       })
+    },
+
+    // Arrow-key move: shifts the selected object by an exact delta. Successive
+    // presses coalesce into one undo step, and the position is NOT re-snapped,
+    // so a fine step stays where it is put.
+    nudge: (dx, dz) => {
+      const { selectedId, objects, building } = get()
+      if (!selectedId) return
+      const o = objects.find((v) => v.id === selectedId)
+      if (!o) return
+      get().snapshot(true)
+      const r = computeDrop(o, o.x + dx, o.z + dz, building, false)
+      set({ objects: objects.map((v) => (v.id === selectedId ? { ...v, x: r.x, z: r.z, rot: r.rot } : v)) })
+      set({ building: growToFit(get().building, get().objects) })
     },
 
     updateObject: (id, patch) => {
