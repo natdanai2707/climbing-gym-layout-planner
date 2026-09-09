@@ -2574,95 +2574,34 @@ function Wheel({ pos, r }: { pos: [number, number, number]; r: number }) {
 const CAR_PAINTS = ['#d8dadd', '#c4c8cd', '#22262b', '#3a4552', '#711f26', '#20344d', '#e9e7e1', '#8b939c']
 const CAR_DEFAULT_COLORS = new Set(['#5b7fb4', '#60a5fa'])
 
-/**
- * Lofted car body. Each cross-section is a rounded box outline in the (z, y)
- * plane whose width, sill height, shoulder height and tumblehome all change
- * along the length — that is what gives a car its real double-curved sheet
- * metal, which a straight extrusion can never have.
- */
-type CarSection = { x: number; hw: number; yBot: number; yTop: number; tumble: number; round: number }
-
-const CAR_RADIAL = 22
-function carLoft(sections: CarSection[]): THREE.BufferGeometry {
-  const pos: number[] = []
-  const idx: number[] = []
-  const ring = (s: CarSection) => {
-    // superellipse-ish outline: rounded bottom corners, rounded shoulder,
-    // top narrower than the sill by `tumble`
-    const pts: Array<[number, number]> = []
-    for (let k = 0; k < CAR_RADIAL; k++) {
-      const a = (k / CAR_RADIAL) * Math.PI * 2
-      const c = Math.cos(a)
-      const sn = Math.sin(a)
-      const n = s.round
-      const zx = Math.sign(c) * Math.pow(Math.abs(c), 2 / n)
-      const zy = Math.sign(sn) * Math.pow(Math.abs(sn), 2 / n)
-      const midY = (s.yTop + s.yBot) / 2
-      const halfH = (s.yTop - s.yBot) / 2
-      const y = midY + zy * halfH
-      // narrow the section toward the roof
-      const t = (y - s.yBot) / Math.max(1e-4, s.yTop - s.yBot)
-      const w = s.hw * (1 - s.tumble * t * t)
-      pts.push([zx * w, y])
-    }
-    return pts
-  }
-  for (const s of sections) for (const [z, y] of ring(s)) pos.push(s.x, y, z)
-  for (let r = 0; r < sections.length - 1; r++) {
-    for (let k = 0; k < CAR_RADIAL; k++) {
-      const a = r * CAR_RADIAL + k
-      const b = r * CAR_RADIAL + ((k + 1) % CAR_RADIAL)
-      const c = (r + 1) * CAR_RADIAL + k
-      const d = (r + 1) * CAR_RADIAL + ((k + 1) % CAR_RADIAL)
-      idx.push(a, b, c, b, d, c)
-    }
-  }
-  // flat caps at both ends
-  for (const [ri, flip] of [[0, true], [sections.length - 1, false]] as const) {
-    const s = sections[ri]
-    const center = pos.length / 3
-    pos.push(s.x, (s.yTop + s.yBot) / 2, 0)
-    for (let k = 0; k < CAR_RADIAL; k++) {
-      const a = ri * CAR_RADIAL + k
-      const b = ri * CAR_RADIAL + ((k + 1) % CAR_RADIAL)
-      if (flip) idx.push(center, b, a)
-      else idx.push(center, a, b)
-    }
-  }
-  const g = new THREE.BufferGeometry()
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
-  g.setIndex(idx)
-  g.computeVertexNormals()
-  return g
-}
-
 // Alloy wheel: rounded tire carcass, dished rim face and five spokes.
+// The axle runs along Z, which is the car's width.
 function CarWheel({ pos, r = 0.33 }: { pos: [number, number, number]; r?: number }) {
-  const w = r * 0.62 // tread width
+  const w = r * 0.56
   return (
-    // torus and the rim discs all spin about Z, which is the car's axle axis
     <group position={pos}>
       <mesh castShadow>
-        <torusGeometry args={[r * 0.8, r * 0.2, 10, 24]} />
+        <torusGeometry args={[r * 0.8, r * 0.2, 8, 20]} />
         <meshStandardMaterial color="#1b1d21" roughness={0.97} metalness={0} />
       </mesh>
       <mesh rotation-x={Math.PI / 2} castShadow>
-        <cylinderGeometry args={[r * 0.82, r * 0.82, w, 24]} />
+        <cylinderGeometry args={[r * 0.82, r * 0.82, w, 20]} />
         <meshStandardMaterial color="#1b1d21" roughness={0.97} metalness={0} />
       </mesh>
-      {([1, -1] as const).map((s) => (
-        <group key={s} position={[0, 0, (s * w) / 2]}>
+      {/* alloy face on both sides, so the wheel reads from either flank */}
+      {([1, -1] as const).map((f) => (
+        <group key={f} position={[0, 0, (f * w) / 2]}>
           <mesh rotation-x={Math.PI / 2}>
-            <cylinderGeometry args={[r * 0.6, r * 0.6, 0.02, 22]} />
+            <cylinderGeometry args={[r * 0.62, r * 0.62, 0.02, 18]} />
             <meshStandardMaterial color="#aeb4bb" metalness={0.85} roughness={0.32} />
           </mesh>
-          <mesh position={[0, 0, s * 0.02]} rotation-x={Math.PI / 2}>
-            <cylinderGeometry args={[r * 0.17, r * 0.17, 0.03, 14]} />
+          <mesh position={[0, 0, f * 0.02]} rotation-x={Math.PI / 2}>
+            <cylinderGeometry args={[r * 0.17, r * 0.17, 0.03, 12]} />
             <meshStandardMaterial color="#8f959c" metalness={0.8} roughness={0.35} />
           </mesh>
           {Array.from({ length: 5 }, (_, i) => (
-            <mesh key={i} position={[0, 0, s * 0.012]} rotation-z={(i / 5) * Math.PI * 2}>
-              <boxGeometry args={[r * 0.13, r * 1.02, 0.02]} />
+            <mesh key={i} position={[0, 0, f * 0.014]} rotation-z={(i / 5) * Math.PI * 2}>
+              <boxGeometry args={[r * 0.13, r * 1.04, 0.02]} />
               <meshStandardMaterial color="#b8bec5" metalness={0.85} roughness={0.28} />
             </mesh>
           ))}
@@ -2672,7 +2611,15 @@ function CarWheel({ pos, r = 0.33 }: { pos: [number, number, number]; r?: number
   )
 }
 
-// Parked car — rotate in 45° steps to angle-park it.
+/**
+ * Parked car — rotate in 45° steps to angle-park it.
+ *
+ * The whole car is ONE extruded shell: a single side-view silhouette that
+ * runs bumper → hood → windscreen → roof → rear glass → boot and back along
+ * the sills, with the wheel arches cut out of that same outline. The wheels
+ * then sit inside those arches, within the body's width, so the car reads as
+ * one mass instead of a body with wheels stuck on beside it.
+ */
 function Car({ o, tint }: { o: Placed; tint: string | null }) {
   let body = tint ?? o.color
   if (!tint && CAR_DEFAULT_COLORS.has(o.color)) {
@@ -2682,120 +2629,104 @@ function Car({ o, tint }: { o: Placed; tint: string | null }) {
   }
   const L = o.w
   const W = o.d
-  const wx = L * 0.31 // wheel centres along the length
-  const wr = Math.min(0.35, W * 0.2)
+  const wx = L * 0.3 // wheel centres along the length
+  const wr = Math.min(0.36, W * 0.205)
+  const arch = wr * 1.08
+  const sill = 0.32
+  const belt = 0.92
 
-  const { bodyGeo, cabinGeo, roofGeo } = useMemo(() => {
-    const hw = W / 2
-    const sill = 0.3
-    // t: 0 = tail, 1 = nose. Width swells over the wheels, tapers at both ends.
-    const secs: CarSection[] = []
-    const N = 26
-    for (let i = 0; i < N; i++) {
-      const t = i / (N - 1)
-      const x = -L / 2 + t * L
-      // plan-view taper: full width across the doors, narrower at nose and tail
-      const plan = 0.8 + 0.2 * Math.sin(Math.PI * Math.min(1, Math.max(0, (t - 0.02) / 0.96)))
-      const endPinch = t < 0.06 ? 0.82 + t * 3 : t > 0.94 ? 0.82 + (1 - t) * 3 : 1
-      // side view: hood rises from the nose to the cowl, beltline runs back
-      let top: number
-      if (t > 0.78) top = 0.74 + (1 - t) * 0.5 // nose and hood
-      else if (t > 0.62) top = 0.85 + (0.78 - t) * 0.35 // cowl
-      else if (t > 0.14) top = 0.9
-      else top = 0.9 - (0.14 - t) * 0.5 // boot lid falls away
-      const bot = sill - (t < 0.08 || t > 0.92 ? 0.05 : 0) // slight lift at the bumpers
-      secs.push({
-        x,
-        hw: hw * plan * Math.min(1, endPinch),
-        yBot: bot,
-        yTop: top,
-        tumble: 0.12,
-        round: 3.4, // fuller than an ellipse, softer than a box
-      })
-    }
-    // cabin: windscreen → roof → rear glass, inset from the body sides
-    const cab: CarSection[] = []
-    const M = 16
-    for (let i = 0; i < M; i++) {
-      const t = i / (M - 1) // 0 = rear glass base, 1 = windscreen base
-      const x = -L * 0.42 + t * L * 0.6
-      // roof arc: low at both glass bases, tallest over the B-pillar
-      const roof = 0.92 + Math.sin(Math.PI * t) * 0.52 * Math.sin(Math.PI * 0.5 + (t - 0.5) * 0.5)
-      cab.push({
-        x,
-        hw: hw * (0.78 + 0.1 * Math.sin(Math.PI * t)),
-        yBot: 0.86,
-        yTop: Math.max(0.95, roof),
-        tumble: 0.3, // strong tumblehome: glass leans in toward the roof
-        round: 3,
-      })
-    }
-    // painted roof skin: the same run, capping the glass
-    const roof: CarSection[] = cab.map((c) => ({
-      ...c,
-      hw: c.hw * (1 - c.tumble) * 1.01,
-      yBot: c.yTop - 0.1,
-      yTop: c.yTop + 0.012,
-      tumble: 0.1,
-      round: 4,
-    }))
-    return { bodyGeo: carLoft(secs), cabinGeo: carLoft(cab), roofGeo: carLoft(roof) }
-  }, [L, W])
+  const { shellGeo, glassGeo, glassZ } = useMemo(() => {
+    // side silhouette, x = along the car (nose at +x), y = up
+    const s = new THREE.Shape()
+    s.moveTo(-L * 0.46, sill)
+    // rear wheel arch
+    s.lineTo(-wx - arch, sill)
+    s.absarc(-wx, sill, arch, Math.PI, 0, true)
+    // sill between the arches
+    s.lineTo(wx - arch, sill)
+    s.absarc(wx, sill, arch, Math.PI, 0, true)
+    // front bumper and nose
+    s.lineTo(L * 0.46, sill)
+    s.quadraticCurveTo(L * 0.5, sill + 0.02, L * 0.5, 0.5)
+    s.lineTo(L * 0.5, 0.62)
+    s.quadraticCurveTo(L * 0.5, 0.74, L * 0.42, 0.79)
+    // hood rising to the cowl
+    s.quadraticCurveTo(L * 0.3, 0.84, L * 0.17, belt)
+    // windscreen
+    s.lineTo(L * 0.02, 1.33)
+    // roof, gently arched
+    s.quadraticCurveTo(-L * 0.14, 1.4, -L * 0.28, 1.32)
+    // rear glass down to the boot lid
+    s.lineTo(-L * 0.4, belt)
+    s.quadraticCurveTo(-L * 0.49, belt - 0.02, -L * 0.5, 0.78)
+    s.lineTo(-L * 0.5, 0.5)
+    s.quadraticCurveTo(-L * 0.5, sill + 0.02, -L * 0.46, sill)
+    s.closePath()
+
+    const bev = Math.min(0.09, W * 0.05)
+    const g = new THREE.ExtrudeGeometry(s, {
+      depth: W - bev * 2,
+      bevelEnabled: true,
+      bevelThickness: bev,
+      bevelSize: bev,
+      bevelSegments: 4,
+      curveSegments: 14,
+    })
+    g.translate(0, 0, -(W - bev * 2) / 2)
+
+    // greenhouse glazing: the same outline shape, inset, so the glass sits in
+    // the shell rather than floating beside it
+    const gl = new THREE.Shape()
+    gl.moveTo(L * 0.145, belt + 0.015)
+    gl.lineTo(L * 0.025, 1.305)
+    gl.quadraticCurveTo(-L * 0.14, 1.375, -L * 0.272, 1.295)
+    gl.lineTo(-L * 0.378, belt + 0.015)
+    gl.closePath()
+    const gg = new THREE.ShapeGeometry(gl, 12)
+    return { shellGeo: g, glassGeo: gg, glassZ: W / 2 - bev * 0.15 }
+  }, [L, W, wx, arch, sill, belt])
 
   return (
     <group>
-      <mesh geometry={bodyGeo} castShadow receiveShadow>
-        <meshPhysicalMaterial color={body} roughness={0.28} metalness={0.15} clearcoat={1} clearcoatRoughness={0.08} />
+      {/* one shell for the whole car */}
+      <mesh geometry={shellGeo} castShadow receiveShadow>
+        <meshPhysicalMaterial color={body} roughness={0.3} metalness={0.15} clearcoat={1} clearcoatRoughness={0.09} />
       </mesh>
-      {/* dark glasshouse wrapping the cabin */}
-      <mesh geometry={cabinGeo} castShadow>
-        <meshPhysicalMaterial color="#181e26" roughness={0.08} metalness={0.2} clearcoat={1} clearcoatRoughness={0.05} />
-      </mesh>
-      {/* painted roof skin over the glass */}
-      <mesh geometry={roofGeo} castShadow>
-        <meshPhysicalMaterial color={body} roughness={0.28} metalness={0.15} clearcoat={1} clearcoatRoughness={0.08} />
-      </mesh>
-      {/* wheels tucked into the arches */}
+      {/* dark glazing laid on each flank, so the greenhouse always reads */}
+      {([1, -1] as const).map((s) => (
+        <mesh key={s} geometry={glassGeo} position={[0, 0, s * glassZ]}>
+          <meshPhysicalMaterial color="#151b23" roughness={0.08} metalness={0.2} clearcoat={1} clearcoatRoughness={0.05} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+      {/* wheels inside the arches, tucked within the body width */}
       {([1, -1] as const).map((s) =>
-        [wx, -wx].map((x) => <CarWheel key={`${s}${x}`} pos={[x, wr, s * (W / 2 - wr * 0.42)]} r={wr} />),
+        [wx, -wx].map((x) => <CarWheel key={`${s}${x}`} pos={[x, wr, s * (W / 2 - wr * 0.3)]} r={wr} />),
       )}
-      {/* dark arch liners so the wheels sit in a recess, not on the surface */}
-      {([1, -1] as const).map((s) =>
-        [wx, -wx].map((x) => (
-          <mesh key={`a${s}${x}`} position={[x, wr, s * (W / 2 - wr * 0.42)]} rotation-x={Math.PI / 2}>
-            <cylinderGeometry args={[wr * 1.04, wr * 1.04, wr * 0.66, 18, 1, true]} />
-            <meshStandardMaterial color="#15171a" roughness={1} side={THREE.DoubleSide} />
-          </mesh>
-        )),
-      )}
-      {/* bumpers, grille, plates, lamps, mirrors, handles */}
-      <mesh position={[L / 2 - 0.02, 0.62, 0]} rotation-y={Math.PI / 2}>
-        <planeGeometry args={[W * 0.52, 0.14]} />
+      {/* grille, plates, lamps, mirrors, handles, rocker line */}
+      <mesh position={[L / 2 - 0.005, 0.6, 0]} rotation-y={Math.PI / 2}>
+        <planeGeometry args={[W * 0.56, 0.15]} />
         <meshStandardMaterial color="#15171a" roughness={0.7} />
       </mesh>
-      <Box args={[0.03, 0.1, 0.3]} pos={[L / 2 + 0.02, 0.42, 0]} color="#e7e9ec" />
-      <Box args={[0.03, 0.1, 0.3]} pos={[-L / 2 - 0.02, 0.44, 0]} color="#e7e9ec" />
+      <Box args={[0.03, 0.1, 0.3]} pos={[L / 2 + 0.01, 0.42, 0]} color="#e7e9ec" />
+      <Box args={[0.03, 0.1, 0.3]} pos={[-L / 2 - 0.01, 0.44, 0]} color="#e7e9ec" />
       {([1, -1] as const).map((s) => (
         <group key={s}>
-          {/* headlamp + tail lamp wrapped onto the corners */}
-          <mesh position={[L * 0.47, 0.74, s * W * 0.3]} rotation-y={-s * 0.35}>
-            <boxGeometry args={[0.1, 0.09, W * 0.24]} />
+          <mesh position={[L * 0.455, 0.74, s * W * 0.28]}>
+            <boxGeometry args={[0.1, 0.1, W * 0.26]} />
             <meshPhysicalMaterial color="#eef4fa" roughness={0.1} metalness={0.2} clearcoat={1} />
           </mesh>
-          <mesh position={[-L * 0.475, 0.82, s * W * 0.31]} rotation-y={s * 0.3}>
-            <boxGeometry args={[0.08, 0.1, W * 0.22]} />
+          <mesh position={[-L * 0.475, 0.84, s * W * 0.29]}>
+            <boxGeometry args={[0.07, 0.11, W * 0.24]} />
             <meshPhysicalMaterial color="#8f1f1a" roughness={0.15} metalness={0.15} clearcoat={1} />
           </mesh>
-          {/* door mirror on a stalk */}
-          <mesh position={[L * 0.12, 0.98, s * (W / 2 + 0.02)]}>
-            <boxGeometry args={[0.13, 0.06, 0.11]} />
+          {/* door mirror sitting on the shell, not floating off it */}
+          <mesh position={[L * 0.13, 1.0, s * (W / 2 - 0.02)]}>
+            <boxGeometry args={[0.12, 0.06, 0.16]} />
             <meshStandardMaterial color={body} roughness={0.3} metalness={0.15} />
           </mesh>
-          {/* flush door handles */}
-          <Box args={[0.16, 0.028, 0.02]} pos={[L * 0.02, 0.84, s * (W / 2 - 0.02)]} color="#9aa1a9" />
-          <Box args={[0.16, 0.028, 0.02]} pos={[-L * 0.22, 0.84, s * (W / 2 - 0.02)]} color="#9aa1a9" />
-          {/* rocker shadow line */}
-          <Box args={[L * 0.62, 0.05, 0.03]} pos={[0, 0.33, s * (W / 2 - 0.03)]} color="#2a2e33" />
+          <Box args={[0.16, 0.028, 0.02]} pos={[L * 0.0, 0.86, s * (W / 2 - 0.03)]} color="#9aa1a9" />
+          <Box args={[0.16, 0.028, 0.02]} pos={[-L * 0.24, 0.86, s * (W / 2 - 0.03)]} color="#9aa1a9" />
+          <Box args={[L * 0.5, 0.05, 0.03]} pos={[0, sill + 0.02, s * (W / 2 - 0.04)]} color="#2a2e33" />
         </group>
       ))}
     </group>
