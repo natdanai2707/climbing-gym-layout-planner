@@ -2687,72 +2687,58 @@ function EntranceSteps({ o, tint }: { o: Placed; tint: string | null }) {
         <boxGeometry args={[o.w, rise, landing]} />
         <meshStandardMaterial color={c} map={map} roughness={0.9} metalness={0} />
       </mesh>
-      <AccessRail w={o.w} d={o.d} rise={rise} landing={landing} c={c} map={map} />
+      <AccessRail w={o.w} d={o.d} rise={rise} landing={landing} />
     </group>
   )
 }
 
 /**
- * Kerb + handrail running down one entrance flight or ramp: a sloped concrete
- * upstand beside the incline, a solid one beside the landing, and a steel rail
- * carried on posts at ~1 m centres so it is visibly held up rather than
- * floating alongside.
+ * Handrail running down one entrance flight or ramp and on across the top
+ * landing: a continuous rail on each side, carried on posts at ~1 m centres
+ * that stand on the treads themselves. The rail's two runs meet at the top
+ * nosing, so it reads as one rail turning the corner rather than two pieces.
  */
-function AccessRail({
-  w,
-  d,
-  rise,
-  landing,
-  c,
-  map,
-}: {
-  w: number
-  d: number
-  rise: number
-  landing: number
-  c: string
-  map: THREE.Texture
-}) {
+function AccessRail({ w, d, rise, landing }: { w: number; d: number; rise: number; landing: number }) {
   const run = Math.max(0.3, d - landing)
   const slope = Math.atan2(rise, run)
   const slabLen = Math.hypot(run, rise)
   const RAIL = '#6b7280'
+  const H = 0.95 // rail height above the walking surface
+  // posts along the incline, as fractions of the climb; the last one lands on
+  // the top nosing where the sloped rail meets the level one
   const np = Math.max(2, Math.round(slabLen / 1.1) + 1)
   const posts = Array.from({ length: np }, (_, i) => i / (np - 1))
+  const rail = (
+    key: string,
+    pos: [number, number, number],
+    len: number,
+    rotX: number,
+    r = 0.025,
+  ) => (
+    <mesh key={key} position={pos} rotation-x={rotX} castShadow>
+      <cylinderGeometry args={[r, r, len, 8]} />
+      <meshStandardMaterial color={RAIL} metalness={0.85} roughness={0.35} />
+    </mesh>
+  )
   return (
     <>
       {([1, -1] as const).map((s) => {
-        const x = (s * w) / 2 + s * 0.06
+        const x = (s * (w - 0.2)) / 2
         return (
           <group key={s}>
-            {/* kerb following the incline, then the landing upstand */}
-            <mesh position={[x, rise / 2 - 0.04, landing / 2]} rotation-x={slope} castShadow>
-              <boxGeometry args={[0.12, 0.3, slabLen]} />
-              <meshStandardMaterial color={c} map={map} roughness={0.9} />
-            </mesh>
-            <mesh position={[x, rise / 2, -d / 2 + landing / 2]} castShadow receiveShadow>
-              <boxGeometry args={[0.12, rise, landing]} />
-              <meshStandardMaterial color={c} map={map} roughness={0.9} />
-            </mesh>
-            {/* rail: sloped over the incline, level over the landing */}
-            {/* a cylinder's axis is Y, so the tilt is measured off vertical */}
-            <mesh position={[x, rise / 2 + 0.95, landing / 2]} rotation-x={slope - Math.PI / 2} castShadow>
-              <cylinderGeometry args={[0.025, 0.025, slabLen, 8]} />
-              <meshStandardMaterial color={RAIL} metalness={0.85} roughness={0.35} />
-            </mesh>
-            <mesh position={[x, rise + 0.95, -d / 2 + landing / 2]} rotation-x={Math.PI / 2} castShadow>
-              <cylinderGeometry args={[0.025, 0.025, landing, 8]} />
-              <meshStandardMaterial color={RAIL} metalness={0.85} roughness={0.35} />
-            </mesh>
-            {/* posts standing on the incline, plus one at the landing corner */}
+            {/* sloped run: a cylinder's axis is Y, so the tilt is off vertical */}
+            {rail('slope', [x, rise / 2 + H, landing / 2], slabLen, slope - Math.PI / 2)}
+            {/* level run across the landing, meeting the sloped one at the top */}
+            {rail('flat', [x, rise + H, -d / 2 + landing / 2], landing, Math.PI / 2)}
             {posts.map((u, i) => (
-              <mesh key={i} position={[x, u * rise + 0.46, d / 2 - u * run]} castShadow>
-                <cylinderGeometry args={[0.026, 0.026, 1.0, 8]} />
+              <mesh key={i} position={[x, u * rise + H / 2, d / 2 - u * run]} castShadow>
+                <cylinderGeometry args={[0.026, 0.026, H + 0.06, 8]} />
                 <meshStandardMaterial color={RAIL} metalness={0.85} roughness={0.35} />
               </mesh>
             ))}
-            <mesh position={[x, rise + 0.47, -d / 2 + 0.1]} castShadow>
-              <cylinderGeometry args={[0.028, 0.028, 0.96, 8]} />
+            {/* end post at the landing, so the rail is held at both ends */}
+            <mesh position={[x, rise + H / 2, -d / 2 + 0.12]} castShadow>
+              <cylinderGeometry args={[0.028, 0.028, H + 0.06, 8]} />
               <meshStandardMaterial color={RAIL} metalness={0.85} roughness={0.35} />
             </mesh>
           </group>
@@ -2795,7 +2781,7 @@ function EntranceRamp({ o, tint }: { o: Placed; tint: string | null }) {
         <boxGeometry args={[o.w, rise, landing]} />
         <meshStandardMaterial color={c} map={map} roughness={0.92} metalness={0} />
       </mesh>
-      <AccessRail w={o.w} d={o.d} rise={rise} landing={landing} c={c} map={map} />
+      <AccessRail w={o.w} d={o.d} rise={rise} landing={landing} />
     </group>
   )
 }

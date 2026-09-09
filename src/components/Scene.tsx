@@ -1148,7 +1148,7 @@ function SceneContent() {
       <Ghost />
       {plan ? (
         <PlanBuildingOutline width={building.width} length={building.length} apron={building.apron} centerZ={building.centerZ} />
-      ) : shellDesign ? (
+      ) : shellDesign && shellDesign.segments.length > 0 ? (
         <SegmentedShell />
       ) : (
         <WarehouseShell />

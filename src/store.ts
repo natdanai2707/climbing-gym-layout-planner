@@ -312,6 +312,14 @@ const DEFAULT_SHELL: ShellConfig = { mode: 0, eave: 6 }
 
 // Old saves smuggled legacy shell keys (length/offset) along via object spread;
 // picking the fields explicitly keeps exports clean.
+// A shell design with no zones describes no building: it renders as an empty
+// envelope — no walls, no roof — while the toolbar still says "Solid". Treat it
+// as "no design" so the plain shell takes over and the hall is never left
+// standing without walls.
+export function usableDesign(d: ShellDesign | null | undefined): ShellDesign | null {
+  return d && Array.isArray(d.segments) && d.segments.length > 0 ? d : null
+}
+
 function cleanShell(s?: ShellConfig): ShellConfig {
   return { mode: s?.mode ?? DEFAULT_SHELL.mode, eave: s?.eave ?? DEFAULT_SHELL.eave }
 }
@@ -333,7 +341,7 @@ function loadSaved(): {
     if (raw) {
       const data = JSON.parse(raw) as LayoutFile
       if (data && data.building && Array.isArray(data.objects)) {
-        DEFAULT_SHELL_DESIGN = data.shellDesign ?? null
+        DEFAULT_SHELL_DESIGN = usableDesign(data.shellDesign)
         return {
           ...normalizeFile(data),
           shell: cleanShell(data.shell),
@@ -347,7 +355,7 @@ function loadSaved(): {
   }
   // first visit: open with the bundled example gym instead of an empty hall
   const demo = DEFAULT_LAYOUT_FILE
-  DEFAULT_SHELL_DESIGN = demo.shellDesign ?? null
+  DEFAULT_SHELL_DESIGN = usableDesign(demo.shellDesign)
   return {
     ...normalizeFile(demo),
     shell: cleanShell(demo.shell),
@@ -452,7 +460,7 @@ export const useStore = create<GymState>()(
     shellDesign: DEFAULT_SHELL_DESIGN,
     setShellDesign: (d) => {
       get().snapshot(true)
-      set({ shellDesign: d })
+      set({ shellDesign: usableDesign(d) })
     },
 
     // Resizing never squeezes the layout: floor items stay exactly where they
@@ -730,7 +738,7 @@ export const useStore = create<GymState>()(
       set({
         ...normalizeFile(file),
         shell: cleanShell(file.shell),
-        shellDesign: file.shellDesign ?? null,
+        shellDesign: usableDesign(file.shellDesign),
         coolFactor: typeof file.coolFactor === 'number' ? file.coolFactor : get().coolFactor,
         floor: { ...DEFAULT_FLOOR, ...file.floor },
         selectedId: null,

@@ -266,7 +266,6 @@ export function SegmentedShell({ force = false }: { force?: boolean }) {
 
   const detail = useStore((s) => s.quality !== 'low')
   const spans = useMemo(() => (design ? segmentSpans(design, L) : []), [design, L])
-  const doors = useMemo(() => objects.filter((o) => o.category === 'door' && o.rule === 'edge'), [objects])
 
   const panelShapes = useMemo(() => {
     if (!design) return []
@@ -378,38 +377,6 @@ export function SegmentedShell({ force = false }: { force?: boolean }) {
         return (
           <group key={`c${i}`} position={a.pos} rotation-y={a.rot}>
             <Canopy c={c} ghost={ghost} />
-          </group>
-        )
-      })}
-      {/* placed entrance / fire-exit doors shown on the facade */}
-      {doors.map((d) => {
-        const frame = '#6b7280'
-        if (d.rot === 0 || d.rot === 4) {
-          const z = d.rot === 0 ? -L / 2 - t - 0.05 : L / 2 + t + 0.05
-          return (
-            <group key={d.id} position={[d.x, 0, z]}>
-              <mesh position={[0, d.h / 2 + 0.08, 0]}>
-                <boxGeometry args={[d.w + 0.3, d.h + 0.16, 0.08]} />
-                <meshStandardMaterial color={frame} />
-              </mesh>
-              <mesh position={[0, d.h / 2, d.rot === 0 ? -0.03 : 0.03]}>
-                <boxGeometry args={[d.w, d.h, 0.08]} />
-                <meshStandardMaterial color={d.color} roughness={0.6} />
-              </mesh>
-            </group>
-          )
-        }
-        const x = d.rot === 2 ? -W / 2 - t - 0.05 : W / 2 + t + 0.05
-        return (
-          <group key={d.id} position={[x, 0, d.z - off]}>
-            <mesh position={[0, d.h / 2 + 0.08, 0]}>
-              <boxGeometry args={[0.08, d.h + 0.16, d.w + 0.3]} />
-              <meshStandardMaterial color={frame} />
-            </mesh>
-            <mesh position={[d.rot === 2 ? -0.03 : 0.03, d.h / 2, 0]}>
-              <boxGeometry args={[0.08, d.h, d.w]} />
-              <meshStandardMaterial color={d.color} roughness={0.6} />
-            </mesh>
           </group>
         )
       })}
