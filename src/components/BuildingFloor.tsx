@@ -1,5 +1,6 @@
 import { useStore } from '../store'
 import { surfaceMap, surfaceNormal } from '../materials'
+import { GROUND_Y } from '../placement'
 
 // One neutral ground slab for the whole working area, plus the warehouse
 // floor that exactly matches the shell footprint (width × length at centerZ).
@@ -14,10 +15,15 @@ export function BuildingFloor() {
 
   return (
     <group position={[0, 0, centerZ]}>
-      {/* neutral ground (apron) slab */}
-      <mesh position={[0, -0.13, 0]} receiveShadow>
+      {/* the site around the building, one plinth height below the hall floor */}
+      <mesh position={[0, GROUND_Y - 0.09, 0]} receiveShadow>
         <boxGeometry args={[W + apron * 2, 0.18, L + apron * 2]} />
         <meshStandardMaterial color="#d6d2c8" roughness={1} />
+      </mesh>
+      {/* concrete plinth: the raised slab edge the hall floor sits on */}
+      <mesh position={[0, GROUND_Y / 2 - 0.05, 0]} castShadow receiveShadow>
+        <boxGeometry args={[W + 0.3, Math.abs(GROUND_Y) + 0.1, L + 0.3]} />
+        <meshStandardMaterial color="#c2beb4" map={surfaceMap('concrete', W, L)} roughness={0.85} metalness={0} />
       </mesh>
       {/* warehouse floor slab — follows the shell size. Roughness matches the
           finish: sealed concrete is smoother than rubber, but none of them

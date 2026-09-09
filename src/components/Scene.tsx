@@ -18,7 +18,7 @@ import { PlacedObject } from './PlacedObject'
 import { WarehouseShell, ROOF_PITCH } from './WarehouseShell'
 import { SegmentedShell } from './SegmentedShell'
 import { ArrowHandle } from './gizmo'
-import { elevationFor, fp, getWarningIds, wallOpenings } from '../placement'
+import { GROUND_Y, elevationFor, fp, getWarningIds, wallOpenings } from '../placement'
 import type { Opening } from '../placement'
 
 // Exposed so the toolbar can grab a PNG of the canvas
@@ -178,7 +178,8 @@ export const walkLook = { x: 0, y: 0 }
 const WALK_PASSABLE = new Set(['zone', 'mat', 'door', 'person', 'parking', 'mezzanine', 'ceiling', 'hvac', 'tech'])
 // site items that are roofs/canopies on posts — walk (and park) beneath them —
 // plus the entry gate, which people walk through
-const WALK_PASSABLE_DEFS = new Set(['carport', 'awning', 'umbrella', 'gate_face'])
+// steps and ramps are climbed, not bumped into — supportAt lifts the walker
+const WALK_PASSABLE_DEFS = new Set(['carport', 'awning', 'umbrella', 'gate_face', 'steps', 'ramp'])
 
 function WalkRig() {
   const gl = useThree((s) => s.gl)
@@ -288,10 +289,27 @@ function WalkRig() {
     }
     // walkable surface height at a point: ground, stair ramps, mezzanine tops
     const supportAt = (x: number, z: number, foot: number) => {
-      let best = 0
+      // the hall floor sits on a 1 m plinth; the site around it is lower
+      const hw = s.building.width / 2
+      const zMin = s.building.centerZ - s.building.length / 2
+      const zMax = s.building.centerZ + s.building.length / 2
+      const inside = Math.abs(x) <= hw + 0.15 && z >= zMin - 0.15 && z <= zMax + 0.15
+      let best = inside ? 0 : GROUND_Y
       for (const o of s.objects) {
-        let cand = -1
-        if (o.category === 'mezzanine') {
+        let cand = -Infinity
+        // entrance steps and ramps bridge the plinth: both climb from their
+        // local +d/2 (site) to -d/2 (floor level), like the indoor stairs
+        if (o.defId === 'steps' || o.defId === 'ramp') {
+          const th = (o.rot * Math.PI) / 4
+          const dx = x - o.x
+          const dz = z - o.z
+          const lx = dx * Math.cos(th) - dz * Math.sin(th)
+          const lz = dx * Math.sin(th) + dz * Math.cos(th)
+          if (Math.abs(lx) < o.w / 2 + 0.12 && Math.abs(lz) < o.d / 2 + 0.25) {
+            const t = Math.max(0, Math.min(1, (o.d / 2 - lz) / o.d))
+            cand = GROUND_Y + o.h * t
+          }
+        } else if (o.category === 'mezzanine') {
           const { fw, fd } = fp(o)
           if (Math.abs(x - o.x) < fw / 2 && Math.abs(z - o.z) < fd / 2) cand = o.h
         } else if (o.category === 'stairs') {
@@ -307,7 +325,7 @@ function WalkRig() {
           }
         }
         // can step up ~half a meter; any drop is allowed
-        if (cand >= 0 && cand <= foot + 0.55 && cand > best) best = cand
+        if (cand > -Infinity && cand <= foot + 0.55 && cand > best) best = cand
       }
       return best
     }

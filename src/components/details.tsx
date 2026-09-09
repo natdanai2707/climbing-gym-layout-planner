@@ -2568,6 +2568,86 @@ function Wheel({ pos, r }: { pos: [number, number, number]; r: number }) {
   )
 }
 
+/**
+ * Concrete entrance steps up onto the raised floor slab. The flight climbs
+ * from the site (GROUND_Y) to the hall floor, low end at local +d/2 and the
+ * top landing at -d/2 — the same convention as the indoor staircase, so walk
+ * mode reads both the same way.
+ */
+function EntranceSteps({ o, tint }: { o: Placed; tint: string | null }) {
+  const rise = Math.max(0.2, o.h)
+  const n = Math.max(2, Math.round(rise / 0.17))
+  const c = tint ?? o.color
+  const map = surfaceMap('concrete', o.w, o.d)
+  return (
+    <group>
+      {Array.from({ length: n }, (_, i) => {
+        const y = (rise * (i + 1)) / n
+        const dz = (o.d * (n - i)) / n
+        return (
+          <mesh key={i} position={[0, y / 2, o.d / 2 - dz / 2]} castShadow receiveShadow>
+            <boxGeometry args={[o.w, y, dz]} />
+            <meshStandardMaterial color={c} map={map} roughness={0.9} metalness={0} />
+          </mesh>
+        )
+      })}
+      {/* cheek walls and a handrail down each side */}
+      {([1, -1] as const).map((s) => (
+        <group key={s}>
+          <mesh position={[s * (o.w / 2 + 0.06), rise / 2, 0]} castShadow>
+            <boxGeometry args={[0.12, rise, o.d]} />
+            <meshStandardMaterial color={c} map={map} roughness={0.9} />
+          </mesh>
+          <mesh
+            position={[s * (o.w / 2 + 0.06), rise / 2 + 0.95, 0]}
+            rotation-x={Math.atan2(rise, o.d)}
+            castShadow
+          >
+            <cylinderGeometry args={[0.025, 0.025, Math.hypot(o.d, rise), 8]} />
+            <meshStandardMaterial color="#6b7280" metalness={0.85} roughness={0.35} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  )
+}
+
+// Concrete access ramp: one sloped slab from the site up to the floor slab,
+// with kerbs and handrails. Low end at local +d/2, top landing at -d/2.
+function EntranceRamp({ o, tint }: { o: Placed; tint: string | null }) {
+  const rise = Math.max(0.2, o.h)
+  const run = Math.max(0.6, o.d)
+  const c = tint ?? o.color
+  const map = surfaceMap('concrete', o.w, run)
+  const ang = Math.atan2(rise, run)
+  const slabLen = Math.hypot(run, rise)
+  return (
+    <group>
+      <mesh position={[0, rise / 2, 0]} rotation-x={-ang} castShadow receiveShadow>
+        <boxGeometry args={[o.w, 0.16, slabLen]} />
+        <meshStandardMaterial color={c} map={map} roughness={0.92} metalness={0} />
+      </mesh>
+      {/* fill under the deck so it reads as a built ramp, not a floating plank */}
+      <mesh position={[0, rise / 4, 0]} castShadow receiveShadow>
+        <boxGeometry args={[o.w - 0.02, rise / 2, run * 0.98]} />
+        <meshStandardMaterial color={c} map={map} roughness={0.95} metalness={0} />
+      </mesh>
+      {([1, -1] as const).map((s) => (
+        <group key={s}>
+          <mesh position={[s * (o.w / 2 + 0.05), rise / 2 + 0.1, 0]} rotation-x={-ang} castShadow>
+            <boxGeometry args={[0.1, 0.22, slabLen]} />
+            <meshStandardMaterial color={c} map={map} roughness={0.9} />
+          </mesh>
+          <mesh position={[s * (o.w / 2 + 0.05), rise / 2 + 0.95, 0]} rotation-x={-ang} castShadow>
+            <cylinderGeometry args={[0.025, 0.025, slabLen, 8]} />
+            <meshStandardMaterial color="#6b7280" metalness={0.85} roughness={0.35} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  )
+}
+
 // Realistic parking-lot paints. Cars that still carry the old default blue get
 // a stable per-instance paint from this palette (a lot of identical bright-blue
 // cars reads as toys); a color chosen in the inspector is respected.
@@ -3649,6 +3729,8 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
       if (o.defId === 'car') return <Car o={o} tint={tint} />
       if (o.defId === 'moto') return <Motorcycle o={o} tint={tint} />
       if (o.defId === 'carport') return <Carport o={o} tint={tint} />
+      if (o.defId === 'steps') return <EntranceSteps o={o} tint={tint} />
+      if (o.defId === 'ramp') return <EntranceRamp o={o} tint={tint} />
       return <Box args={[o.w, o.h, o.d]} pos={[0, o.h / 2, 0]} color={tint ?? o.color} />
     case 'wall_low':
     case 'wall_high':

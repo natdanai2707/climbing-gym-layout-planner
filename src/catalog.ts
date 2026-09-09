@@ -63,6 +63,9 @@ export const CATALOG: ObjectDef[] = [
   { id: 'car', label: 'Car (parked)', category: 'site', w: 4.6, d: 1.8, h: 1.5, color: '#5b7fb4', rule: 'outdoor' },
   { id: 'moto', label: 'Motorcycle', category: 'site', w: 2.1, d: 0.8, h: 1.2, color: '#c2452f', rule: 'outdoor' },
   { id: 'carport', label: 'Carport Roof', category: 'site', w: 5.5, d: 5.5, h: 2.7, color: '#9aa3ad', rule: 'outdoor' },
+  // entrance access onto the raised floor slab — place at a door
+  { id: 'steps', label: 'Concrete Steps (to entrance)', category: 'site', w: 3.0, d: 1.6, h: 1.0, color: '#c2beb4', rule: 'outdoor' },
+  { id: 'ramp', label: 'Concrete Ramp / Slope', category: 'site', w: 2.0, d: 6.0, h: 1.0, color: '#c2beb4', rule: 'outdoor' },
   // garden set
   { id: 'tree_cone', label: 'Conifer Tree', category: 'site', w: 2.2, d: 2.2, h: 4.5, color: '#3f6d3a', rule: 'outdoor' },
   { id: 'tree_slim', label: 'Cypress (columnar)', category: 'site', w: 1.2, d: 1.2, h: 5.0, color: '#4a7a42', rule: 'outdoor' },

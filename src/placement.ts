@@ -206,3 +206,11 @@ export function elevationFor(o: Pick<Placed, 'x' | 'z' | 'level'>, objects: Plac
   }
   return 0
 }
+
+/**
+ * The hall floor sits on a 1 m plinth above the surrounding site, the way a
+ * warehouse floor sits at truck-bed height. Interior coordinates keep y = 0
+ * as the finished floor, so everything indoors is unchanged; the site around
+ * it simply lies at GROUND_Y. Steps and ramps placed at the doors bridge it.
+ */
+export const GROUND_Y = -1

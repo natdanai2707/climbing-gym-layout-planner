@@ -4,7 +4,7 @@ import type { ThreeEvent } from '@react-three/fiber'
 import { useThree } from '@react-three/fiber'
 import type { Placed } from '../types'
 import { useStore } from '../store'
-import { fp } from '../placement'
+import { GROUND_Y, fp } from '../placement'
 import { ObjectMesh } from './details'
 import { PlanSymbol } from './PlanSymbols'
 
@@ -35,7 +35,7 @@ export function PlacedObject({ o, warning, elev }: { o: Placed; warning: boolean
   if (!showCeilings && o.category === 'ceiling') return null
 
   const tint = warning ? '#e05252' : null
-  const baseY = o.rule === 'outdoor' ? -0.04 : elev
+  const baseY = o.rule === 'outdoor' ? GROUND_Y - 0.04 : elev
   const { fw, fd } = fp(o)
 
   const onPointerDown = (e: ThreeEvent<PointerEvent>) => {
