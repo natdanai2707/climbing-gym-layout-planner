@@ -1,5 +1,4 @@
 import { useMemo } from 'react'
-import type { ReactNode } from 'react'
 import * as THREE from 'three'
 import { Edges } from '@react-three/drei'
 import type { ThreeEvent } from '@react-three/fiber'
@@ -84,9 +83,6 @@ export function WarehouseShell() {
       return sh
     })()
 
-  // only perimeter doors show on the facade — interior room doors stay inside
-  const doors = useMemo(() => objects.filter((o) => o.category === 'door' && o.rule === 'edge'), [objects])
-
   // skylight strips let daylight into the hall — one every ~6 m per roof plane
   const skylights = useMemo(() => {
     const n = Math.max(1, Math.floor((L - 2) / 6))
@@ -132,43 +128,6 @@ export function WarehouseShell() {
   }
 
   const off = building.centerZ
-  // Door panels drawn on the OUTSIDE of the shell, at each placed door's spot
-  // (local coords — the whole shell group is shifted by the z offset).
-  // rot encodes the wall the door snapped to: 0 = north (-z), 4 = south (+z),
-  // 2 = west (-x), 6 = east (+x).
-  const doorPanels = (): ReactNode[] =>
-    doors.map((d) => {
-      const frame = '#6b7280'
-      if (d.rot === 0 || d.rot === 4) {
-        const z = (d.rot === 0 ? -L / 2 - t - 0.05 : L / 2 + t + 0.05)
-        return (
-          <group key={d.id} position={[d.x, 0, z]}>
-            <mesh position={[0, d.h / 2 + 0.08, 0]}>
-              <boxGeometry args={[d.w + 0.3, d.h + 0.16, 0.08]} />
-              <meshStandardMaterial color={frame} />
-            </mesh>
-            <mesh position={[0, d.h / 2, d.rot === 0 ? -0.03 : 0.03]}>
-              <boxGeometry args={[d.w, d.h, 0.08]} />
-              <meshStandardMaterial color={d.color} roughness={0.6} />
-            </mesh>
-          </group>
-        )
-      }
-      const x = d.rot === 2 ? -W / 2 - t - 0.05 : W / 2 + t + 0.05
-      return (
-        <group key={d.id} position={[x, 0, d.z - off]}>
-          <mesh position={[0, d.h / 2 + 0.08, 0]}>
-            <boxGeometry args={[0.08, d.h + 0.16, d.w + 0.3]} />
-            <meshStandardMaterial color={frame} />
-          </mesh>
-          <mesh position={[d.rot === 2 ? -0.03 : 0.03, d.h / 2, 0]}>
-            <boxGeometry args={[0.08, d.h, d.w]} />
-            <meshStandardMaterial color={d.color} roughness={0.6} />
-          </mesh>
-        </group>
-      )
-    })
-
   return (
     // key remounts the shell when the mode changes — otherwise r3f keeps the
     // transparent-mode material props (opacity/depthWrite) on the solid shell.
@@ -255,13 +214,6 @@ export function WarehouseShell() {
         <boxGeometry args={[0.3, 0.14, L + 0.4]} />
         <meshStandardMaterial color={transparent ? '#5c7fa6' : '#aab3bc'} transparent={transparent} opacity={transparent ? 0.5 : 1} />
       </mesh>
-
-      {/* solid mode: the placed entrance / fire-exit doors on the facade */}
-      {!transparent && (
-        <group>
-          {doorPanels()}
-        </group>
-      )}
 
       {/* adjustment arrows: each gable end moves ONLY its own end; height at the ridge */}
       {!presenting && (

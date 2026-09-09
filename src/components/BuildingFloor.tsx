@@ -7,6 +7,8 @@ import { GROUND_Y } from '../placement'
 // The hall floor finish (painted / concrete / birch / EPDM) comes from the
 // floor state, set directly or by a theme. Gym floors are sealed, not
 // mirror-polished, so roughness alone carries the finish — no reflections.
+const PLINTH_TOP = -0.04
+
 export function BuildingFloor() {
   const { width: W, length: L, apron, centerZ } = useStore((s) => s.building)
   const floor = useStore((s) => s.floor)
@@ -20,9 +22,12 @@ export function BuildingFloor() {
         <boxGeometry args={[W + apron * 2, 0.18, L + apron * 2]} />
         <meshStandardMaterial color="#d6d2c8" roughness={1} />
       </mesh>
-      {/* concrete plinth: the raised slab edge the hall floor sits on */}
-      <mesh position={[0, GROUND_Y / 2 - 0.05, 0]} castShadow receiveShadow>
-        <boxGeometry args={[W + 0.3, Math.abs(GROUND_Y) + 0.1, L + 0.3]} />
+      {/* Concrete plinth: the raised slab edge the hall floor sits on. Its top
+          stops just short of the hall floor's, because two faces at exactly the
+          same height over the whole footprint z-fight — the floor flickers as
+          the camera pans. The 4 cm it gives up reads as the slab edge. */}
+      <mesh position={[0, (GROUND_Y - 0.1 + PLINTH_TOP) / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[W + 0.3, PLINTH_TOP - (GROUND_Y - 0.1), L + 0.3]} />
         <meshStandardMaterial color="#c2beb4" map={surfaceMap('concrete', W, L)} roughness={0.85} metalness={0} />
       </mesh>
       {/* warehouse floor slab — follows the shell size. Roughness matches the

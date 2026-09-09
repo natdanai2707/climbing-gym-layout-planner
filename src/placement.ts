@@ -256,15 +256,18 @@ export function wallPanels(
  * Glass openings and doors placed on the building perimeter, resolved onto one
  * shell wall. `rotWant` is the rotation an edge item takes on that wall
  * (0 = north/-z, 4 = south/+z, 2 = west/-x, 6 = east/+x) and `centerZ` shifts
- * the long walls into the shell's local frame.
+ * the long walls into the shell's local frame. Doors cut to the floor; glass
+ * openings start at their sill. Both leave a real hole for the placed item to
+ * sit in, so the facade shows the actual door or window, not a painted panel.
  */
 export function shellOpenings(objects: Placed[], rotWant: number, centerZ: number, wallH: number): Opening[] {
   const res: Opening[] = []
   for (const o of objects) {
-    if (o.category !== 'window' || o.rule !== 'edge' || o.rot !== rotWant) continue
+    const glass = o.category === 'window'
+    if ((!glass && o.category !== 'door') || o.rule !== 'edge' || o.rot !== rotWant) continue
     const c = rotWant === 0 || rotWant === 4 ? o.x : o.z - centerZ
-    const y0 = clamp(o.sill ?? 0.9, 0, Math.max(0, wallH - 0.2))
-    res.push({ c, w: o.w, y0, y1: Math.min(y0 + o.h, wallH - 0.02), glass: true })
+    const y0 = glass ? clamp(o.sill ?? 0.9, 0, Math.max(0, wallH - 0.2)) : 0
+    res.push({ c, w: o.w + (glass ? 0 : 0.12), y0, y1: Math.min(y0 + o.h, wallH - 0.02), glass })
   }
   return res
 }

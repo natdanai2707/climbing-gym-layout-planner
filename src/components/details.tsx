@@ -2664,8 +2664,11 @@ function EntranceSteps({ o, tint }: { o: Placed; tint: string | null }) {
   const landing = landingDepth(o.d)
   const run = o.d - landing
   const n = Math.max(2, Math.round(rise / 0.17))
+  // Built with the landing at local -z, then turned to face the way an edge
+  // door on the same wall faces — so giving the steps the door's rotation puts
+  // the landing against the building instead of out on the apron.
   return (
-    <group>
+    <group rotation-y={Math.PI}>
       {/* flight, occupying what is left after the landing */}
       <group position={[0, 0, landing / 2]}>
         {Array.from({ length: n }, (_, i) => {
@@ -2768,7 +2771,7 @@ function EntranceRamp({ o, tint }: { o: Placed; tint: string | null }) {
   const run = Math.max(0.6, o.d - landing)
   const c = tint ?? o.color
   const map = surfaceMap('concrete', o.w, run)
-  // right-angled wedge: ground at the low (+z) end, floor height at the top
+  // right-angled wedge: ground at the low end, floor height at the landing
   const wedge = useMemo(() => {
     const sh = new THREE.Shape()
     sh.moveTo(-run / 2, 0)
@@ -2781,7 +2784,8 @@ function EntranceRamp({ o, tint }: { o: Placed; tint: string | null }) {
     return g
   }, [run, rise, o.w])
   return (
-    <group>
+    // turned to match the steps and the door on the same wall — see EntranceSteps
+    <group rotation-y={Math.PI}>
       {/* the incline is a solid wedge of fill, not a floating plank */}
       <mesh geometry={wedge} position={[0, 0, landing / 2]} castShadow receiveShadow>
         <meshStandardMaterial color={c} map={map} roughness={0.92} metalness={0} />

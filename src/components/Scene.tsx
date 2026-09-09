@@ -299,7 +299,8 @@ function WalkRig() {
       for (const o of s.objects) {
         let cand = -Infinity
         // entrance steps and ramps bridge the plinth: both climb from their
-        // local +d/2 (site) to -d/2 (floor level), like the indoor stairs
+        // local -d/2 (site) up to the landing at +d/2, which faces the building
+        // when they carry the same rotation as the door they serve
         if (o.defId === 'steps' || o.defId === 'ramp') {
           const th = (o.rot * Math.PI) / 4
           const dx = x - o.x
@@ -310,7 +311,7 @@ function WalkRig() {
             // the last stretch before the door is a level landing at floor height
             const land = landingDepth(o.d)
             const run = Math.max(0.3, o.d - land) // the sloped part; past it the landing is flat
-            const t = Math.max(0, Math.min(1, (o.d / 2 - lz) / run))
+            const t = Math.max(0, Math.min(1, (o.d / 2 + lz) / run))
             cand = GROUND_Y + o.h * t
           }
         } else if (o.category === 'mezzanine') {
