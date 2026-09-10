@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { exportLayout, useStore } from '../store'
+import { LAYOUT_PRESETS } from '../layouts'
 import { NumInput } from './NumInput'
 import type { ThemeName } from '../store'
 import type { LayoutFile } from '../types'
@@ -54,6 +55,8 @@ export function Toolbar() {
   const canUndo = useStore((s) => s.past.length > 0)
   const canRedo = useStore((s) => s.future.length > 0)
   const setPage = useStore((s) => s.setPage)
+  const presetId = useStore((s) => s.presetId)
+  const loadPreset = useStore((s) => s.loadPreset)
   const viewMode = useStore((s) => s.viewMode)
   const setViewMode = useStore((s) => s.setViewMode)
   const viewPreset = useStore((s) => s.viewPreset)
@@ -263,6 +266,24 @@ export function Toolbar() {
         <button onClick={() => setPage('window')} title="Draw freeform glass openings and save them as placeable items">
           🪟 Window Design
         </button>
+        <label className="tb-field" title="Layouts that ship with the app — the same drawing on every device">
+          <span>Layout</span>
+          <select
+            value={presetId}
+            onChange={(e) => {
+              const p = LAYOUT_PRESETS.find((x) => x.id === e.target.value)
+              if (!p) return
+              if (confirm(`Load "${p.name}"? This replaces what is on screen (Undo brings it back).`)) loadPreset(p.id)
+              else e.target.value = presetId
+            }}
+          >
+            {LAYOUT_PRESETS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <button className="save" onClick={exportJson}>💾 Save JSON</button>
         <button onClick={() => fileRef.current?.click()}>Import JSON</button>
         <button onClick={exportPng}>Export PNG</button>

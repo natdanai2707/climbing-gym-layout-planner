@@ -4,10 +4,9 @@ import type { Building, FloorFinish, LayoutFile, ObjectDef, Placed, ShellConfig,
 import { clampInside, computeDrop, elevationFor, fp, resolveAfterResize } from './placement'
 import { useWallStore } from './wall/wallStore'
 import { useWindowStore } from './window/windowStore'
-import defaultLayoutJson from './defaultLayout.json'
+import { DEFAULT_PRESET_ID, LAYOUT_PRESETS, presetById } from './layouts'
 
 // Example gym shipped with the app — shown on the very first visit
-const DEFAULT_LAYOUT_FILE = defaultLayoutJson as unknown as LayoutFile
 
 interface Snapshot {
   building: Building
@@ -157,6 +156,10 @@ export interface GymState {
   ) => void
   clearAll: () => void
   importLayout: (file: LayoutFile) => void
+  // which bundled layout is on screen, so the picker can show it and a reload
+  // comes back to the same one
+  presetId: string
+  loadPreset: (id: string) => void
   toggleGrid: () => void
   toggleLabels: () => void
   toggleCeilings: () => void
@@ -325,6 +328,18 @@ function cleanShell(s?: ShellConfig): ShellConfig {
   return { mode: s?.mode ?? DEFAULT_SHELL.mode, eave: s?.eave ?? DEFAULT_SHELL.eave }
 }
 
+const PRESET_KEY = 'gym-layout-preset'
+
+function loadPresetId(): string {
+  try {
+    const id = localStorage.getItem(PRESET_KEY)
+    if (id && presetById(id)) return id
+  } catch {
+    // ignore unreadable storage
+  }
+  return DEFAULT_PRESET_ID
+}
+
 let DEFAULT_SHELL_DESIGN: ShellDesign | null = null
 
 const DEFAULT_COOL_FACTOR = 220 // ~600 BTU/m² at a 2.7 m ceiling, volume-based
@@ -354,8 +369,9 @@ function loadSaved(): {
   } catch {
     // ignore corrupt saves
   }
-  // first visit: open with the bundled example gym instead of an empty hall
-  const demo = DEFAULT_LAYOUT_FILE
+  // first visit: open with a bundled layout instead of an empty hall, so every
+  // device starts on the same drawing
+  const demo = (presetById(loadPresetId()) ?? LAYOUT_PRESETS[0]).file
   DEFAULT_SHELL_DESIGN = usableDesign(demo.shellDesign)
   return {
     ...normalizeFile(demo),
@@ -758,6 +774,19 @@ export const useStore = create<GymState>()(
         ghost: null,
         pendingId: null,
       })
+    },
+
+    presetId: loadPresetId(),
+    loadPreset: (id) => {
+      const p = presetById(id)
+      if (!p) return
+      get().importLayout(p.file)
+      set({ presetId: id })
+      try {
+        localStorage.setItem(PRESET_KEY, id)
+      } catch {
+        // ignore quota errors
+      }
     },
 
     toggleGrid: () => set({ showGrid: !get().showGrid }),
