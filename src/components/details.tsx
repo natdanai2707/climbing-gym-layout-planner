@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { Edges, MeshReflectorMaterial } from '@react-three/drei'
 import type { Placed } from '../types'
 import { useWallStore } from '../wall/wallStore'
+import { normalizedPts, useWindowStore, windowSize } from '../window/windowStore'
 import { WallModel } from '../wall/WallModel'
 import { designDepth, designWidth } from '../wall/profile'
 import { ROUTE_COLORS, SURFACE_TINTED, leafTexture, surfaceMap, surfaceNormal } from '../materials'
@@ -1980,6 +1981,97 @@ function WindowPane({ o, tint }: { o: Placed; tint: string | null }) {
   )
 }
 
+/**
+ * A window drawn on the Window Design page: the saved outline, scaled to the
+ * placed width and height. The wall is cut to the outline's bounding box, so
+ * the item fills that box with a spandrel panel and sets the glazed shape into
+ * it — a round or arched light still reads correctly in a square hole.
+ */
+function DesignedWindow({ o, tint }: { o: Placed; tint: string | null }) {
+  const id = o.defId.replace(/^winp?:/, '')
+  const design = useWindowStore((s) => s.designs.find((d) => d.id === id))
+  const t = Math.max(0.05, Math.min(o.d, 0.35))
+  const sill = Math.max(0, o.sill ?? design?.sill ?? 0.9)
+  const geo = useMemo(() => {
+    if (!design) return null
+    const pts = normalizedPts(design)
+    if (pts.length < 3) return null
+    const size = windowSize(design)
+    const sx = o.w / size.w
+    const sy = o.h / size.h
+    // outline in the item's own frame: centred on x, rising from the sill
+    const shape = new THREE.Shape()
+    pts.forEach(([x, y], i) => {
+      const px = x * sx - o.w / 2
+      const py = y * sy
+      if (i === 0) shape.moveTo(px, py)
+      else shape.lineTo(px, py)
+    })
+    shape.closePath()
+    // the spandrel: the bounding box with the glazed shape punched out
+    const outline = shape.getPoints()
+    const panel = new THREE.Shape()
+    panel.moveTo(-o.w / 2, 0)
+    panel.lineTo(o.w / 2, 0)
+    panel.lineTo(o.w / 2, o.h)
+    panel.lineTo(-o.w / 2, o.h)
+    panel.closePath()
+    panel.holes.push(new THREE.Path(outline))
+    // Frame: the outline with an inset copy punched out. The inset pulls each
+    // corner toward the shape's centre by the frame width, which is exact for
+    // a rectangle and close enough for the curved and raked shapes.
+    const cx = outline.reduce((a, p) => a + p.x, 0) / outline.length
+    const cy = outline.reduce((a, p) => a + p.y, 0) / outline.length
+    const fw = Math.max(0.01, Math.min(design.frameW, Math.min(o.w, o.h) * 0.3))
+    const inner = outline.map((p) => {
+      const dx = cx - p.x
+      const dy = cy - p.y
+      const len = Math.hypot(dx, dy) || 1
+      const k = Math.min(1, fw / len)
+      return new THREE.Vector2(p.x + dx * k, p.y + dy * k)
+    })
+    const glazed = new THREE.Shape(inner)
+    const ring = new THREE.Shape(outline)
+    ring.holes.push(new THREE.Path(inner))
+    return {
+      glass: new THREE.ShapeGeometry(glazed),
+      panel: new THREE.ExtrudeGeometry(panel, { depth: t, bevelEnabled: false }),
+      frame: new THREE.ExtrudeGeometry(ring, { depth: t * 0.9, bevelEnabled: false }),
+    }
+  }, [design, o.w, o.h, t])
+  if (!design || !geo) return <WindowPane o={o} tint={tint} />
+  const frameCol = tint ?? design.frame
+  const bars = (n: number, horizontal: boolean) =>
+    Array.from({ length: n }, (_, i) => {
+      const f = (i + 1) / (n + 1)
+      return horizontal ? (
+        <Alu key={`h${i}`} args={[o.w, 0.04, t * 0.8]} pos={[0, o.h * f, 0]} color={frameCol} />
+      ) : (
+        <Alu key={`v${i}`} args={[0.04, o.h, t * 0.8]} pos={[o.w * (f - 0.5), o.h / 2, 0]} color={frameCol} />
+      )
+    })
+  return (
+    <group position={[0, sill, 0]}>
+      {/* spandrel filling the rest of the rectangular hole */}
+      <mesh geometry={geo.panel} position={[0, 0, -t / 2]} castShadow receiveShadow>
+        <meshStandardMaterial color={frameCol} roughness={0.6} metalness={0.3} side={THREE.DoubleSide} />
+      </mesh>
+      {/* frame reveal around the glazed shape */}
+      <mesh geometry={geo.frame} position={[0, 0, -t * 0.45]} castShadow>
+        <meshStandardMaterial color={frameCol} roughness={0.4} metalness={0.6} side={THREE.DoubleSide} />
+      </mesh>
+      {/* the glazing itself */}
+      <mesh geometry={geo.glass} position={[0, 0, 0]}>
+        <PaneGlass tint={tint ?? design.glass} />
+      </mesh>
+      <group>
+        {bars(design.barsX, false)}
+        {bars(design.barsY, true)}
+      </group>
+    </group>
+  )
+}
+
 function Door({ o, tint }: { o: Placed; tint: string | null }) {
   if (o.defId === 'door_glass') return <GlassDoorInterior o={o} tint={tint} />
   // Interior room door (rule 'floor'): a real frame with the leaf slightly ajar.
@@ -3941,7 +4033,11 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
     case 'door':
       return <Door o={o} tint={tint} />
     case 'window':
-      return <WindowPane o={o} tint={tint} />
+      return o.defId.startsWith('win:') || o.defId.startsWith('winp:') ? (
+        <DesignedWindow o={o} tint={tint} />
+      ) : (
+        <WindowPane o={o} tint={tint} />
+      )
     case 'parking':
       return <Parking o={o} tint={tint} />
     default:

@@ -3,6 +3,7 @@ import { subscribeWithSelector } from 'zustand/middleware'
 import type { Building, FloorFinish, LayoutFile, ObjectDef, Placed, ShellConfig, ShellDesign } from './types'
 import { clampInside, computeDrop, elevationFor, fp, resolveAfterResize } from './placement'
 import { useWallStore } from './wall/wallStore'
+import { useWindowStore } from './window/windowStore'
 import defaultLayoutJson from './defaultLayout.json'
 
 // Example gym shipped with the app — shown on the very first visit
@@ -117,8 +118,8 @@ export interface GymState {
   setPanelRight: (v: boolean) => void
 
   // app page: main layout planner, the wall designer or the building designer
-  page: 'layout' | 'wall' | 'building'
-  setPage: (p: 'layout' | 'wall' | 'building') => void
+  page: 'layout' | 'wall' | 'building' | 'window'
+  setPage: (p: 'layout' | 'wall' | 'building' | 'window') => void
 
   // freeform building shell design (zones / canopies / facade glazing)
   shellDesign: ShellDesign | null
@@ -516,6 +517,14 @@ export const useStore = create<GymState>()(
         color: placingDef.color,
         rule: placingDef.rule,
       }
+      // a window drawn on the Window Design page carries its own default sill
+      const winId = placingDef.id.match(/^winp?:(.+)$/)?.[1]
+      if (winId) {
+        const d = useWindowStore.getState().designs.find((x) => x.id === winId)
+        if (d) obj.sill = d.sill
+      } else if (placingDef.category === 'window') {
+        obj.sill = 0.9
+      }
       set({
         objects: [...get().objects, obj],
         placingDef: null,
@@ -735,6 +744,7 @@ export const useStore = create<GymState>()(
       if (!file || !file.building || !Array.isArray(file.objects)) throw new Error('Invalid layout file')
       get().snapshot()
       if (file.wallDesigns) useWallStore.getState().mergeDesigns(file.wallDesigns)
+      if (file.windowDesigns) useWindowStore.getState().mergeDesigns(file.windowDesigns)
       set({
         ...normalizeFile(file),
         shell: cleanShell(file.shell),
@@ -861,7 +871,17 @@ useStore.subscribe(
 
 export function exportLayout(): LayoutFile {
   const { building, objects, shell, coolFactor, floor, shellDesign } = useStore.getState()
-  return { version: FILE_VERSION, building, objects, shell, shellDesign, coolFactor, floor, wallDesigns: useWallStore.getState().designs }
+  return {
+    version: FILE_VERSION,
+    building,
+    objects,
+    shell,
+    shellDesign,
+    coolFactor,
+    floor,
+    wallDesigns: useWallStore.getState().designs,
+    windowDesigns: useWindowStore.getState().designs,
+  }
 }
 
 // handy for debugging / automated UI tests

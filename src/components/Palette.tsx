@@ -2,6 +2,7 @@ import { CATALOG, CATEGORY_LABELS, CATEGORY_ORDER } from '../catalog'
 import type { ObjectDef } from '../types'
 import { useStore } from '../store'
 import { useWallStore } from '../wall/wallStore'
+import { useWindowStore, windowSize } from '../window/windowStore'
 import { designDepth, designWidth } from '../wall/profile'
 import { useThumbStore } from './Thumbnails'
 
@@ -63,6 +64,54 @@ function CustomWallCards() {
   )
 }
 
+// Windows saved on the Window Design page. Each one is offered twice, because
+// the same opening goes either in the building shell (snaps to the perimeter)
+// or in an interior partition (placed anywhere on the floor).
+function CustomWindowCards() {
+  const designs = useWindowStore((s) => s.designs)
+  const builtIn = CATALOG.filter((d) => d.category === 'window')
+  if (designs.length === 0 && builtIn.length === 0) return null
+  return (
+    <div className="palette-group">
+      <h3>{CATEGORY_LABELS.window}</h3>
+      {builtIn.map((d) => (
+        <PaletteCard key={d.id} def={d} />
+      ))}
+      {designs.map((d) => {
+        const s = windowSize(d)
+        return (
+          <div key={d.id} style={{ display: 'contents' }}>
+            <PaletteCard
+              def={{
+                id: `win:${d.id}`,
+                label: `${d.name} — facade`,
+                category: 'window',
+                w: s.w,
+                d: 0.3,
+                h: s.h,
+                color: d.glass,
+                rule: 'edge',
+              }}
+            />
+            <PaletteCard
+              def={{
+                id: `winp:${d.id}`,
+                label: `${d.name} — partition`,
+                category: 'window',
+                w: s.w,
+                d: 0.15,
+                h: s.h,
+                color: d.glass,
+                rule: 'floor',
+              }}
+            />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function Palette() {
   const open = useStore((s) => s.panelLeft)
   const setPanelLeft = useStore((s) => s.setPanelLeft)
@@ -74,6 +123,7 @@ export function Palette() {
       <h2>Objects (tap to place)</h2>
       {CATEGORY_ORDER.map((cat) => {
         if (cat === 'wall_custom') return <CustomWallCards key={cat} />
+        if (cat === 'window') return <CustomWindowCards key={cat} />
         const defs = CATALOG.filter((d) => d.category === cat)
         if (defs.length === 0) return null
         return (

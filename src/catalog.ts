@@ -132,6 +132,7 @@ export const CATEGORY_ORDER: Category[] = [
   'hvac',
   'tech',
   'door',
+  'window',
   'parking',
   'site',
 ]

@@ -154,6 +154,26 @@ export interface LayoutFile {
   shell?: ShellConfig
   shellDesign?: ShellDesign | null
   wallDesigns?: WallDesign[]
+  windowDesigns?: WindowDesign[]
   coolFactor?: number // aircon sizing assumption (BTU/hr per m³ of hall volume)
   floor?: FloorFinish
+}
+
+/**
+ * A glazed opening drawn on the Window Design page. `pts` is a closed outline
+ * in metres with its own bounding box as the item's size, so the shape can be
+ * anything: a rectangle, an arch, a circle, a raked gable light. Saved designs
+ * become placeable items, dropped on the building shell or on an interior
+ * partition like any other object.
+ */
+export interface WindowDesign {
+  id: string
+  name: string
+  pts: Array<[number, number]> // outline, metres, origin at the bottom-left of the bbox
+  frame: string // frame / surround colour
+  glass: string // glazing tint
+  frameW: number // visible frame width around the glass (m)
+  barsX: number // vertical glazing bars
+  barsY: number // horizontal glazing bars
+  sill: number // default sill height when placed (m)
 }

@@ -7,6 +7,7 @@ import { Inspector } from './components/Inspector'
 import { StatsPanel } from './components/StatsPanel'
 import { WallDesigner } from './components/WallDesigner'
 import { BuildingDesigner } from './components/BuildingDesigner'
+import { WindowDesigner } from './components/WindowDesigner'
 import { useStore } from './store'
 import { viewAxis, screenRight } from './viewAxis'
 import { useWallStore } from './wall/wallStore'
@@ -214,6 +215,7 @@ export default function App() {
 
   if (page === 'wall') return <WallDesigner />
   if (page === 'building') return <BuildingDesigner />
+  if (page === 'window') return <WindowDesigner />
 
   return (
     <div className="app">

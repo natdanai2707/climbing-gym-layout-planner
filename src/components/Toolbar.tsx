@@ -260,6 +260,9 @@ export function Toolbar() {
         <button onClick={() => setPage('building')} title="Shape the building: zones with different heights/roofs, canopies, free-shape glazing, per-zone cladding colors">
           🏗 Building Design
         </button>
+        <button onClick={() => setPage('window')} title="Draw freeform glass openings and save them as placeable items">
+          🪟 Window Design
+        </button>
         <button className="save" onClick={exportJson}>💾 Save JSON</button>
         <button onClick={() => fileRef.current?.click()}>Import JSON</button>
         <button onClick={exportPng}>Export PNG</button>
