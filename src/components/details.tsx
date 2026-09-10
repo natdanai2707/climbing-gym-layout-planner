@@ -2669,13 +2669,16 @@ function EntranceSteps({ o, tint }: { o: Placed; tint: string | null }) {
   // the landing against the building instead of out on the apron.
   return (
     <group rotation-y={Math.PI}>
-      {/* flight, occupying what is left after the landing */}
+      {/* Flight, occupying what is left after the landing. Each tread is a
+          block standing on the ground, the tallest one against the landing:
+          stacking them the other way round makes the flight climb AWAY from
+          the landing and dip in the middle. */}
       <group position={[0, 0, landing / 2]}>
         {Array.from({ length: n }, (_, i) => {
           const y = (rise * (i + 1)) / n
           const dz = (run * (n - i)) / n
           return (
-            <mesh key={i} position={[0, y / 2, run / 2 - dz / 2]} castShadow receiveShadow>
+            <mesh key={i} position={[0, y / 2, -run / 2 + dz / 2]} castShadow receiveShadow>
               <boxGeometry args={[o.w, y, dz]} />
               <meshStandardMaterial color={c} map={map} roughness={0.9} metalness={0} />
             </mesh>
