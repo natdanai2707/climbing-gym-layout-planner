@@ -18,7 +18,10 @@ import type { Opening } from '../placement'
  */
 
 const GLASS_MAT = { color: '#9fc8e0', transparent: true, opacity: 0.45, roughness: 0.12, metalness: 0.2, side: THREE.DoubleSide, depthWrite: false }
-const CLEAR_MAT = { color: '#f2f7fa', transparent: true, opacity: 0.5, roughness: 0.3, emissive: '#dfeaf2', emissiveIntensity: 0.2, side: THREE.DoubleSide, depthWrite: false }
+// A "clear" zone is clad in translucent daylight sheeting, not left open: at
+// opacity 0.5 a whole wall of it read as a hole in the building, so it is
+// milky enough to see as a surface while still showing the layout behind it.
+const CLEAR_MAT = { color: '#eef4f8', transparent: true, opacity: 0.78, roughness: 0.35, emissive: '#dfeaf2', emissiveIntensity: 0.18, side: THREE.DoubleSide, depthWrite: false }
 // Shell mode 1 ("Clear"): the whole designed building becomes a ghost so the
 // layout inside stays readable, exactly like the simple warehouse shell does.
 const GHOST_MAT = { color: '#8fb0cc', transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide }
@@ -161,6 +164,9 @@ function SegmentRoof({ seg, W, ghost }: { seg: SegSpan; W: number; ghost?: boole
             <boxGeometry args={[planeLen, 0.12, len + 0.1]} />
             {ghost ? (
               <meshStandardMaterial {...GHOST_ROOF} />
+            ) : seg.clear ? (
+              // the zone's roof is sheeted in the same material as its walls
+              <meshStandardMaterial {...CLEAR_MAT} />
             ) : (
               <meshStandardMaterial color="#cfd6dd" roughness={0.5} metalness={0.3} side={THREE.DoubleSide} />
             )}

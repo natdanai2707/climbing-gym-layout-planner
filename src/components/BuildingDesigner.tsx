@@ -171,6 +171,7 @@ export function BuildingDesigner() {
                 )}
                 <label className="bd-check">
                   <input type="checkbox" checked={!!s.clear} onChange={(e) => setSeg(i, { clear: e.target.checked })} /> clear
+                  <span className="muted"> (translucent sheet)</span>
                 </label>
                 <ColorDots value={s.color} onPick={(c) => setSeg(i, { color: c })} />
                 {design.segments.length > 1 && (
