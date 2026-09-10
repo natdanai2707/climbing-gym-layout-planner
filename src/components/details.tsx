@@ -2883,6 +2883,73 @@ function EntranceRamp({ o, tint }: { o: Placed; tint: string | null }) {
   )
 }
 
+/**
+ * Massing block for a building that is already standing on the site — a plain
+ * white metal-sheet shed with a gable across its width. `h` is the ridge and
+ * `eave` the side wall height, so the default 18 x 14 m block stands 6 m at
+ * the columns and 8 m at the ridge. It sits at site level, not on the hall's
+ * plinth, and is meant to be positioned by hand as a neighbour, not detailed.
+ */
+function ExistingBuilding({ o, tint }: { o: Placed; tint: string | null }) {
+  const ridge = Math.max(0.6, o.h)
+  const eave = clampN(o.eave ?? Math.max(0.3, ridge - 2), 0.3, ridge - 0.2)
+  const c = tint ?? o.color
+  const rise = ridge - eave
+  const slope = Math.atan2(rise, o.w / 2)
+  const planeLen = Math.hypot(o.w / 2, rise) + 0.12
+  const detail = useStore((st) => st.quality !== 'low')
+  const wallMap = surfaceMap('metalsheet', o.w, eave)
+  const gable = useMemo(() => {
+    const sh = new THREE.Shape()
+    sh.moveTo(-o.w / 2, eave)
+    sh.lineTo(o.w / 2, eave)
+    sh.lineTo(0, ridge)
+    sh.closePath()
+    return sh
+  }, [o.w, eave, ridge])
+  return (
+    <group>
+      {/* side and end walls */}
+      <mesh position={[0, eave / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[o.w, eave, o.d]} />
+        <meshStandardMaterial
+          color={c}
+          map={wallMap}
+          normalMap={detail ? surfaceNormal('metalsheet', o.w, eave) : undefined}
+          roughness={0.5}
+          metalness={0.25}
+        />
+      </mesh>
+      {/* the two gable ends */}
+      {([-1, 1] as const).map((sz) => (
+        <mesh key={sz} position={[0, 0, (sz * o.d) / 2]} rotation-y={sz < 0 ? Math.PI : 0} castShadow>
+          <shapeGeometry args={[gable]} />
+          <meshStandardMaterial color={c} roughness={0.5} metalness={0.25} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+      {/* roof planes rising to a central ridge */}
+      {([-1, 1] as const).map((sx) => (
+        <mesh
+          key={`r${sx}`}
+          position={[(sx * o.w) / 4, (eave + ridge) / 2, 0]}
+          rotation-z={-sx * slope}
+          castShadow
+          receiveShadow
+        >
+          <boxGeometry args={[planeLen, 0.1, o.d + 0.24]} />
+          <meshStandardMaterial color={c} roughness={0.45} metalness={0.3} />
+        </mesh>
+      ))}
+      {/* ridge cap and eave trims, so the massing reads as a built shed */}
+      <Box args={[0.26, 0.12, o.d + 0.3]} pos={[0, ridge + 0.06, 0]} color="#dfe3e7" />
+      {([-1, 1] as const).map((sx) => (
+        <Box key={`e${sx}`} args={[0.14, 0.16, o.d + 0.3]} pos={[(sx * (o.w + 0.18)) / 2, eave - 0.02, 0]} color="#dfe3e7" />
+      ))}
+      <Box args={[o.w + 0.06, 0.25, o.d + 0.06]} pos={[0, 0.125, 0]} color="#c8ccd1" />
+    </group>
+  )
+}
+
 // Realistic parking-lot paints. Cars that still carry the old default blue get
 // a stable per-instance paint from this palette (a lot of identical bright-blue
 // cars reads as toys); a color chosen in the inspector is respected.
@@ -3663,7 +3730,15 @@ function GroundPatch({ o, tint, kind }: { o: Placed; tint: string | null; kind: 
 // Fitness wall mirror: alu-framed panel that really reflects the scene.
 // Place it flush against any partition or room wall (front faces local +z).
 function WallMirror({ o, tint }: { o: Placed; tint: string | null }) {
-  const reflect = useStore((s) => s.quality !== 'low')
+  const quality = useStore((s) => s.quality)
+  // A reflector costs one extra render of the scene per frame, so the mirror
+  // pays for itself at a resolution that suits the quality setting rather than
+  // being switched off. The old Low fallback was a plain metalness-0.9 pane,
+  // and with no environment map at Low it had nothing to reflect — it came out
+  // solid black, which reads as a hole in the wall rather than as a mirror.
+  const low = quality === 'low'
+  const res = quality === 'high' ? 512 : quality === 'medium' ? 256 : 128
+  const blur: [number, number] = quality === 'high' ? [70, 25] : [40, 14]
   const t = Math.max(0.04, o.d)
   const ph = Math.max(0.3, o.h - 0.2) // glass panel, bottom lifted off the floor
   const py = 0.15 + ph / 2
@@ -3677,21 +3752,22 @@ function WallMirror({ o, tint }: { o: Placed; tint: string | null }) {
           falls back to a plain glossy pane. */}
       <mesh position={[0, py, t / 2 - 0.004]}>
         <planeGeometry args={[o.w - 0.09, ph]} />
-        {reflect ? (
-          <MeshReflectorMaterial
-            mirror={1}
-            blur={[70, 25]}
-            resolution={512}
-            mixBlur={0.1}
-            mixStrength={1}
-            depthScale={0}
-            roughness={0.02}
-            metalness={0.9}
-            color={tint ?? '#eef2f5'}
-          />
-        ) : (
-          <meshStandardMaterial color={tint ?? '#c3ced6'} roughness={0.08} metalness={0.9} />
-        )}
+        <MeshReflectorMaterial
+          key={quality} // resolution/blur are constructor-time, so remount on change
+          mirror={1}
+          blur={blur}
+          resolution={res}
+          mixBlur={0.1}
+          mixStrength={low ? 1.5 : 1}
+          depthScale={0}
+          roughness={0.02}
+          // A metal reflects its environment, and Low has no environment map —
+          // at metalness 0.9 the pane had nothing to shade with and came out
+          // black, with the reflection blended against that. Low leans on the
+          // reflector alone instead.
+          metalness={low ? 0 : 0.9}
+          color={tint ?? '#eef2f5'}
+        />
       </mesh>
       {/* slim aluminium frame */}
       <Alu args={[o.w, 0.055, t]} pos={[0, 0.125, 0]} />
@@ -3957,6 +4033,7 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
       if (o.defId === 'cctv') return <Cctv o={o} tint={tint} />
       return <SpeakerBox o={o} tint={tint} />
     case 'site':
+      if (o.defId === 'shed') return <ExistingBuilding o={o} tint={tint} />
       if (o.defId === 'tree_small' || o.defId === 'tree_big') return <Tree o={o} tint={tint} />
       if (o.defId === 'tree_cone' || o.defId === 'tree_slim') return <Conifer o={o} tint={tint} />
       if (o.defId === 'pond') return <Pond o={o} tint={tint} />

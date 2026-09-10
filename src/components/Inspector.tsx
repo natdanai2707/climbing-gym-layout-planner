@@ -79,6 +79,15 @@ export function Inspector() {
           </select>
         </label>
       )}
+      {selected.defId === 'shed' && (
+        <Field
+          label="Eave height (m)"
+          value={selected.eave ?? 6}
+          step={0.1}
+          min={0.3}
+          onChange={(v) => set({ eave: v })}
+        />
+      )}
       {selected.category === 'window' && (
         <Field
           label="Sill height (m)"

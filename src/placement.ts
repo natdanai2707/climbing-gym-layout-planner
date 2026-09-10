@@ -212,42 +212,49 @@ export function landingDepth(d: number): number {
 }
 
 /**
- * Split a wall (length `len`, height `h`) into the solid rectangles that are
- * left after cutting `openings` out of it: the full-height runs between the
- * holes, plus the spandrel under and head over each raised hole. Shared by the
- * interior walls and the building shell so both open up the same way.
+ * Split a wall (length `len`, height `h`) into the solid rectangles left after
+ * cutting `openings` out of it — an exact rectangle subtraction, so a door and
+ * a window above it keep the transom between them and the wall either side.
+ * Shared by the interior walls and the building shell so both open up the same
+ * way.
  */
 export function wallPanels(
   len: number,
   h: number,
   openings: Opening[],
 ): Array<{ u0: number; u1: number; y0: number; y1: number }> {
-  const cuts = openings
-    .map((o) => [Math.max(-len / 2, o.c - o.w / 2), Math.min(len / 2, o.c + o.w / 2), o.y0, Math.min(o.y1, h)] as const)
-    .filter((c) => c[1] - c[0] > 0.02 && c[3] - c[2] > 0.05) // misses this wall entirely
-    .map((c) => [...c] as [number, number, number, number])
-    .sort((p, q) => p[0] - q[0])
-  // overlapping holes open over the union of their bands, so the wall is never
-  // left with a sliver wedged between two windows
-  const merged: Array<[number, number, number, number]> = []
-  for (const c of cuts) {
-    const last = merged[merged.length - 1]
-    if (last && c[0] <= last[1] + 0.01) {
-      last[1] = Math.max(last[1], c[1])
-      last[2] = Math.min(last[2], c[2])
-      last[3] = Math.max(last[3], c[3])
-    } else merged.push(c)
-  }
+  const holes = openings
+    .map((o) => ({
+      x0: Math.max(-len / 2, o.c - o.w / 2),
+      x1: Math.min(len / 2, o.c + o.w / 2),
+      y0: Math.max(0, o.y0),
+      y1: Math.min(o.y1, h),
+    }))
+    .filter((o) => o.x1 - o.x0 > 0.02 && o.y1 - o.y0 > 0.05) // misses this wall
+  if (holes.length === 0) return len > 0.04 && h > 0.04 ? [{ u0: -len / 2, u1: len / 2, y0: 0, y1: h }] : []
+
+  // Split the wall at every opening edge, then subtract each strip's holes in
+  // turn. Merging overlapping openings into one band — which is what this used
+  // to do — takes the union of their extents, so a door with a window above it
+  // opened one hole the full height of both and the full width of the wider:
+  // the transom between them and the wall beside the door simply vanished.
+  const xs = [...new Set([-len / 2, len / 2, ...holes.flatMap((o) => [o.x0, o.x1])])].sort((a, b) => a - b)
   const res: Array<{ u0: number; u1: number; y0: number; y1: number }> = []
-  let cursor = -len / 2
-  for (const [x0, x1] of merged) {
-    if (x0 - cursor > 0.04) res.push({ u0: cursor, u1: x0, y0: 0, y1: h })
-    cursor = Math.max(cursor, x1)
-  }
-  if (len / 2 - cursor > 0.04) res.push({ u0: cursor, u1: len / 2, y0: 0, y1: h })
-  for (const [x0, x1, y0, y1] of merged) {
-    if (y0 > 0.04) res.push({ u0: x0, u1: x1, y0: 0, y1: y0 })
-    if (y1 < h - 0.04) res.push({ u0: x0, u1: x1, y0: y1, y1: h })
+  for (let i = 0; i < xs.length - 1; i++) {
+    const u0 = xs[i]
+    const u1 = xs[i + 1]
+    if (u1 - u0 <= 0.02) continue
+    const mid = (u0 + u1) / 2
+    const bands = holes
+      .filter((o) => o.x0 <= mid && o.x1 >= mid)
+      .map((o) => [o.y0, o.y1] as [number, number])
+      .sort((a, b) => a[0] - b[0])
+    let y = 0
+    for (const [b0, b1] of bands) {
+      if (b0 - y > 0.04) res.push({ u0, u1, y0: y, y1: b0 })
+      y = Math.max(y, b1)
+    }
+    if (h - y > 0.04) res.push({ u0, u1, y0: y, y1: h })
   }
   return res
 }

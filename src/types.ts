@@ -51,6 +51,7 @@ export interface Placed {
   level?: 'ground' | 'upper' // 'upper' = sits on a mezzanine floor
   material?: 'epdm' | 'concrete' | 'birch' | 'glass' // surface finish (zones/mats) or glass partitions
   sill?: number // glass opening: height of the bottom edge above the floor (m)
+  eave?: number // dummy building: wall height at the eaves; h is the ridge (m)
   drop?: number // vertical ceiling (bulkhead): panel extent hanging below its top hangers (m)
 }
 

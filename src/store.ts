@@ -524,6 +524,8 @@ export const useStore = create<GymState>()(
         if (d) obj.sill = d.sill
       } else if (placingDef.category === 'window') {
         obj.sill = 0.9
+      } else if (placingDef.id === 'shed') {
+        obj.eave = 6
       }
       set({
         objects: [...get().objects, obj],
