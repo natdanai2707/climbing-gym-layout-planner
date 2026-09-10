@@ -2034,7 +2034,9 @@ function DesignedWindow({ o, tint }: { o: Placed; tint: string | null }) {
     const ring = new THREE.Shape(outline)
     ring.holes.push(new THREE.Path(inner))
     return {
-      glass: new THREE.ShapeGeometry(glazed),
+      // a thin solid rather than a single-sided plane, so the glazing reads
+      // from inside the hall as well as from the street
+      glass: new THREE.ExtrudeGeometry(glazed, { depth: 0.02, bevelEnabled: false }),
       panel: new THREE.ExtrudeGeometry(panel, { depth: t, bevelEnabled: false }),
       frame: new THREE.ExtrudeGeometry(ring, { depth: t * 0.9, bevelEnabled: false }),
     }
@@ -2061,7 +2063,7 @@ function DesignedWindow({ o, tint }: { o: Placed; tint: string | null }) {
         <meshStandardMaterial color={frameCol} roughness={0.4} metalness={0.6} side={THREE.DoubleSide} />
       </mesh>
       {/* the glazing itself */}
-      <mesh geometry={geo.glass} position={[0, 0, 0]}>
+      <mesh geometry={geo.glass} position={[0, 0, -0.01]}>
         <PaneGlass tint={tint ?? design.glass} />
       </mesh>
       <group>
