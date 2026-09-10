@@ -334,7 +334,13 @@ export function SegmentedShell({ force = false }: { force?: boolean }) {
   const shift = (ops: Opening[], zc: number) => ops.map((o) => ({ ...o, c: o.c - zc }))
 
   return (
-    <group position={[0, 0, off]}>
+    // Keyed on the mode so switching Off / Clear / Solid remounts the shell.
+    // Without it r3f reconciles one <meshStandardMaterial> onto the next and
+    // only writes the props the new one names: the ghost's transparent /
+    // opacity / depthWrite stay set on the solid cladding, and the walls come
+    // back invisible. (Leaving for another page and returning remounted it,
+    // which is why the building looked right after a trip to Building Design.)
+    <group key={mode} position={[0, 0, off]}>
       {spans.map((seg, i) => {
         const len = seg.z1 - seg.z0
         const zc = (seg.z0 + seg.z1) / 2
