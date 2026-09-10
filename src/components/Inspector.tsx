@@ -1,4 +1,5 @@
 import { useStore } from '../store'
+import { FIXED_SIZE_DEFS } from '../catalog'
 import type { Placed } from '../types'
 import { NumInput } from './NumInput'
 
@@ -39,6 +40,7 @@ export function Inspector() {
   }
 
   const set = (patch: Partial<Placed>) => updateObject(selected.id, patch)
+  const fixedSize = FIXED_SIZE_DEFS.has(selected.defId)
 
   return (
     <section className="inspector">
@@ -48,9 +50,21 @@ export function Inspector() {
         <input type="text" value={selected.label} onChange={(e) => set({ label: e.target.value })} />
       </label>
       <div className="insp-grid">
-        <Field label="Width W (m)" value={selected.w} min={0.1} onChange={(v) => set({ w: v })} />
-        <Field label="Depth D (m)" value={selected.d} min={0.1} onChange={(v) => set({ d: v })} />
-        <Field label="Height H (m)" value={selected.h} min={0.05} onChange={(v) => set({ h: v })} />
+        {/* a fixed module is a known size — show it, but don't offer to change it */}
+        {fixedSize ? (
+          <label className="insp-field wide">
+            <span>Size (fixed)</span>
+            <span className="muted">
+              {selected.w} × {selected.d} m
+            </span>
+          </label>
+        ) : (
+          <>
+            <Field label="Width W (m)" value={selected.w} min={0.1} onChange={(v) => set({ w: v })} />
+            <Field label="Depth D (m)" value={selected.d} min={0.1} onChange={(v) => set({ d: v })} />
+            <Field label="Height H (m)" value={selected.h} min={0.05} onChange={(v) => set({ h: v })} />
+          </>
+        )}
         <label className="insp-field">
           <span>Rotation</span>
           <div className="rot-row">
@@ -78,6 +92,34 @@ export function Inspector() {
             <option value="glass">Clear glass</option>
           </select>
         </label>
+      )}
+      {selected.defId === 'signage' && (
+        <>
+          <label className="insp-field wide">
+            <span>Sign text</span>
+            <input
+              type="text"
+              value={selected.text ?? ''}
+              maxLength={40}
+              placeholder="CLIMBING GYM"
+              onChange={(e) => set({ text: e.target.value })}
+            />
+          </label>
+          <Field
+            label="Letter thickness (m)"
+            value={selected.thick ?? 0.08}
+            step={0.01}
+            min={0.01}
+            onChange={(v) => set({ thick: v })}
+          />
+          <Field
+            label="Height above floor (m)"
+            value={selected.sill ?? 3.5}
+            step={0.1}
+            min={0}
+            onChange={(v) => set({ sill: v })}
+          />
+        </>
       )}
       {selected.defId === 'shed' && (
         <Field

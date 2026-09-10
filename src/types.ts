@@ -52,6 +52,8 @@ export interface Placed {
   material?: 'epdm' | 'concrete' | 'birch' | 'glass' // surface finish (zones/mats) or glass partitions
   sill?: number // glass opening: height of the bottom edge above the floor (m)
   eave?: number // dummy building: wall height at the eaves; h is the ridge (m)
+  text?: string // signage: the wording on the facade
+  thick?: number // signage: how far the letters stand off the wall (m)
   drop?: number // vertical ceiling (bulkhead): panel extent hanging below its top hangers (m)
 }
 

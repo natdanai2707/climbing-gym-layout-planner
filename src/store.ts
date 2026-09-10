@@ -542,6 +542,10 @@ export const useStore = create<GymState>()(
         obj.sill = 0.9
       } else if (placingDef.id === 'shed') {
         obj.eave = 6
+      } else if (placingDef.id === 'signage') {
+        obj.text = 'CLIMBING GYM'
+        obj.thick = 0.08
+        obj.sill = 3.5 // sign height above the floor
       }
       set({
         objects: [...get().objects, obj],

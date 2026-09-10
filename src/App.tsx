@@ -143,6 +143,8 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return
+      // (a field keeps the keys while it is focused; clicking the scene blurs
+      // it, so the arrows go back to the selection — see the canvas handler)
       const s = useStore.getState()
       if (s.page === 'wall') return
       if (s.viewMode === 'walk') {
@@ -165,10 +167,11 @@ export default function App() {
         s.redo()
         return
       }
-      // Arrow keys nudge the selected item once Move is armed (or while a
-      // freshly dropped item is still pending). Steps follow the screen, not
-      // the world: ↑ pushes away from the camera whichever way it is orbited.
-      if (e.key.startsWith('Arrow') && s.selectedId && (s.moveArmed || s.pendingId === s.selectedId)) {
+      // Arrow keys nudge whatever is selected — Move does not have to be armed
+      // first, which was the usual reason a press seemed to do nothing. Steps
+      // follow the screen, not the world: ↑ pushes away from the camera
+      // whichever way it is orbited.
+      if (e.key.startsWith('Arrow') && s.selectedId) {
         e.preventDefault()
         const step = e.shiftKey ? 0.1 : s.building.cell
         const f = viewAxis

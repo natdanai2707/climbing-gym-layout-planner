@@ -35,6 +35,9 @@ export const CATALOG: ObjectDef[] = [
   { id: 'person', label: 'Person', category: 'person', w: 0.5, d: 0.4, h: 1.7, color: '#3b82f6', rule: 'floor' },
   { id: 'training', label: 'Training Area', category: 'zone', w: 8.0, d: 6.0, h: 0.1, color: '#fca5a5', rule: 'floor' },
   { id: 'hyrox', label: 'Hyrox Zone', category: 'zone', w: 20.0, d: 15.0, h: 0.1, color: '#33363b', rule: 'floor' },
+  // a complete Hyrox bay drawn to a 78 x 42 ft plan — a fixed module, so it is
+  // dropped in whole rather than stretched
+  { id: 'hyrox_bay', label: 'Hyrox Bay (78 × 42 ft, fixed)', category: 'zone', w: 23.77, d: 12.8, h: 0.1, color: '#33363b', rule: 'floor' },
   { id: 'icebath', label: 'Ice Bath', category: 'fixture', w: 3.0, d: 2.0, h: 1.0, color: '#38bdf8', rule: 'floor' },
   { id: 'sauna', label: 'Sauna', category: 'room', w: 3.0, d: 3.0, h: 2.4, color: '#d4a373', rule: 'floor' },
   // tennis simulator: dark booth with the impact screen filling one 5 m end
@@ -71,6 +74,9 @@ export const CATALOG: ObjectDef[] = [
   // massing block for a building that is already on the site: white metal
   // sheet, gable across the width. H is the ridge, `eave` the side wall.
   { id: 'shed', label: 'Existing Building (dummy)', category: 'site', w: 18, d: 14, h: 8, color: '#f2f4f6', rule: 'outdoor' },
+  // facade signage: built-up letters on the building wall. W is the length of
+  // the wording, H the cap height, and `thick` how far the letters stand off.
+  { id: 'signage', label: 'Facade Signage (lettering)', category: 'fixture', w: 6, d: 0.12, h: 0.9, color: '#2f3237', rule: 'edge' },
   // entrance access onto the raised floor slab — place at a door
   { id: 'steps', label: 'Concrete Steps (to entrance)', category: 'site', w: 3.0, d: 3.0, h: 1.0, color: '#c2beb4', rule: 'outdoor' },
   { id: 'ramp', label: 'Concrete Ramp / Slope', category: 'site', w: 2.0, d: 7.4, h: 1.0, color: '#c2beb4', rule: 'outdoor' },
@@ -139,3 +145,6 @@ export const CATEGORY_ORDER: Category[] = [
   'parking',
   'site',
 ]
+
+/** Items that are a fixed module: no resize arrows, no size fields. */
+export const FIXED_SIZE_DEFS = new Set(['hyrox_bay'])

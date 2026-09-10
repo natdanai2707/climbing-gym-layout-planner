@@ -2884,6 +2884,168 @@ function EntranceRamp({ o, tint }: { o: Placed; tint: string | null }) {
 }
 
 /**
+ * A complete Hyrox training bay, laid out to the supplied 78 x 42 ft plan and
+ * fixed at that size — the whole point is that the bay is a known module you
+ * drop in, not something to stretch. Local origin is the centre of the bay,
+ * x runs the 78 ft length and z the 42 ft depth.
+ */
+const FT = 0.3048
+function HyroxLayout({ o, tint }: { o: Placed; tint: string | null }) {
+  const W = 78 * FT // 23.77 m
+  const D = 42 * FT // 12.80 m
+  const deck = tint ?? o.color
+  // the plan's bands: 12'5" side aisles either end, rows of 13'5" / 13'1" / 15'5"
+  const rowerZ = -D / 2 + 2.1
+  const laneZ = -D / 2 + 4.09 + 3.99 / 2 - 0.2
+  const bottomZ = D / 2 - 2.4
+  // c3: eight rowers at 4'6" centres
+  const rowers = Array.from({ length: 8 }, (_, i) => (i - 3.5) * 4.5 * FT)
+  // c1: four ski ergs at 6'0" centres, c2: four bikes at 4'0" centres
+  const skis = Array.from({ length: 4 }, (_, i) => -5.6 + (i - 1.5) * 6 * FT)
+  const bikes = Array.from({ length: 4 }, (_, i) => 2.6 + (i - 1.5) * 4 * FT)
+  // f1: a rack of three tiers at each end, 3'9" apart
+  const rackZ = Array.from({ length: 3 }, (_, i) => (i - 1) * 3.75 * FT)
+  const laneHalf = 8.1
+  return (
+    <group>
+      {/* rubber deck */}
+      <mesh position={[0, 0.04, 0]} receiveShadow>
+        <boxGeometry args={[W, 0.08, D]} />
+        <meshStandardMaterial color={deck} roughness={0.95} metalness={0} />
+      </mesh>
+      {/* pale bays under each equipment group, as drawn */}
+      {[
+        [0, rowerZ, 12.4, 2.6],
+        [-5.6, bottomZ, 6.4, 2.2],
+        [2.6, bottomZ + 0.3, 5.2, 1.8],
+        [-W / 2 + 1.5, 0, 1.9, 4.6],
+        [W / 2 - 1.5, 0, 1.9, 4.6],
+      ].map(([x, z, bw, bd], i) => (
+        <mesh key={i} position={[x, 0.085, z]} receiveShadow>
+          <boxGeometry args={[bw, 0.01, bd]} />
+          <meshStandardMaterial color="#f2f0ea" roughness={0.9} />
+        </mesh>
+      ))}
+      {/* a1: the two sled lanes, turf, split by a solid line with a dashed
+          centre across the middle */}
+      <mesh position={[0, 0.09, laneZ]} receiveShadow>
+        <boxGeometry args={[laneHalf * 2, 0.02, 3.8]} />
+        <meshStandardMaterial color="#f4f2ec" roughness={0.95} />
+      </mesh>
+      <Box args={[laneHalf * 2, 0.012, 0.06]} pos={[0, 0.105, laneZ]} color="#d9b310" />
+      {Array.from({ length: 9 }, (_, i) => (
+        <Box key={i} args={[0.06, 0.012, 0.24]} pos={[0, 0.105, laneZ - 1.7 + i * 0.42]} color="#d9b310" />
+      ))}
+      {([-1, 1] as const).map((s) => (
+        <Box key={s} args={[0.05, 0.012, 3.8]} pos={[s * laneHalf, 0.105, laneZ]} color="#d9b310" />
+      ))}
+      {/* sleds sitting at the head of each lane */}
+      <Sled pos={[-laneHalf + 1.2, 0.09, laneZ - 0.95]} />
+      <Sled pos={[laneHalf - 1.2, 0.09, laneZ + 0.95]} />
+      {/* c3: rowers along the back */}
+      {rowers.map((x, i) => (
+        <Rower key={i} pos={[x, 0.09, rowerZ]} />
+      ))}
+      {/* c1: ski ergs, c2: cross-trainers standing in for the bikes */}
+      {skis.map((x, i) => (
+        <SkiErg key={i} pos={[x, 0.09, bottomZ]} />
+      ))}
+      {bikes.map((x, i) => (
+        <Elliptical key={i} pos={[x, 0.09, bottomZ + 0.3]} ry={Math.PI} />
+      ))}
+      {/* f1: weight racks at both ends */}
+      {([-1, 1] as const).map((s) =>
+        rackZ.map((z, i) => <DumbbellRack key={`${s}${i}`} pos={[s * (W / 2 - 1.5), 0.09, z]} ry={Math.PI / 2} />),
+      )}
+      {/* f2: kettlebell clusters marked around the lanes */}
+      {[
+        [-laneHalf - 1.4, laneZ + 1.4],
+        [laneHalf + 1.4, laneZ - 1.4],
+        [-2.2, bottomZ - 1.6],
+        [6.4, laneZ + 1.2],
+      ].map(([x, z], i) => (
+        <group key={i}>
+          <Kettlebell pos={[x, 0.09, z]} />
+          <Kettlebell pos={[x + 0.32, 0.09, z + 0.18]} color="#4b5563" />
+          <Kettlebell pos={[x + 0.16, 0.09, z - 0.26]} color="#6b7280" />
+        </group>
+      ))}
+      <Figure pose="walk" pos={[-laneHalf + 2.2, 0.09, laneZ - 0.95]} ry={-Math.PI / 2} shirt="#22c55e" idx={1} />
+      <Figure pose="stand" pos={[rowers[2], 0.09, rowerZ + 1.1]} ry={Math.PI} shirt="#3b82f6" idx={5} />
+    </group>
+  )
+}
+
+// Letters drawn once into a canvas and reused as a stencil: the mesh is
+// coloured by the material, so the same texture serves any sign colour.
+const signCache = new Map<string, { tex: THREE.CanvasTexture; aspect: number }>()
+
+function signTexture(text: string) {
+  const key = text
+  const hit = signCache.get(key)
+  if (hit) return hit
+  const PX = 128 // cap height in canvas pixels
+  const font = `700 ${PX}px "Helvetica Neue", Arial, sans-serif`
+  const probe = document.createElement('canvas').getContext('2d')!
+  probe.font = font
+  const w = Math.max(PX, Math.ceil(probe.measureText(text).width))
+  const cv = document.createElement('canvas')
+  cv.width = w + PX * 0.3
+  cv.height = Math.round(PX * 1.35)
+  const ctx = cv.getContext('2d')!
+  ctx.font = font
+  ctx.fillStyle = '#ffffff'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, cv.width / 2, cv.height / 2)
+  const tex = new THREE.CanvasTexture(cv)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
+  const out = { tex, aspect: cv.width / cv.height }
+  signCache.set(key, out)
+  return out
+}
+
+/**
+ * Built-up lettering on a facade: the wording is cut out of a stack of thin
+ * slices, so the letters stand off the wall by `thick` and read as solid from
+ * an angle rather than as a painted decal. W and H bound the lettering, which
+ * keeps its own proportions inside that box; the letters face outward, away
+ * from the building, on whichever wall the sign snaps to.
+ */
+function FacadeSignage({ o, tint }: { o: Placed; tint: string | null }) {
+  const text = (o.text ?? 'CLIMBING GYM').slice(0, 40) || ' '
+  const thick = clampN(o.thick ?? 0.08, 0.01, 0.6)
+  const { tex, aspect } = useMemo(() => signTexture(text), [text])
+  // fit the wording inside the item's box without distorting the letterforms
+  const h = Math.min(o.h, o.w / aspect)
+  const w = h * aspect
+  const slices = Math.max(2, Math.min(8, Math.round(thick / 0.02)))
+  const col = tint ?? o.color
+  const mount = Math.max(0, o.sill ?? 3.5)
+  return (
+    // An edge item's local +z points into the building, so the group is turned
+    // to face the street: without it the lettering reads backwards from outside.
+    <group position={[0, mount + h / 2, 0]} rotation-y={Math.PI}>
+      {Array.from({ length: slices }, (_, i) => (
+        <mesh key={i} position={[0, 0, 0.01 + (thick * i) / (slices - 1)]} castShadow>
+          <planeGeometry args={[w, h]} />
+          <meshStandardMaterial
+            color={col}
+            map={tex}
+            alphaMap={tex}
+            alphaTest={0.5}
+            roughness={0.4}
+            metalness={0.5}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+/**
  * Massing block for a building that is already standing on the site — a plain
  * white metal-sheet shed with a gable across its width. `h` is the ridge and
  * `eave` the side wall height, so the default 18 x 14 m block stands 6 m at
@@ -4084,6 +4246,7 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
       if (o.defId === 'cowork') return <CoworkZone o={o} tint={tint} />
       if (o.defId === 'training') return <TrainingZone o={o} tint={tint} />
       if (o.defId === 'hyrox') return <HyroxZone o={o} tint={tint} />
+      if (o.defId === 'hyrox_bay') return <HyroxLayout o={o} tint={tint} />
       return <ZonePatch o={o} tint={tint} />
     case 'room':
       if (o.defId === 'toilet') return <Restroom o={o} tint={tint} />
@@ -4094,6 +4257,7 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
     case 'reception':
       return <Reception o={o} tint={tint} />
     case 'fixture':
+      if (o.defId === 'signage') return <FacadeSignage o={o} tint={tint} />
       if (o.defId === 'shoes') return <ShoeRack o={o} tint={tint} />
       if (o.defId === 'gate_face') return <FaceGate o={o} tint={tint} />
       if (o.defId === 'mirror') return <WallMirror o={o} tint={tint} />

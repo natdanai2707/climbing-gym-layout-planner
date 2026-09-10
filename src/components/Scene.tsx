@@ -9,6 +9,7 @@ import { DepthOfField, EffectComposer } from '@react-three/postprocessing'
 import { N8AOPostPass } from 'n8ao'
 import { ContactShadows } from '@react-three/drei'
 import { useStore } from '../store'
+import { FIXED_SIZE_DEFS } from '../catalog'
 import { viewAxis } from '../viewAxis'
 import type { ResizeAxis, ResizeState } from '../store'
 import type { Placed } from '../types'
@@ -384,7 +385,10 @@ function WalkRig() {
         if (perimeterBlocked(x, z)) return true
         for (const o of s.objects) {
           if (o.h < 0.9 || o.category === 'stairs' || WALK_PASSABLE.has(o.category) || WALK_PASSABLE_DEFS.has(o.defId)) continue
-          const elev = elevationFor(o, s.objects)
+          // A glazed opening is a hole in a wall, not a block standing on the
+          // floor: it starts at its sill. Measuring from the floor made a
+          // window fitted above a door stop you in the doorway underneath it.
+          const elev = elevationFor(o, s.objects) + (o.category === 'window' ? Math.max(0, o.sill ?? 0.9) : 0)
           if (elev + o.h <= foot + 0.45) continue // entirely below the feet
           if (elev >= foot + 1.55) continue // entirely above the head
           const { fw, fd } = fp(o)
@@ -1126,7 +1130,9 @@ function SceneContent() {
   const warnings = useMemo(() => getWarningIds(objects, building), [objects, building])
   // hide the resize arrows while Move mode is armed — moving and resizing are
   // separate gestures, and the arrows would only get in the way of the drag
-  const selected = moveArmed || walking ? undefined : objects.find((o) => o.id === selectedId)
+  const sel = moveArmed || walking ? undefined : objects.find((o) => o.id === selectedId)
+  // a fixed module has no resize arrows — it is dropped in at its real size
+  const selected = sel && FIXED_SIZE_DEFS.has(sel.defId) ? undefined : sel
 
   return (
     <>
@@ -1182,6 +1188,12 @@ export function Scene() {
     // Explicit modern pipeline: sRGB output + ACES Filmic tone mapping +
     // PCF soft shadows; pixel ratio capped at 2. No legacy lighting anywhere.
     <Canvas
+      // A focused inspector field swallows the arrow keys, so clicking back
+      // into the scene hands them to the selected object again.
+      onPointerDown={() => {
+        const el = document.activeElement as HTMLElement | null
+        if (el && el !== document.body && typeof el.blur === 'function') el.blur()
+      }}
       shadows="soft"
       dpr={quality === 'low' ? [1, 1.5] : [1, 2]}
       gl={{
