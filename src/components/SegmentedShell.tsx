@@ -149,6 +149,39 @@ function endShape(seg: NormSeg, W: number, ops: Opening[] = []): THREE.Shape {
   return s
 }
 
+/**
+ * Face that closes the step where one zone is taller than the next. Only the
+ * gap BETWEEN the two roof profiles is clad: filling the whole cross-section
+ * (which is what this used to do) drops an internal wall across the hall,
+ * cutting the building in two. Returns null when the zones line up.
+ */
+function stepShape(a: NormSeg, b: NormSeg, W: number): THREE.Shape | null {
+  const pa = roofProfile(a, W)
+  const pb = roofProfile(b, W)
+  const yAt = (prof: Array<[number, number]>, x: number) => {
+    for (let i = 0; i < prof.length - 1; i++) {
+      const [x0, y0] = prof[i]
+      const [x1, y1] = prof[i + 1]
+      if (x >= x0 - 1e-6 && x <= x1 + 1e-6) {
+        const k = x1 === x0 ? 0 : (x - x0) / (x1 - x0)
+        return y0 + (y1 - y0) * k
+      }
+    }
+    return prof[prof.length - 1][1]
+  }
+  // sample both profiles wherever either of them bends
+  const xs = [...new Set([...pa, ...pb].map((p) => p[0]))].sort((u, v) => u - v)
+  const top = xs.map((x) => [x, Math.max(yAt(pa, x), yAt(pb, x))] as [number, number])
+  const bot = xs.map((x) => [x, Math.min(yAt(pa, x), yAt(pb, x))] as [number, number])
+  if (top.every(([, y], i) => y - bot[i][1] < 0.05)) return null
+  const sh = new THREE.Shape()
+  sh.moveTo(top[0][0], top[0][1])
+  for (let i = 1; i < top.length; i++) sh.lineTo(top[i][0], top[i][1])
+  for (let i = bot.length - 1; i >= 0; i--) sh.lineTo(bot[i][0], bot[i][1])
+  sh.closePath()
+  return sh
+}
+
 function SegmentRoof({ seg, W, ghost }: { seg: SegSpan; W: number; ghost?: boolean }) {
   const len = seg.z1 - seg.z0
   const zc = (seg.z0 + seg.z1) / 2
@@ -330,16 +363,21 @@ export function SegmentedShell({ force = false }: { force?: boolean }) {
               ))
             })}
             <SegmentRoof seg={seg} W={W} ghost={ghost} />
-            {/* bulkhead face where the next zone has a different profile */}
-            {i < spans.length - 1 &&
-              (Math.abs(segTop(spans[i + 1]) - segTop(seg)) > 0.1 ||
-                Math.abs(spans[i + 1].eaveL - seg.eaveL) > 0.1 ||
-                Math.abs(spans[i + 1].eaveR - seg.eaveR) > 0.1) && (
+            {/* clad the step where the next zone's roof sits at a different
+                height — the hall itself stays open underneath */}
+            {(() => {
+              if (i >= spans.length - 1) return null
+              const next = spans[i + 1]
+              const step = stepShape(seg, next, W)
+              if (!step) return null
+              const taller = segTop(seg) >= segTop(next) ? seg : next
+              return (
                 <mesh position={[0, 0, seg.z1]}>
-                  <shapeGeometry args={[endShape(segTop(seg) >= segTop(spans[i + 1]) ? seg : spans[i + 1], W)]} />
-                  <Cladding seg={segTop(seg) >= segTop(spans[i + 1]) ? seg : spans[i + 1]} ghost={ghost} />
+                  <shapeGeometry args={[step]} />
+                  <Cladding seg={taller} ghost={ghost} />
                 </mesh>
-              )}
+              )
+            })()}
           </group>
         )
       })}
