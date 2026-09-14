@@ -66,7 +66,9 @@ export interface Building {
   width: number // x extent (m)
   length: number // z extent (m)
   cell: number // grid cell (m)
-  apron: number // outdoor margin around building (m)
+  apron: number // outdoor margin around building (m) — derived: the larger of
+  // apronMin and whatever the outdoor items need
+  apronMin?: number // the margin you asked for; the apron never goes below it
   centerZ: number // z position of the building/shell center (one-end resizing shifts it)
 }
 

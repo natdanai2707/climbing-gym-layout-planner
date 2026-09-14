@@ -155,9 +155,7 @@ export interface GymState {
     newDims: { w: number; d: number; h: number },
   ) => void
   clearAll: () => void
-  // the hall only ever grows to fit what is dropped in it, so an item placed
-  // and then turned or moved can leave it permanently oversized — this snaps
-  // it back to what the layout actually needs
+  // snap the hall to exactly what the floor items need, in both directions
   fitBuildingToLayout: () => void
   importLayout: (file: LayoutFile) => void
   // which bundled layout is on screen, so the picker can show it and a reload
@@ -268,45 +266,30 @@ function normalizeFile(file: LayoutFile): { building: Building; objects: Placed[
     }
   }
   // open at the right size: the shell must already cover every placed item
-  return { building: growToFit(building, objects), objects }
+  return { building: stretchApron(building, objects), objects }
 }
 
 // Grow the building (never shrink) so its footprint contains every floor
 // item. Used by resizing AND on every load/import, so a saved layout whose
 // items outgrew the stored building opens with the shell at the right size
 // instead of snapping only when an arrow is first touched.
-function growToFit(building: Building, objects: Placed[]): Building {
+/**
+ * Stretch the outdoor apron so anything placed beyond the hall still has
+ * ground under it. The hall itself is NOT resized here: it used to grow to
+ * contain whatever was dropped in, which meant a module wider than the hall
+ * silently widened the building (and swallowed the apron things were standing
+ * on), and a typed length was snapped straight back the next time anything was
+ * placed. The hall is now only ever the size you set, or what "Fit hall" sets.
+ */
+function stretchApron(building: Building, objects: Placed[]): Building {
   const b = { ...building }
-  const floors = objects.filter((o) => o.rule === 'floor')
-  if (floors.length > 0) {
-    let minX = Infinity
-    let maxX = -Infinity
-    let minZ = Infinity
-    let maxZ = -Infinity
-    for (const o of floors) {
-      const { fw, fd } = fp(o)
-      minX = Math.min(minX, o.x - fw / 2)
-      maxX = Math.max(maxX, o.x + fw / 2)
-      minZ = Math.min(minZ, o.z - fd / 2)
-      maxZ = Math.max(maxZ, o.z + fd / 2)
-    }
-    // width is centered on x = 0
-    const needW = 2 * Math.max(maxX, -minX, 0)
-    if (b.width < needW) b.width = needW
-    // length bounds must keep containing every item
-    let bMin = b.centerZ - b.length / 2
-    let bMax = b.centerZ + b.length / 2
-    bMin = Math.min(bMin, minZ)
-    bMax = Math.max(bMax, maxZ)
-    b.length = bMax - bMin
-    b.centerZ = (bMin + bMax) / 2
-  }
-  // the outdoor apron stretches so garden items placed beyond the original
-  // grid still get ground under them
   const hw = b.width / 2
   const zMin = b.centerZ - b.length / 2
   const zMax = b.centerZ + b.length / 2
-  let needA = b.apron
+  // Recomputed from scratch every time, never ratcheted up from the current
+  // value: shrinking the hall pushes the outdoor items further out and widens
+  // the apron, and growing it back has to bring the apron back down again.
+  let needA = b.apronMin ?? DEFAULT_BUILDING.apron
   for (const o of objects) {
     if (o.rule !== 'outdoor') continue
     const { fw, fd } = fp(o)
@@ -315,6 +298,7 @@ function growToFit(building: Building, objects: Placed[]): Building {
   b.apron = Math.ceil(needA * 4) / 4
   return b
 }
+
 
 const DEFAULT_SHELL: ShellConfig = { mode: 0, eave: 6 }
 
@@ -484,18 +468,21 @@ export const useStore = create<GymState>()(
       set({ shellDesign: usableDesign(d) })
     },
 
-    // Resizing never squeezes the layout: floor items stay exactly where they
-    // are, and the building simply refuses to shrink past their outer edges.
+    // Resizing is yours to make: the size you type is the size you get, and
+    // nothing in the layout is moved to accommodate it. Floor items keep their
+    // coordinates (anything left outside is flagged), doors and signage travel
+    // with the wall they are fitted to, and the apron stretches to keep ground
+    // under whatever is outside.
     setBuilding: (patch) => {
       let building = { ...get().building, ...patch }
       building.width = Math.max(2, building.width)
       building.length = Math.max(4, Math.min(300, building.length))
-      building.apron = Math.max(0, building.apron)
-      building = growToFit(building, get().objects)
+      // a typed apron is the margin you want; it becomes the new minimum
+      if (patch.apron !== undefined) building.apronMin = Math.max(0, patch.apron)
+      building = stretchApron(building, get().objects)
 
-      // doors follow their wall; outdoor items get pushed back into the apron
       const objects = get().objects.map((o) =>
-        o.rule === 'floor' ? o : { ...o, ...resolveAfterResize(o, building) },
+        o.rule === 'edge' ? { ...o, ...resolveAfterResize(o, building) } : o,
       )
       set({ building, objects })
     },
@@ -567,7 +554,7 @@ export const useStore = create<GymState>()(
       })
     },
 
-    confirmPending: () => set({ pendingId: null, building: growToFit(get().building, get().objects) }),
+    confirmPending: () => set({ pendingId: null, building: stretchApron(get().building, get().objects) }),
 
     cancelPending: () => {
       const { pendingId } = get()
@@ -583,7 +570,7 @@ export const useStore = create<GymState>()(
       if (r !== null) get().snapshot() // one undo step per resize gesture
       set(
         r === null
-          ? { resizing: null, building: growToFit(get().building, get().objects) }
+          ? { resizing: null, building: stretchApron(get().building, get().objects) }
           : { resizing: r },
       )
     },
@@ -670,7 +657,7 @@ export const useStore = create<GymState>()(
         })
       }
       // the shell/building always covers the layout, even right after a move
-      set({ draggingId: null, dragOrigin: null, dragValid: true, building: growToFit(get().building, get().objects) })
+      set({ draggingId: null, dragOrigin: null, dragValid: true, building: stretchApron(get().building, get().objects) })
     },
 
     // rotates in 45° steps; edge objects (doors) stay flush with their wall
@@ -696,7 +683,7 @@ export const useStore = create<GymState>()(
           return { ...o, rot, x: r.x, z: r.z }
         }),
       })
-      set({ building: growToFit(get().building, get().objects) })
+      set({ building: stretchApron(get().building, get().objects) })
     },
 
     removeSelected: () => {
@@ -721,7 +708,7 @@ export const useStore = create<GymState>()(
       get().snapshot(true)
       const r = computeDrop(o, o.x + dx, o.z + dz, building, false)
       set({ objects: objects.map((v) => (v.id === selectedId ? { ...v, x: r.x, z: r.z, rot: r.rot } : v)) })
-      set({ building: growToFit(get().building, get().objects) })
+      set({ building: stretchApron(get().building, get().objects) })
     },
 
     updateObject: (id, patch) => {
@@ -740,7 +727,7 @@ export const useStore = create<GymState>()(
           return { ...next, x: r.x, z: r.z, rot: r.rot }
         }),
       })
-      set({ building: growToFit(get().building, get().objects) })
+      set({ building: stretchApron(get().building, get().objects) })
     },
 
     // After a wall design is edited on the Wall Design page, refit every placed
@@ -765,7 +752,7 @@ export const useStore = create<GymState>()(
           return { ...next, x: r.x, z: r.z, rot: r.rot }
         }),
       })
-      set({ building: growToFit(get().building, get().objects) })
+      set({ building: stretchApron(get().building, get().objects) })
     },
 
     fitBuildingToLayout: () => {
@@ -788,7 +775,7 @@ export const useStore = create<GymState>()(
       const length = Math.max(2, maxZ - minZ)
       set({ building: { ...building, width, length, centerZ: (minZ + maxZ) / 2 } })
       // the apron still has to reach whatever sits outside
-      set({ building: growToFit(get().building, get().objects) })
+      set({ building: stretchApron(get().building, get().objects) })
     },
 
     clearAll: () => {

@@ -98,38 +98,46 @@ export function computeDrop(
 
 // After a building resize, try to keep an outdoor object in the apron by pushing it
 // out of the building along the shortest axis.
+/**
+ * Where an item sits after the building has been resized. Nothing is dragged
+ * around: a door or a sign stays on the wall it was fitted to and simply
+ * travels with it, sliding along only as far as it must to stay on that wall.
+ * Everything else keeps its coordinates — an outdoor item that the building
+ * has grown over is flagged (see getWarningIds) rather than teleported to the
+ * far side of the hall, which is not a decision the app should make for you.
+ */
 export function resolveAfterResize(o: Placed, b: Building): { x: number; z: number; rot: number } {
-  const r = computeDrop(o, o.x, o.z, b, false)
-  if (r.valid || o.rule !== 'outdoor') return { x: r.x, z: r.z, rot: r.rot }
-  const { fw, fd } = fp(o)
+  if (o.rule !== 'edge') return { x: o.x, z: o.z, rot: o.rot }
   const hw = b.width / 2
   const cz = b.centerZ ?? 0
-  const candidates: Array<[number, number]> = [
-    [o.x, cz - b.length / 2 - fd / 2], // north
-    [o.x, cz + b.length / 2 + fd / 2], // south
-    [-hw - fw / 2, o.z], // west
-    [hw + fw / 2, o.z], // east
-  ]
-  let best: DropResult | null = null
-  let bestDist = Infinity
-  for (const [cx, cz] of candidates) {
-    const c = computeDrop(o, cx, cz, b)
-    if (!c.valid) continue
-    const dist = (c.x - o.x) ** 2 + (c.z - o.z) ** 2
-    if (dist < bestDist) {
-      bestDist = dist
-      best = c
-    }
+  const minZ = cz - b.length / 2
+  const maxZ = cz + b.length / 2
+  // rot encodes the wall it was placed on: 0 north, 4 south, 2 west, 6 east
+  if (o.rot === 0 || o.rot === 4) {
+    return { x: clampInside(o.x, o.w, -hw, hw), z: o.rot === 0 ? minZ : maxZ, rot: o.rot }
   }
-  return best ? { x: best.x, z: best.z, rot: best.rot } : { x: r.x, z: r.z, rot: r.rot }
+  return { x: o.rot === 2 ? -hw : hw, z: clampInside(o.z, o.w, minZ, maxZ), rot: o.rot }
 }
+
 
 // Objects tinted red: only outdoor objects violating the apron rule.
 // (Overlapping items are allowed by design — layouts layer zones, mats and gear.)
 export function getWarningIds(objects: Placed[], b: Building): Set<string> {
   const warn = new Set<string>()
+  const hw = b.width / 2
+  const cz = b.centerZ ?? 0
+  const minZ = cz - b.length / 2
+  const maxZ = cz + b.length / 2
   for (const o of objects) {
+    // an outdoor item the building now covers
     if (o.rule === 'outdoor' && !computeDrop(o, o.x, o.z, b, false).valid) warn.add(o.id)
+    // ...and, since resizing no longer shoves things around, a floor item the
+    // building no longer covers
+    if (o.rule === 'floor') {
+      const { fw, fd } = fp(o)
+      if (o.x - fw / 2 < -hw - EPS || o.x + fw / 2 > hw + EPS || o.z - fd / 2 < minZ - EPS || o.z + fd / 2 > maxZ + EPS)
+        warn.add(o.id)
+    }
   }
   return warn
 }
