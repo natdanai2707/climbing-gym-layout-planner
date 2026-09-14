@@ -506,8 +506,15 @@ export const useStore = create<GymState>()(
     },
 
     // picking a new item implicitly confirms any pending one
-    startPlacing: (def) =>
-      set({ placingDef: def, placingRot: 0, ghost: null, selectedId: null, panelLeft: false, pendingId: null }),
+    startPlacing: (def) => {
+      // A fixed module comes in the way round that fits the hall. The Hyrox bay
+      // is 23.77 m across and 12.8 m deep, so in a 20.5 m wide hall it only
+      // fits turned — dropping it square would widen the building around it
+      // and push the apron over everything parked outside.
+      const b = get().building
+      const turn = def.w > b.width && def.d <= b.width && def.w <= b.length ? 2 : 0
+      set({ placingDef: def, placingRot: turn, ghost: null, selectedId: null, panelLeft: false, pendingId: null })
+    },
     cancelPlacing: () => set({ placingDef: null, ghost: null }),
 
     updateGhost: (x, z) => {
