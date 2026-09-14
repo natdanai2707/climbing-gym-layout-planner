@@ -5,6 +5,7 @@ import { Edges, MeshReflectorMaterial } from '@react-three/drei'
 import type { Placed } from '../types'
 import { useWallStore } from '../wall/wallStore'
 import { normalizedPts, useWindowStore, windowSize } from '../window/windowStore'
+import { roofHeightAt } from './SegmentedShell'
 import { WallModel } from '../wall/WallModel'
 import { designDepth, designWidth } from '../wall/profile'
 import { ROUTE_COLORS, SURFACE_TINTED, leafTexture, surfaceMap, surfaceNormal } from '../materials'
@@ -2215,6 +2216,9 @@ function CustomWallObject({ o, tint }: { o: Placed; tint: string | null }) {
 // Suspended ceiling panel. H is the MOUNT height of the panel underside, so
 // the green height arrow tunes the ceiling level to match adjacent wall tops.
 function CeilingPanel({ o, tint }: { o: Placed; tint: string | null }) {
+  const building = useStore((s) => s.building)
+  const eave = useStore((s) => s.shell.eave)
+  const design = useStore((s) => s.shellDesign)
   const y = Math.max(0.5, o.h)
   const tiles = useMemo(() => {
     const xs = spread(Math.max(1, Math.round(o.w / 1.2)) - 1, o.w).map((v) => v + o.w / (2 * Math.max(1, Math.round(o.w / 1.2))))
@@ -2235,10 +2239,14 @@ function CeilingPanel({ o, tint }: { o: Placed; tint: string | null }) {
       {tiles.zs.map((z, i) => (
         <Box key={`z${i}`} args={[o.w, 0.02, 0.03]} pos={[0, y - 0.012, z]} color="#cfc9bc" />
       ))}
-      {/* hanger rods at the corners */}
-      {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([sx, sz], i) => (
-        <Box key={i} args={[0.04, 0.7, 0.04]} pos={[(sx * (o.w - 0.4)) / 2, y + 0.45, (sz * (o.d - 0.4)) / 2]} color={STEEL} />
-      ))}
+      {/* hangers running from the panel up to the underside of the roof, so the
+          ceiling reads as suspended from the structure rather than floating */}
+      {([[-1, -1], [1, -1], [-1, 1], [1, 1]] as const).map(([sx, sz], i) => {
+        const hx = (sx * (o.w - 0.4)) / 2
+        const hz = (sz * (o.d - 0.4)) / 2
+        const len = Math.max(0.08, roofHeightAt(o.x + hx, o.z + hz, building, eave, design) - (y + 0.1))
+        return <Box key={i} args={[0.04, len, 0.04]} pos={[hx, y + 0.1 + len / 2, hz]} color={STEEL} />
+      })}
     </group>
   )
 }
@@ -2263,8 +2271,11 @@ function GlassPanel({ w, h, t, tint }: { w: number; h: number; t: number; tint: 
 
 // Vertical ceiling / bulkhead: a partition-like panel hanging DOWN from the
 // roof. H is the height of its BOTTOM edge (line it up with wall tops); the
-// panel extends `drop` meters upward from there, with hanger rods on top.
+// panel extends `drop` meters upward from there, hung from the roof above.
 function Bulkhead({ o, tint }: { o: Placed; tint: string | null }) {
+  const building = useStore((s) => s.building)
+  const eave = useStore((s) => s.shell.eave)
+  const design = useStore((s) => s.shellDesign)
   const bottom = Math.max(0.3, o.h)
   const drop = clampN(o.drop ?? 1.5, 0.3, 12)
   const t = Math.max(0.08, o.d)
@@ -2280,9 +2291,12 @@ function Bulkhead({ o, tint }: { o: Placed; tint: string | null }) {
           <Edges color="#c9c2b4" />
         </mesh>
       )}
-      {rods.map((x, i) => (
-        <Box key={i} args={[0.04, 0.7, 0.04]} pos={[x, drop / 2 + 0.35, 0]} color={STEEL} />
-      ))}
+      {/* hangers up to the roof, like the ceiling panels */}
+      {rods.map((x, i) => {
+        const top = bottom + drop
+        const len = Math.max(0.08, roofHeightAt(o.x + x, o.z, building, eave, design) - top)
+        return <Box key={i} args={[0.04, len, 0.04]} pos={[x, top - (bottom + drop / 2) + len / 2, 0]} color={STEEL} />
+      })}
     </group>
   )
 }

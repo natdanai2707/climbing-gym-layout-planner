@@ -96,6 +96,41 @@ export function roofProfile(seg: NormSeg, W: number): Array<[number, number]> {
   return pts
 }
 
+/**
+ * Underside of the roof above a point in the hall — what a ceiling hangs from.
+ * Falls back to the plain gable shell when there is no design, and to the eave
+ * height when the shell is switched off, so hangers always have something to
+ * reach.
+ */
+export function roofHeightAt(
+  x: number,
+  z: number,
+  building: { width: number; length: number; centerZ: number },
+  eave: number,
+  design: ShellDesign | null,
+): number {
+  const W = building.width
+  if (design && design.segments.length) {
+    const spans = segmentSpans(design, building.length)
+    const zl = z - building.centerZ
+    const seg = spans.find((sg) => zl >= sg.z0 && zl <= sg.z1) ?? (zl < spans[0].z0 ? spans[0] : spans[spans.length - 1])
+    const prof = roofProfile(seg, W)
+    const cx = Math.max(-W / 2, Math.min(W / 2, x))
+    for (let i = 0; i < prof.length - 1; i++) {
+      const [x0, y0] = prof[i]
+      const [x1, y1] = prof[i + 1]
+      if (cx >= x0 - 1e-6 && cx <= x1 + 1e-6) {
+        const k = x1 === x0 ? 0 : (cx - x0) / (x1 - x0)
+        return y0 + (y1 - y0) * k
+      }
+    }
+    return segTop(seg)
+  }
+  // plain shell: a 15° gable rising to the ridge on the centre line
+  const rise = (W / 2) * ROOF_PITCH
+  return eave + rise * (1 - Math.min(1, Math.abs(x) / Math.max(0.1, W / 2)))
+}
+
 const segTop = (seg: NormSeg): number =>
   seg.roof === 'gable' ? Math.max(seg.eaveL, seg.eaveR) + Math.max(0.05, seg.rise) : Math.max(seg.eaveL, seg.eaveR)
 
