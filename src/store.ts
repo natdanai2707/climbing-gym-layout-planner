@@ -155,6 +155,10 @@ export interface GymState {
     newDims: { w: number; d: number; h: number },
   ) => void
   clearAll: () => void
+  // the hall only ever grows to fit what is dropped in it, so an item placed
+  // and then turned or moved can leave it permanently oversized — this snaps
+  // it back to what the layout actually needs
+  fitBuildingToLayout: () => void
   importLayout: (file: LayoutFile) => void
   // which bundled layout is on screen, so the picker can show it and a reload
   // comes back to the same one
@@ -754,6 +758,29 @@ export const useStore = create<GymState>()(
           return { ...next, x: r.x, z: r.z, rot: r.rot }
         }),
       })
+      set({ building: growToFit(get().building, get().objects) })
+    },
+
+    fitBuildingToLayout: () => {
+      const { objects, building } = get()
+      const floors = objects.filter((o) => o.rule === 'floor')
+      if (floors.length === 0) return
+      let minX = Infinity
+      let maxX = -Infinity
+      let minZ = Infinity
+      let maxZ = -Infinity
+      for (const o of floors) {
+        const { fw, fd } = fp(o)
+        minX = Math.min(minX, o.x - fw / 2)
+        maxX = Math.max(maxX, o.x + fw / 2)
+        minZ = Math.min(minZ, o.z - fd / 2)
+        maxZ = Math.max(maxZ, o.z + fd / 2)
+      }
+      get().snapshot()
+      const width = Math.max(2, 2 * Math.max(maxX, -minX, 0))
+      const length = Math.max(2, maxZ - minZ)
+      set({ building: { ...building, width, length, centerZ: (minZ + maxZ) / 2 } })
+      // the apron still has to reach whatever sits outside
       set({ building: growToFit(get().building, get().objects) })
     },
 

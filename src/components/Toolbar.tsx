@@ -57,6 +57,7 @@ export function Toolbar() {
   const setPage = useStore((s) => s.setPage)
   const presetId = useStore((s) => s.presetId)
   const loadPreset = useStore((s) => s.loadPreset)
+  const fitBuildingToLayout = useStore((s) => s.fitBuildingToLayout)
   const viewMode = useStore((s) => s.viewMode)
   const setViewMode = useStore((s) => s.setViewMode)
   const viewPreset = useStore((s) => s.viewPreset)
@@ -118,6 +119,12 @@ export function Toolbar() {
             <option value={1}>1</option>
           </select>
         </label>
+        <button
+          onClick={fitBuildingToLayout}
+          title="Shrink the hall back to what the layout actually needs — the building only ever grows to fit what you drop in, so turning or moving a large item afterwards can leave it oversized"
+        >
+          ⤡ Fit hall
+        </button>
         <NumberField label="Apron (m)" value={building.apron} min={0} max={50} onChange={(v) => setBuilding({ apron: v })} />
         <NumberField label="Ceiling (m)" value={eave} min={3} max={20} step={0.5} onChange={setEave} />
       </div>
