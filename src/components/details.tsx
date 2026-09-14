@@ -2976,6 +2976,88 @@ function HyroxLayout({ o, tint }: { o: Placed; tint: string | null }) {
   )
 }
 
+/**
+ * Retail gondola for the shop counter: an upright with four shelves carrying
+ * boxed shoes, chalk tubs and racked harnesses. Shelf count follows the height,
+ * so a taller unit gains shelves rather than stretching them.
+ */
+function ShopShelf({ o, tint }: { o: Placed; tint: string | null }) {
+  const c = tint ?? o.color
+  const t = Math.max(0.25, o.d)
+  const n = Math.max(2, Math.min(6, Math.round(o.h / 0.45)))
+  const shelfY = Array.from({ length: n }, (_, i) => 0.18 + ((o.h - 0.28) * i) / (n - 1))
+  const goods = ['#c2452f', '#2f7fc2', '#e0a020', '#3f8f5f', '#8a5fc2', '#c2456f']
+  return (
+    <group>
+      {/* back panel and end uprights */}
+      <Box args={[o.w, o.h, 0.04]} pos={[0, o.h / 2, -t / 2 + 0.02]} color={c} />
+      {([-1, 1] as const).map((sx) => (
+        <Box key={sx} args={[0.05, o.h, t]} pos={[(sx * (o.w - 0.05)) / 2, o.h / 2, 0]} color={c} />
+      ))}
+      <Box args={[o.w, 0.06, t]} pos={[0, 0.06, 0]} color="#8d867a" />
+      {shelfY.map((y, i) => (
+        <group key={i}>
+          <Box args={[o.w - 0.1, 0.04, t - 0.04]} pos={[0, y, 0.01]} color="#cfc8bb" />
+          {/* stock: boxed shoes and chalk on the lower shelves, harnesses hung high */}
+          {i < n - 1
+            ? spread(Math.max(2, Math.floor((o.w - 0.2) / 0.34)), o.w - 0.25).map((x, k) => (
+                <Box
+                  key={k}
+                  args={[0.28, 0.2, Math.min(0.3, t - 0.12)]}
+                  pos={[x, y + 0.12, 0.02]}
+                  color={goods[(i * 3 + k) % goods.length]}
+                />
+              ))
+            : spread(Math.max(3, Math.floor((o.w - 0.2) / 0.22)), o.w - 0.3).map((x, k) => (
+                <Box key={k} args={[0.05, 0.3, 0.1]} pos={[x, y + 0.17, 0]} color={goods[(k * 2) % goods.length]} />
+              ))}
+        </group>
+      ))}
+    </group>
+  )
+}
+
+/**
+ * Upright glass-door drinks cooler: lit interior behind a glazed door, with
+ * shelves of cans and bottles and a branded header panel on top.
+ */
+function BeverageCooler({ o, tint }: { o: Placed; tint: string | null }) {
+  const body = tint ?? o.color
+  const t = Math.max(0.35, o.d)
+  const n = Math.max(2, Math.min(6, Math.round(o.h / 0.42)))
+  const shelfY = Array.from({ length: n }, (_, i) => 0.22 + ((o.h - 0.65) * i) / (n - 1))
+  const cans = ['#c2452f', '#2f7fc2', '#3f8f5f', '#e0a020', '#d8d4cc']
+  return (
+    <group>
+      {/* cabinet: back, sides, base and the header above the door */}
+      <Box args={[o.w, o.h, 0.05]} pos={[0, o.h / 2, -t / 2 + 0.025]} color={body} />
+      {([-1, 1] as const).map((sx) => (
+        <Box key={sx} args={[0.05, o.h, t]} pos={[(sx * (o.w - 0.05)) / 2, o.h / 2, 0]} color={body} />
+      ))}
+      <Box args={[o.w, 0.18, t]} pos={[0, 0.09, 0]} color={body} />
+      <Box args={[o.w, 0.26, t]} pos={[0, o.h - 0.13, 0]} color="#c2452f" />
+      {/* stock, lit from inside so it reads through the glass */}
+      {shelfY.map((y, i) => (
+        <group key={i}>
+          <Box args={[o.w - 0.14, 0.03, t - 0.1]} pos={[0, y, 0]} color="#9aa3ad" />
+          {spread(Math.max(3, Math.floor((o.w - 0.14) / 0.09)), o.w - 0.22).map((x, k) => (
+            <mesh key={k} position={[x, y + 0.08, 0]} castShadow>
+              <cylinderGeometry args={[0.033, 0.033, 0.13, 8]} />
+              <meshStandardMaterial color={cans[(i + k) % cans.length]} roughness={0.45} metalness={0.3} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+      {/* glazed door with a handle down one side */}
+      <mesh position={[0, (o.h - 0.22) / 2 + 0.09, t / 2 - 0.02]}>
+        <boxGeometry args={[o.w - 0.12, o.h - 0.48, 0.03]} />
+        <PaneGlass />
+      </mesh>
+      <Alu args={[0.04, o.h - 0.6, 0.04]} pos={[o.w / 2 - 0.12, (o.h - 0.22) / 2 + 0.09, t / 2 + 0.03]} color="#c9ced4" />
+    </group>
+  )
+}
+
 // Letters drawn once into a canvas and reused as a stencil: the mesh is
 // coloured by the material, so the same texture serves any sign colour.
 const signCache = new Map<string, { tex: THREE.CanvasTexture; aspect: number }>()
@@ -3624,7 +3706,9 @@ function TableOutSet({ o, tint }: { o: Placed; tint: string | null }) {
         <meshStandardMaterial color="#3a3f45" roughness={0.5} metalness={0.4} />
       </mesh>
       {[0, Math.PI].map((a, i) => (
-        <group key={i} position={[Math.cos(a) * (r + 0.35), 0, Math.sin(a) * (r + 0.35)]} rotation-y={-a + Math.PI / 2}>
+        // the seat faces local +z, so it has to be turned to look back at the
+        // table — the other way round and both chairs sit with their backs to it
+        <group key={i} position={[Math.cos(a) * (r + 0.35), 0, Math.sin(a) * (r + 0.35)]} rotation-y={-a - Math.PI / 2}>
           <Box args={[0.4, 0.03, 0.4]} pos={[0, 0.44, 0]} color={c} />
           <Box args={[0.4, 0.42, 0.03]} pos={[0, 0.66, -0.19]} rot={[-0.1, 0, 0]} color={c} />
           {[
@@ -4258,6 +4342,8 @@ export function ObjectMesh({ o, tint }: { o: Placed; tint: string | null }) {
       return <Reception o={o} tint={tint} />
     case 'fixture':
       if (o.defId === 'signage') return <FacadeSignage o={o} tint={tint} />
+      if (o.defId === 'shop_shelf') return <ShopShelf o={o} tint={tint} />
+      if (o.defId === 'cooler') return <BeverageCooler o={o} tint={tint} />
       if (o.defId === 'shoes') return <ShoeRack o={o} tint={tint} />
       if (o.defId === 'gate_face') return <FaceGate o={o} tint={tint} />
       if (o.defId === 'mirror') return <WallMirror o={o} tint={tint} />

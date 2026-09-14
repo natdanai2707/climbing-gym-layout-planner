@@ -923,3 +923,20 @@ button.wide {
   position: absolute;
   inset: 0;
 }
+
+/* toolbar value that is owned by another page — reads as a value, acts as a link */
+.tb-linkish {
+  font: inherit;
+  font-weight: 600;
+  padding: 4px 8px;
+  border: 1px dashed #cfc8bb;
+  border-radius: 6px;
+  background: #faf9f6;
+  color: #5b5449;
+  cursor: pointer;
+}
+
+.tb-linkish:hover {
+  border-style: solid;
+  background: #fff;
+}

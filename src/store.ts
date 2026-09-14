@@ -312,6 +312,25 @@ export function usableDesign(d: ShellDesign | null | undefined): ShellDesign | n
   return d && Array.isArray(d.segments) && d.segments.length > 0 ? d : null
 }
 
+/** Total length of a design's zones — which IS the building length. */
+export function designLength(d: ShellDesign): number {
+  return d.segments.reduce((a, s) => a + Math.max(1, s.len), 0)
+}
+
+/**
+ * Zone lengths used to be proportions stretched to fill whatever length the
+ * building happened to be; they are metres now. Files saved under the old rule
+ * are rescaled on load so the zones keep exactly the spans they were drawn at
+ * and the numbers become the real thing.
+ */
+function designToLength(d: ShellDesign | null, length: number): ShellDesign | null {
+  if (!d) return d
+  const total = designLength(d)
+  if (total <= 0 || Math.abs(total - length) < 0.01) return d
+  const k = length / total
+  return { ...d, segments: d.segments.map((s) => ({ ...s, len: Math.round(Math.max(1, s.len) * k * 100) / 100 })) }
+}
+
 function cleanShell(s?: ShellConfig): ShellConfig {
   return { mode: s?.mode ?? DEFAULT_SHELL.mode, eave: s?.eave ?? DEFAULT_SHELL.eave }
 }
@@ -345,7 +364,7 @@ function loadSaved(): {
     if (raw) {
       const data = JSON.parse(raw) as LayoutFile
       if (data && data.building && Array.isArray(data.objects)) {
-        DEFAULT_SHELL_DESIGN = usableDesign(data.shellDesign)
+        DEFAULT_SHELL_DESIGN = designToLength(usableDesign(data.shellDesign), data.building.length)
         return {
           ...normalizeFile(data),
           shell: cleanShell(data.shell),
@@ -360,7 +379,7 @@ function loadSaved(): {
   // first visit: open with a bundled layout instead of an empty hall, so every
   // device starts on the same drawing
   const demo = (presetById(loadPresetId()) ?? LAYOUT_PRESETS[0]).file
-  DEFAULT_SHELL_DESIGN = usableDesign(demo.shellDesign)
+  DEFAULT_SHELL_DESIGN = designToLength(usableDesign(demo.shellDesign), demo.building.length)
   return {
     ...normalizeFile(demo),
     shell: cleanShell(demo.shell),
@@ -465,7 +484,25 @@ export const useStore = create<GymState>()(
     shellDesign: DEFAULT_SHELL_DESIGN,
     setShellDesign: (d) => {
       get().snapshot(true)
-      set({ shellDesign: usableDesign(d) })
+      const design = usableDesign(d)
+      if (!design) {
+        set({ shellDesign: null })
+        return
+      }
+      // the zones own the length: the hall follows their total, keeping the
+      // first zone where it is and growing off the far end
+      const b = get().building
+      const total = designLength(design)
+      const north = b.centerZ - b.length / 2
+      const building =
+        Math.abs(total - b.length) > 0.01 ? { ...b, length: total, centerZ: north + total / 2 } : b
+      set({ shellDesign: design, building })
+      if (building !== b) {
+        const objects = get().objects.map((o) =>
+          o.rule === 'edge' ? { ...o, ...resolveAfterResize(o, building) } : o,
+        )
+        set({ objects, building: stretchApron(building, objects) })
+      }
     },
 
     // Resizing is yours to make: the size you type is the size you get, and
@@ -791,7 +828,7 @@ export const useStore = create<GymState>()(
       set({
         ...normalizeFile(file),
         shell: cleanShell(file.shell),
-        shellDesign: usableDesign(file.shellDesign),
+        shellDesign: designToLength(usableDesign(file.shellDesign), file.building.length),
         coolFactor: typeof file.coolFactor === 'number' ? file.coolFactor : get().coolFactor,
         floor: { ...DEFAULT_FLOOR, ...file.floor },
         selectedId: null,

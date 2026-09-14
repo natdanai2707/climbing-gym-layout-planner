@@ -77,6 +77,8 @@ export const CATALOG: ObjectDef[] = [
   // facade signage: built-up letters on the building wall. W is the length of
   // the wording, H the cap height, and `thick` how far the letters stand off.
   { id: 'signage', label: 'Facade Signage (lettering)', category: 'fixture', w: 6, d: 0.12, h: 0.9, color: '#2f3237', rule: 'edge' },
+  { id: 'shop_shelf', label: 'Retail Shelving (shop)', category: 'fixture', w: 2.0, d: 0.5, h: 1.8, color: '#b9b2a6', rule: 'floor' },
+  { id: 'cooler', label: 'Beverage Cooler (glass door)', category: 'fixture', w: 0.75, d: 0.72, h: 1.95, color: '#2f3237', rule: 'floor' },
   // entrance access onto the raised floor slab — place at a door
   { id: 'steps', label: 'Concrete Steps (to entrance)', category: 'site', w: 3.0, d: 3.0, h: 1.0, color: '#c2beb4', rule: 'outdoor' },
   { id: 'ramp', label: 'Concrete Ramp / Slope', category: 'site', w: 2.0, d: 7.4, h: 1.0, color: '#c2beb4', rule: 'outdoor' },

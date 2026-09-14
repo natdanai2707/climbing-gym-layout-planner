@@ -47,6 +47,8 @@ export function BuildingDesigner() {
   const dragRef = useRef<{ panel: number; pt: number } | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
 
+  // Zone lengths are real metres and the hall length is their total; the store
+  // keeps the building in step (see setShellDesign).
   const patch = (p: Partial<ShellDesign>) => setShellDesign({ ...design, ...p })
   // editing a zone migrates it to the full left/right-height format first
   const setSeg = (i: number, p: Partial<ShellSegment>) =>
@@ -149,8 +151,9 @@ export function BuildingDesigner() {
           <h3>1 · Building zones (front → back)</h3>
           <p className="muted small">
             Each zone has its own LEFT and RIGHT wall heights (e.g. a 14 m climbing bay on one side), roof shape and skin.
-            Gable ridge can sit anywhere across the width; a Shed roof slopes between the two heights. Zone lengths scale to
-            fill the building ({building.length} m).
+            Gable ridge can sit anywhere across the width; a Shed roof slopes between the two heights. Zone lengths are in
+            metres and set the building length — {design.segments.map((s) => Math.max(1, s.len)).join(' + ')} ={' '}
+            {building.length} m.
           </p>
           {design.segments.map((raw, i) => {
             const s = normalizeSegment(raw)

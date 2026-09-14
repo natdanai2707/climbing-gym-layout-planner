@@ -58,6 +58,7 @@ export function Toolbar() {
   const presetId = useStore((s) => s.presetId)
   const loadPreset = useStore((s) => s.loadPreset)
   const fitBuildingToLayout = useStore((s) => s.fitBuildingToLayout)
+  const shellDesign = useStore((s) => s.shellDesign)
   const viewMode = useStore((s) => s.viewMode)
   const setViewMode = useStore((s) => s.setViewMode)
   const viewPreset = useStore((s) => s.viewPreset)
@@ -111,7 +112,18 @@ export function Toolbar() {
       </div>
       <div className="tb-group">
         <NumberField label="Width (m)" value={building.width} min={2} max={200} onChange={(v) => setBuilding({ width: v })} />
-        <NumberField label="Length (m)" value={building.length} min={2} max={300} onChange={(v) => setBuilding({ length: v })} />
+        {/* With a shell design the length belongs to the zones, so it is set on
+            the Building Design page and only reported here. */}
+        {shellDesign ? (
+          <label className="tb-field" title="Set by the zone lengths on the Building Design page">
+            <span>Length (m)</span>
+            <button className="tb-linkish" onClick={() => setPage('building')}>
+              {building.length} →
+            </button>
+          </label>
+        ) : (
+          <NumberField label="Length (m)" value={building.length} min={2} max={300} onChange={(v) => setBuilding({ length: v })} />
+        )}
         <label className="tb-field">
           <span>Grid (m)</span>
           <select value={building.cell} onChange={(e) => setBuilding({ cell: parseFloat(e.target.value) })}>
