@@ -25,6 +25,8 @@ function labelY(o: Placed): number {
 
 export function PlacedObject({ o, warning, elev }: { o: Placed; warning: boolean; elev: number }) {
   const selected = useStore((s) => s.selectedId === o.id)
+  // part of a multi-selection, but not the primary the inspector is editing
+  const alsoSelected = useStore((s) => s.selectedId !== o.id && s.selection.includes(o.id))
   const showLabels = useStore((s) => s.showLabels)
   const showCeilings = useStore((s) => s.showCeilings)
   const beginMove = useStore((s) => s.beginMove)
@@ -44,9 +46,16 @@ export function PlacedObject({ o, warning, elev }: { o: Placed; warning: boolean
     if (s.viewMode === 'walk') return // walking: taps steer the view, never select
     if (s.measuring) return // measuring: taps drop tape points, never select
     e.stopPropagation()
+    // Shift-click builds up a group: add or drop one item, leaving the rest be.
+    // The group then moves, nudges and deletes as one.
+    if (e.shiftKey) {
+      s.toggleSelect(o.id)
+      return
+    }
     // Objects only drag when move mode is armed (or right after being dropped) —
     // a plain tap just selects, so brushing the screen can't shift the layout.
-    const canDrag = s.pendingId === o.id || (s.moveArmed && s.selectedId === o.id)
+    // dragging any member of an armed selection drags the whole group
+    const canDrag = s.pendingId === o.id || (s.moveArmed && s.selection.includes(o.id))
     if (!canDrag) {
       s.select(o.id)
       return
@@ -67,10 +76,15 @@ export function PlacedObject({ o, warning, elev }: { o: Placed; warning: boolean
       <group rotation-y={(o.rot * Math.PI) / 4} onPointerDown={onPointerDown}>
         {plan ? <PlanSymbol o={o} tint={tint} /> : <ObjectMesh o={o} tint={tint} />}
       </group>
-      {selected && (
+      {(selected || alsoSelected) && (
         <mesh position={[0, 0.02, 0]} rotation-x={-Math.PI / 2}>
           <planeGeometry args={[fw + 0.7, fd + 0.7]} />
-          <meshBasicMaterial color="#2563eb" transparent opacity={0.28} depthWrite={false} />
+          <meshBasicMaterial
+            color={selected ? '#2563eb' : '#60a5fa'}
+            transparent
+            opacity={selected ? 0.28 : 0.2}
+            depthWrite={false}
+          />
         </mesh>
       )}
       {showLabels && (

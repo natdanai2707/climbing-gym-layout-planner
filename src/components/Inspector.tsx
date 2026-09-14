@@ -28,6 +28,7 @@ export function Inspector() {
   const selected = useStore((s) => s.objects.find((o) => o.id === s.selectedId) ?? null)
   const updateObject = useStore((s) => s.updateObject)
   const rotate = useStore((s) => s.rotate)
+  const selection = useStore((s) => s.selection)
   const removeSelected = useStore((s) => s.removeSelected)
 
   if (!selected) {
@@ -41,10 +42,17 @@ export function Inspector() {
 
   const set = (patch: Partial<Placed>) => updateObject(selected.id, patch)
   const fixedSize = FIXED_SIZE_DEFS.has(selected.defId)
+  const groupCount = selection.length
 
   return (
     <section className="inspector">
       <h2>Selected Object</h2>
+      {groupCount > 1 && (
+        <p className="muted">
+          <b>{groupCount} items selected.</b> Delete removes them all; arrows and dragging move them together. The
+          fields below edit the last one you picked. Shift-click to add or drop one.
+        </p>
+      )}
       <label className="insp-field wide">
         <span>Name</span>
         <input type="text" value={selected.label} onChange={(e) => set({ label: e.target.value })} />

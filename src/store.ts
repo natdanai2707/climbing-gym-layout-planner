@@ -71,6 +71,11 @@ export interface GymState {
   building: Building
   objects: Placed[]
   selectedId: string | null
+  // Everything currently selected, primary last. selectedId is the primary —
+  // the one the inspector edits and the resize arrows belong to — while the
+  // whole set moves and deletes together.
+  selection: string[]
+  toggleSelect: (id: string) => void
 
   // palette placement in progress (ghost follows the pointer)
   placingDef: ObjectDef | null
@@ -87,6 +92,9 @@ export interface GymState {
   draggingId: string | null
   dragOffset: { dx: number; dz: number }
   dragOrigin: { x: number; z: number; rot: number } | null
+  // where every other selected item stood when the drag began, so the group
+  // moves as one instead of collapsing onto the pointer
+  dragStarts: Record<string, { x: number; z: number }>
   dragValid: boolean
   dragPlaneY: number // raycast plane height while moving (mezzanine top for elevated objects)
 
@@ -392,6 +400,7 @@ export const useStore = create<GymState>()(
   subscribeWithSelector((set, get) => ({
     ...loadSaved(),
     selectedId: null,
+    selection: [],
     placingDef: null,
     placingRot: 0,
     ghost: null,
@@ -400,6 +409,7 @@ export const useStore = create<GymState>()(
     draggingId: null,
     dragOffset: { dx: 0, dz: 0 },
     dragOrigin: null,
+    dragStarts: {},
     dragValid: true,
     dragPlaneY: 0,
     showGrid: true,
@@ -643,10 +653,21 @@ export const useStore = create<GymState>()(
       })
     },
 
+    toggleSelect: (id) => {
+      const { selection, selectedId } = get()
+      if (selection.includes(id)) {
+        const next = selection.filter((v) => v !== id)
+        set({ selection: next, selectedId: id === selectedId ? (next[next.length - 1] ?? null) : selectedId })
+        return
+      }
+      set({ selection: [...selection.filter((v) => v !== id), id], selectedId: id, pendingId: null, moveArmed: true })
+    },
+
     select: (id) => {
       const { pendingId, selectedId } = get()
       // selecting elsewhere confirms the pending object; changing selection disarms move mode
       set({
+        selection: id ? [id] : [],
         selectedId: id,
         pendingId: id === pendingId ? pendingId : null,
         moveArmed: id === selectedId ? get().moveArmed : false,
@@ -658,8 +679,14 @@ export const useStore = create<GymState>()(
       if (!o) return
       get().snapshot() // one undo step per move gesture
       const { pendingId } = get()
+      const sel = get().selection
+      const group = sel.includes(id) ? sel : [id]
+      const dragStarts: Record<string, { x: number; z: number }> = {}
+      for (const v of get().objects) if (group.includes(v.id)) dragStarts[v.id] = { x: v.x, z: v.z }
       set({
         selectedId: id,
+        selection: group,
+        dragStarts,
         pendingId: id === pendingId ? pendingId : null,
         draggingId: id,
         dragOffset: { dx: o.x - px, dz: o.z - pz },
@@ -673,15 +700,27 @@ export const useStore = create<GymState>()(
     },
 
     moveTo: (px, pz) => {
-      const { draggingId, dragOffset, building } = get()
-      if (!draggingId) return
-      const objects = get().objects.map((o) => {
-        if (o.id !== draggingId) return o
-        const r = computeDrop(o, px + dragOffset.dx, pz + dragOffset.dz, building)
-        set({ dragValid: r.valid })
-        return { ...o, x: r.x, z: r.z, rot: r.rot }
+      const { draggingId, dragOffset, dragOrigin, dragStarts, building, selection } = get()
+      if (!draggingId || !dragOrigin) return
+      const lead = get().objects.find((o) => o.id === draggingId)
+      if (!lead) return
+      // the item under the pointer follows it; the rest of the selection travels
+      // by the same delta from where it stood when the drag began, so a group
+      // keeps its arrangement
+      const r = computeDrop(lead, px + dragOffset.dx, pz + dragOffset.dz, building)
+      const dx = r.x - dragOrigin.x
+      const dz = r.z - dragOrigin.z
+      const others = new Set(selection.filter((id) => id !== draggingId))
+      set({
+        dragValid: r.valid,
+        objects: get().objects.map((o) => {
+          if (o.id === draggingId) return { ...o, x: r.x, z: r.z, rot: r.rot }
+          const st = others.has(o.id) ? dragStarts[o.id] : undefined
+          if (!st) return o
+          const c = computeDrop(o, st.x + dx, st.z + dz, building, false)
+          return { ...o, x: c.x, z: c.z, rot: c.rot }
+        }),
       })
-      set({ objects })
     },
 
     endMove: () => {
@@ -724,13 +763,15 @@ export const useStore = create<GymState>()(
     },
 
     removeSelected: () => {
-      const { selectedId, pendingId } = get()
-      if (!selectedId) return
+      const { selection, selectedId, pendingId } = get()
+      const ids = new Set(selection.length ? selection : selectedId ? [selectedId] : [])
+      if (ids.size === 0) return
       get().snapshot()
       set({
-        objects: get().objects.filter((o) => o.id !== selectedId),
+        objects: get().objects.filter((o) => !ids.has(o.id)),
         selectedId: null,
-        pendingId: pendingId === selectedId ? null : pendingId,
+        selection: [],
+        pendingId: pendingId && ids.has(pendingId) ? null : pendingId,
       })
     },
 
@@ -738,13 +779,17 @@ export const useStore = create<GymState>()(
     // presses coalesce into one undo step, and the position is NOT re-snapped,
     // so a fine step stays where it is put.
     nudge: (dx, dz) => {
-      const { selectedId, objects, building } = get()
-      if (!selectedId) return
-      const o = objects.find((v) => v.id === selectedId)
-      if (!o) return
+      const { selection, selectedId, objects, building } = get()
+      const ids = new Set(selection.length ? selection : selectedId ? [selectedId] : [])
+      if (ids.size === 0) return
       get().snapshot(true)
-      const r = computeDrop(o, o.x + dx, o.z + dz, building, false)
-      set({ objects: objects.map((v) => (v.id === selectedId ? { ...v, x: r.x, z: r.z, rot: r.rot } : v)) })
+      set({
+        objects: objects.map((v) => {
+          if (!ids.has(v.id)) return v
+          const r = computeDrop(v, v.x + dx, v.z + dz, building, false)
+          return { ...v, x: r.x, z: r.z, rot: r.rot }
+        }),
+      })
       set({ building: stretchApron(get().building, get().objects) })
     },
 
