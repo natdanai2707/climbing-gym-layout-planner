@@ -46,9 +46,10 @@ export function PlacedObject({ o, warning, elev }: { o: Placed; warning: boolean
     if (s.viewMode === 'walk') return // walking: taps steer the view, never select
     if (s.measuring) return // measuring: taps drop tape points, never select
     e.stopPropagation()
-    // Shift-click builds up a group: add or drop one item, leaving the rest be.
-    // The group then moves, nudges and deletes as one.
-    if (e.shiftKey) {
+    // Shift-click — or a tap with the ⧉ Group button armed, for touch screens —
+    // builds up a group: add or drop one item, leaving the rest be. The group
+    // then moves, nudges and deletes as one.
+    if (e.shiftKey || s.multiArmed) {
       s.toggleSelect(o.id)
       return
     }

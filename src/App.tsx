@@ -98,6 +98,9 @@ export default function App() {
   const cancelPending = useStore((s) => s.cancelPending)
   const updateObject = useStore((s) => s.updateObject)
   const moveArmed = useStore((s) => s.moveArmed)
+  const multiArmed = useStore((s) => s.multiArmed)
+  const setMultiArmed = useStore((s) => s.setMultiArmed)
+  const selection = useStore((s) => s.selection)
   const setMoveArmed = useStore((s) => s.setMoveArmed)
   const walking = useStore((s) => s.viewMode === 'walk')
   const setViewMode = useStore((s) => s.setViewMode)
@@ -276,16 +279,32 @@ export default function App() {
               <button className={moveArmed ? 'on' : ''} onClick={() => setMoveArmed(!moveArmed)}>
                 ✥ Move{moveArmed ? ': ON' : ''}
               </button>
+              <button
+                className={multiArmed ? 'on' : ''}
+                onClick={() => setMultiArmed(!multiArmed)}
+                title="Tap more items to add them to the selection (same as Shift-click on a keyboard)"
+              >
+                ⧉ Group{selection.length > 1 ? `: ${selection.length}` : multiArmed ? ': ON' : ''}
+              </button>
               <button onClick={rotate}>↻ 45°</button>
               {canShape && <button onClick={openShape}>🧱 Shape</button>}
               <button onClick={() => setPanelRight(true)}>✎ Edit</button>
               <button className="danger" onClick={removeSelected}>
                 🗑 Delete
               </button>
+              {/* in the same stack as the buttons, so it can never land on top
+                  of them when they wrap onto a second row on a phone */}
+              {moveArmed && (
+                <div className="qa-hint">
+                  {selection.length > 1
+                    ? `Drag any of the ${selection.length} highlighted items — they move together`
+                    : 'Drag the highlighted item — or nudge it with ← ↑ → ↓ (Shift = 10 cm)'}
+                </div>
+              )}
+              {multiArmed && selection.length < 2 && (
+                <div className="qa-hint">Tap more items to add them to the selection</div>
+              )}
             </div>
-          )}
-          {!walking && moveArmed && selectedId && !pending && (
-            <div className="move-hint">Drag the highlighted item — or nudge it with ← ↑ → ↓ (Shift = 10 cm)</div>
           )}
           {/* pending placement: adjust with the arrows, then confirm (all devices) */}
           {!walking && pending && (

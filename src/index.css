@@ -449,6 +449,15 @@ button:disabled {
   font-weight: 600;
 }
 
+/* An armed button takes white text from button.on, but the rule above has the
+   same specificity and comes later, so it kept the white background too — the
+   label vanished into it. Restore the dark pill here. */
+.quick-actions button.on {
+  background: #2b2926;
+  color: #ffffff;
+  border-color: #2b2926;
+}
+
 button.save {
   background: #2b2926;
   color: #fff;
@@ -939,4 +948,21 @@ button.wide {
 .tb-linkish:hover {
   border-style: solid;
   background: #fff;
+}
+
+/* hint that belongs to the quick-action stack: its own full-width row, so a
+   wrapped button row can never sit on top of it */
+.qa-hint {
+  order: -1;
+  flex-basis: 100%;
+  text-align: center;
+  background: rgba(43, 41, 38, 0.85);
+  color: #fff;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 11px;
+  pointer-events: none;
+  align-self: center;
+  width: fit-content;
+  margin: 0 auto;
 }

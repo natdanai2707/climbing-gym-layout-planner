@@ -76,6 +76,10 @@ export interface GymState {
   // whole set moves and deletes together.
   selection: string[]
   toggleSelect: (id: string) => void
+  // On a touch screen there is no Shift to hold, so this arms the same thing:
+  // while it is on, a tap adds to the group instead of replacing it.
+  multiArmed: boolean
+  setMultiArmed: (v: boolean) => void
 
   // palette placement in progress (ghost follows the pointer)
   placingDef: ObjectDef | null
@@ -401,6 +405,8 @@ export const useStore = create<GymState>()(
     ...loadSaved(),
     selectedId: null,
     selection: [],
+    multiArmed: false,
+    setMultiArmed: (v) => set({ multiArmed: v }),
     placingDef: null,
     placingRot: 0,
     ghost: null,
@@ -771,6 +777,7 @@ export const useStore = create<GymState>()(
         objects: get().objects.filter((o) => !ids.has(o.id)),
         selectedId: null,
         selection: [],
+        multiArmed: false,
         pendingId: pendingId && ids.has(pendingId) ? null : pendingId,
       })
     },
