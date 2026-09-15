@@ -1,5 +1,6 @@
 import type { LayoutFile } from '../types'
 import layout1 from './layout1.json'
+import layout2 from './layout2.json'
 import demo from '../defaultLayout.json'
 
 /**
@@ -16,6 +17,7 @@ export interface LayoutPreset {
 
 export const LAYOUT_PRESETS: LayoutPreset[] = [
   { id: 'layout1', name: 'Layout 1', file: layout1 as unknown as LayoutFile },
+  { id: 'layout2', name: 'Layout 2', file: layout2 as unknown as LayoutFile },
   { id: 'demo', name: 'Demo gym', file: demo as unknown as LayoutFile },
 ]
 
