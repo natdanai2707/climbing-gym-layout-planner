@@ -1,5 +1,6 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { exportLayout, useStore } from '../store'
+import { PublishDialog } from './PublishDialog'
 import { LAYOUT_PRESETS } from '../layouts'
 import { NumInput } from './NumInput'
 import type { ThemeName } from '../store'
@@ -84,6 +85,7 @@ export function Toolbar() {
   const takeShot = () => captureStill((url) => addShot(url))
   const importLayout = useStore((s) => s.importLayout)
   const fileRef = useRef<HTMLInputElement>(null)
+  const [publishing, setPublishing] = useState(false)
 
   const exportJson = () => {
     const blob = new Blob([JSON.stringify(exportLayout(), null, 2)], { type: 'application/json' })
@@ -303,7 +305,10 @@ export function Toolbar() {
             ))}
           </select>
         </label>
-        <button className="save" onClick={exportJson}>💾 Save JSON</button>
+        <button className="save" onClick={() => setPublishing(true)} title="Write this layout into Layout 1 or 2 for every device">
+          ☁ Save to Layout
+        </button>
+        <button onClick={exportJson}>💾 Save JSON</button>
         <button onClick={() => fileRef.current?.click()}>Import JSON</button>
         <button onClick={exportPng}>Export PNG</button>
         <button
@@ -326,6 +331,7 @@ export function Toolbar() {
           }}
         />
       </div>
+      {publishing && <PublishDialog onClose={() => setPublishing(false)} />}
     </header>
   )
 }

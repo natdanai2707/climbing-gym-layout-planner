@@ -790,9 +790,9 @@
       "label": "Tennis Simulator Room",
       "category": "room",
       "w": 11.5,
-      "d": 5.5,
+      "d": 5,
       "h": 3.2,
-      "x": -2.4999999999999996,
+      "x": -2.7499999999999996,
       "z": 21,
       "rot": 2,
       "color": "#31445c",
@@ -1806,44 +1806,15 @@
       "rule": "floor"
     },
     {
-      "id": "obj-mu0zqc5y-2",
-      "defId": "tracklight",
-      "label": "Track Light (H = mount height)",
-      "category": "tech",
-      "w": 10.5,
-      "d": 0.15,
-      "h": 3.2,
-      "x": -5,
-      "z": 16.075,
-      "rot": 0,
-      "color": "#2b2f35",
-      "rule": "floor"
-    },
-    {
       "id": "obj-mu0zypsh-3",
       "defId": "window_wall",
       "label": "Glass Opening (facade)",
       "category": "window",
-      "w": 19.25,
+      "w": 18,
       "d": 0.3,
       "h": 2,
       "x": -10.25,
-      "z": 6.625,
-      "rot": 2,
-      "color": "#9ec8d8",
-      "rule": "edge",
-      "sill": 0.9
-    },
-    {
-      "id": "obj-mu0zz6ug-4",
-      "defId": "window_wall",
-      "label": "Glass Opening (facade)",
-      "category": "window",
-      "w": 2,
-      "d": 0.3,
-      "h": 2,
-      "x": -10.25,
-      "z": 19,
+      "z": 6,
       "rot": 2,
       "color": "#9ec8d8",
       "rule": "edge",
@@ -1930,7 +1901,7 @@
       "x": 7.5,
       "z": 11,
       "rot": 0,
-      "color": "#e9e6df",
+      "color": "#ec8e22",
       "rule": "floor"
     },
     {
@@ -2006,7 +1977,7 @@
     }
   ],
   "shell": {
-    "mode": 1,
+    "mode": 0,
     "eave": 13.75
   },
   "shellDesign": {

@@ -13,11 +13,17 @@ export interface LayoutPreset {
   id: string
   name: string
   file: LayoutFile
+  /**
+   * Where this preset lives in the repository. Saving a layout from inside the
+   * app commits back to this path (see publish.ts), so a preset without one —
+   * the read-only demo — simply cannot be overwritten from the UI.
+   */
+  path?: string
 }
 
 export const LAYOUT_PRESETS: LayoutPreset[] = [
-  { id: 'layout1', name: 'Layout 1', file: layout1 as unknown as LayoutFile },
-  { id: 'layout2', name: 'Layout 2', file: layout2 as unknown as LayoutFile },
+  { id: 'layout1', name: 'Layout 1', file: layout1 as unknown as LayoutFile, path: 'src/layouts/layout1.json' },
+  { id: 'layout2', name: 'Layout 2', file: layout2 as unknown as LayoutFile, path: 'src/layouts/layout2.json' },
   { id: 'demo', name: 'Demo gym', file: demo as unknown as LayoutFile },
 ]
 
