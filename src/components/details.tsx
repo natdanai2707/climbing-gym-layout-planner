@@ -1280,15 +1280,18 @@ function Elliptical({ pos, ry = 0 }: { pos: [number, number, number]; ry?: numbe
 
 // A-frame dumbbell rack with two tiers of round-headed dumbbells.
 function DumbbellRack({ pos, ry = 0 }: { pos: [number, number, number]; ry?: number }) {
-  const bell = (x: number, y: number) => (
+  // A dumbbell is racked across the rail with its bar pointing out at the
+  // lifter, so the bar runs along local z. Laid along x instead they read as
+  // one long barbell chained down the rack.
+  const bell = (x: number, y: number, r: number) => (
     <group key={`${x}${y}`} position={[x, y, 0]}>
-      <mesh rotation-z={Math.PI / 2} castShadow>
+      <mesh rotation-x={Math.PI / 2} castShadow>
         <cylinderGeometry args={[0.02, 0.02, 0.3, 8]} />
         <meshStandardMaterial color="#9aa2ab" roughness={0.35} metalness={0.6} />
       </mesh>
-      {[-0.12, 0.12].map((dx) => (
-        <mesh key={dx} position={[dx, 0, 0]} rotation-z={Math.PI / 2} castShadow>
-          <cylinderGeometry args={[0.07, 0.07, 0.09, 12]} />
+      {[-0.115, 0.115].map((dz) => (
+        <mesh key={dz} position={[0, 0, dz]} rotation-x={Math.PI / 2} castShadow>
+          <cylinderGeometry args={[r, r, 0.09, 12]} />
           <meshStandardMaterial color="#2b2f35" roughness={0.6} />
         </mesh>
       ))}
@@ -1301,8 +1304,9 @@ function DumbbellRack({ pos, ry = 0 }: { pos: [number, number, number]; ry?: num
       ))}
       <Box args={[1.7, 0.06, 0.5]} pos={[0, 0.42, 0.1]} rot={[0.35, 0, 0]} color="#3a3f45" />
       <Box args={[1.7, 0.06, 0.5]} pos={[0, 0.78, -0.08]} rot={[0.35, 0, 0]} color="#3a3f45" />
-      {[-0.55, -0.15, 0.25, 0.6].map((x) => bell(x, 0.56))}
-      {[-0.5, -0.05, 0.4].map((x) => bell(x, 0.92))}
+      {/* heavy pairs on the bottom tier, lighter ones on top */}
+      {Array.from({ length: 6 }, (_, i) => bell((i - 2.5) * 0.25, 0.56, 0.085))}
+      {Array.from({ length: 7 }, (_, i) => bell((i - 3) * 0.21, 0.92, 0.062))}
     </group>
   )
 }
@@ -2958,7 +2962,9 @@ function HyroxLayout({ o, tint }: { o: Placed; tint: string | null }) {
       <Sled pos={[laneHalf - 1.2, 0.09, laneZ + 0.95]} />
       {/* c3: rowers along the back */}
       {rowers.map((x, i) => (
-        <Rower key={i} pos={[x, 0.09, rowerZ]} />
+        // rails point out into the bay with the fan end at the wall, so the
+        // eight machines stand side by side instead of nose to tail
+        <Rower key={i} pos={[x, 0.09, rowerZ]} ry={-Math.PI / 2} />
       ))}
       {/* c1: ski ergs, c2: cross-trainers standing in for the bikes */}
       {skis.map((x, i) => (
@@ -2969,7 +2975,9 @@ function HyroxLayout({ o, tint }: { o: Placed; tint: string | null }) {
       ))}
       {/* f1: weight racks at both ends */}
       {([-1, 1] as const).map((s) =>
-        rackZ.map((z, i) => <DumbbellRack key={`${s}${i}`} pos={[s * (W / 2 - 1.5), 0.09, z]} ry={Math.PI / 2} />),
+        rackZ.map((z, i) => (
+          <DumbbellRack key={`${s}${i}`} pos={[s * (W / 2 - 1.5), 0.09, z]} ry={(-s * Math.PI) / 2} />
+        )),
       )}
       {/* f2: kettlebell clusters marked around the lanes */}
       {[
@@ -2985,7 +2993,7 @@ function HyroxLayout({ o, tint }: { o: Placed; tint: string | null }) {
         </group>
       ))}
       <Figure pose="walk" pos={[-laneHalf + 2.2, 0.09, laneZ - 0.95]} ry={-Math.PI / 2} shirt="#22c55e" idx={1} />
-      <Figure pose="stand" pos={[rowers[2], 0.09, rowerZ + 1.1]} ry={Math.PI} shirt="#3b82f6" idx={5} />
+      <Figure pose="stand" pos={[rowers[2] + 0.69, 0.09, rowerZ + 1.75]} ry={Math.PI} shirt="#3b82f6" idx={5} />
     </group>
   )
 }
@@ -3987,10 +3995,61 @@ function GroundPatch({ o, tint, kind }: { o: Placed; tint: string | null; kind: 
   )
 }
 
+// Which side of a wall mirror the glass ends up on. The mirror is an ordinary
+// floor item the user drags against a wall and turns with the rotate button, so
+// nothing lines the glass up with the room: half the time the panel is turned
+// into the wall and all that shows is the grey backing board, which is exactly
+// what "the mirror has no reflection" looks like. Rather than asking the user to
+// remember a facing convention, probe both sides for the wall it is leaning on
+// and turn the glass away from it.
+const MIRROR_PROBE = 0.75
+function useMirrorFlip(o: Placed) {
+  const objects = useStore((s) => s.objects)
+  const building = useStore((s) => s.building)
+  return useMemo(() => {
+    const a = (o.rot * Math.PI) / 4
+    const nx = Math.sin(a)
+    const nz = Math.cos(a)
+    const halfW = building.width / 2
+    const z0 = building.centerZ - building.length / 2
+    const z1 = building.centerZ + building.length / 2
+    // solid = an opaque partition, or the world outside the hall (the facade)
+    const solidAt = (px: number, pz: number) => {
+      if (px <= -halfW || px >= halfW || pz <= z0 || pz >= z1) return true
+      return objects.some((w) => {
+        if (w.id === o.id || w.defId !== 'partition') return false
+        const th = (w.rot * Math.PI) / 4
+        const c = Math.cos(th)
+        const s2 = Math.sin(th)
+        const dx = px - w.x
+        const dz = pz - w.z
+        const lx = dx * c - dz * s2
+        const lz = dx * s2 + dz * c
+        return Math.abs(lx) <= w.w / 2 && Math.abs(lz) <= w.d / 2
+      })
+    }
+    // distance to the first solid on one side, or Infinity if that side is open
+    const reach = (sign: number) => {
+      // start clear of the mirror's own thickness: it is usually pushed into
+      // the wall, so a probe from the centre lands inside the wall on both
+      // sides and the two are indistinguishable
+      for (let dist = o.d / 2 + 0.01; dist <= MIRROR_PROBE; dist += 0.02) {
+        if (solidAt(o.x + nx * sign * dist, o.z + nz * sign * dist)) return dist
+      }
+      return Infinity
+    }
+    const front = reach(1)
+    const back = reach(-1)
+    return front < back
+  }, [o.id, o.x, o.z, o.rot, objects, building])
+}
+
 // Fitness wall mirror: alu-framed panel that really reflects the scene.
-// Place it flush against any partition or room wall (front faces local +z).
+// The glass sits on local +z, but see useMirrorFlip — the panel turns itself
+// away from whatever wall it is up against, so it always faces the room.
 function WallMirror({ o, tint }: { o: Placed; tint: string | null }) {
   const quality = useStore((s) => s.quality)
+  const flip = useMirrorFlip(o)
   // A reflector costs one extra render of the scene per frame, so the mirror
   // pays for itself at a resolution that suits the quality setting rather than
   // being switched off. The old Low fallback was a plain metalness-0.9 pane,
@@ -4003,7 +4062,7 @@ function WallMirror({ o, tint }: { o: Placed; tint: string | null }) {
   const ph = Math.max(0.3, o.h - 0.2) // glass panel, bottom lifted off the floor
   const py = 0.15 + ph / 2
   return (
-    <group>
+    <group rotation-y={flip ? Math.PI : 0}>
       {/* backing board against the wall */}
       <Box args={[o.w, o.h - 0.06, t * 0.5]} pos={[0, (o.h - 0.06) / 2 + 0.03, -t * 0.25]} color="#5d646c" />
       {/* the mirror itself. `mirror` is what actually shows the reflection —
