@@ -64,7 +64,15 @@ export interface ResizeState {
   id: string
   axis: ResizeAxis
   sign: 1 | -1 // which side is being dragged; the opposite edge stays fixed
-  start: { w: number; d: number; x: number; z: number }
+  start: { w: number; d: number; h: number; x: number; z: number }
+  /**
+   * Where the pointer was when the arrow was grabbed, measured the same way the
+   * drag measures it: along the drag axis for w/d, world height for h. An arrow
+   * floats a good half metre clear of the face it resizes, so without this the
+   * first move snapped the size to the pointer and the item jumped by roughly
+   * the length of the arrow before it started following the finger.
+   */
+  grab: number
 }
 
 export interface GymState {

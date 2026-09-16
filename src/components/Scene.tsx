@@ -795,6 +795,23 @@ function GroundContactShadows() {
 
 const snapDim = (v: number) => Math.max(0.25, Math.round(v / 0.25) * 0.25)
 
+// Unit vector of a horizontal resize axis in world space, for the object's rotation
+const resizeDir = (o: { rot: number }, axis: ResizeAxis) => {
+  const th = (o.rot * Math.PI) / 4
+  return axis === 'x' ? { x: Math.cos(th), z: -Math.sin(th) } : { x: Math.sin(th), z: Math.cos(th) }
+}
+
+// Camera-facing vertical plane through an object, which is what a height drag
+// is measured against
+function verticalPlaneAt(o: { x: number; z: number }, camera: THREE.Camera): THREE.Plane {
+  const dir = new THREE.Vector3()
+  camera.getWorldDirection(dir)
+  dir.y = 0
+  if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1)
+  dir.normalize()
+  return new THREE.Plane().setFromNormalAndCoplanarPoint(dir, new THREE.Vector3(o.x, 0, o.z))
+}
+
 // Height at which the side resize arrows sit. Suspended/elevated items
 // (ceilings, ducts, FCUs, big fans, mezzanine floors) get their arrows at
 // their own working level instead of near the floor, so they're reachable.
@@ -859,14 +876,8 @@ function DragController() {
       if (r.axis === 'y') {
         // intersect a vertical, camera-facing plane through the object's center
         setRay(e)
-        const dir = new THREE.Vector3()
-        camera.getWorldDirection(dir)
-        dir.y = 0
-        if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1)
-        dir.normalize()
-        const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(dir, new THREE.Vector3(o.x, 0, o.z))
-        if (!raycaster.ray.intersectPlane(plane, pt)) return
-        const h = Math.max(0.1, Math.round((pt.y - base) / 0.25) * 0.25)
+        if (!raycaster.ray.intersectPlane(verticalPlaneAt(o, camera), pt)) return
+        const h = Math.max(0.1, Math.round((r.start.h + (pt.y - r.grab)) / 0.25) * 0.25)
         if (h !== o.h) s.updateObject(o.id, { h })
         return
       }
@@ -874,14 +885,11 @@ function DragController() {
       // the opposite side stays fixed (center shifts by half the size change).
       const p = projectAt(e, base)
       if (!p) return
-      const th = (o.rot * Math.PI) / 4
-      const dir =
-        r.axis === 'x'
-          ? { x: Math.cos(th), z: -Math.sin(th) }
-          : { x: Math.sin(th), z: Math.cos(th) }
+      const dir = resizeDir(o, r.axis)
       const u = (p.x - r.start.x) * dir.x + (p.z - r.start.z) * dir.z
       const startDim = r.axis === 'x' ? r.start.w : r.start.d
-      const newDim = snapDim(r.sign * u + startDim / 2)
+      // how far the finger has travelled since the grab, not where it is
+      const newDim = snapDim(startDim + r.sign * (u - r.grab))
       const shift = (r.sign * (newDim - startDim)) / 2
       const nx = r.start.x + dir.x * shift
       const nz = r.start.z + dir.z * shift
@@ -1012,6 +1020,14 @@ function ArrowPriorityPicker() {
     if (!selectedId && shellMode === 0) return
     const el = gl.domElement
 
+    // test hook: where a world point lands on the canvas (used by UI tests to
+    // aim at a resize arrow without guessing)
+    ;(window as unknown as Record<string, unknown>).__projectPoint = (x: number, y: number, z: number) => {
+      const r = el.getBoundingClientRect()
+      const v = new THREE.Vector3(x, y, z).project(camera)
+      return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height]
+    }
+
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return
       const s = useStore.getState()
@@ -1042,8 +1058,23 @@ function ArrowPriorityPicker() {
             o.z - lx * Math.sin(th) + lz * Math.cos(th),
           )
         const yMid = arrowLevel(o)
-        const start = (axis: ResizeAxis, sign: 1 | -1) => () =>
-          s.setResizing({ id: o.id, axis, sign, start: { w: o.w, d: o.d, x: o.x, z: o.z } })
+        // Same grab measurement as the 3D handles: a tap near an arrow must not
+        // move the size until the finger does (see ResizeState.grab).
+        const ray = new THREE.Raycaster()
+        ray.setFromCamera(new THREE.Vector2((px / rect.width) * 2 - 1, 1 - (py / rect.height) * 2), camera)
+        const hit = new THREE.Vector3()
+        const start = (axis: ResizeAxis, sign: 1 | -1) => () => {
+          let grab: number
+          if (axis === 'y') {
+            grab = ray.ray.intersectPlane(verticalPlaneAt(o, camera), hit) ? hit.y : elev + o.h
+          } else if (ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -elev), hit)) {
+            const d = resizeDir(o, axis)
+            grab = (hit.x - o.x) * d.x + (hit.z - o.z) * d.z
+          } else {
+            grab = (sign * (axis === 'x' ? o.w : o.d)) / 2
+          }
+          s.setResizing({ id: o.id, axis, sign, start: { w: o.w, d: o.d, h: o.h, x: o.x, z: o.z }, grab })
+        }
         add(loc(o.w / 2 + 0.95, yMid, 0), start('x', 1))
         add(loc(-o.w / 2 - 0.95, yMid, 0), start('x', -1))
         add(loc(0, yMid, o.d / 2 + 0.95), start('z', 1))
@@ -1081,11 +1112,25 @@ function ArrowPriorityPicker() {
 function ResizeGizmo({ o, elev }: { o: Placed; elev: number }) {
   const setResizing = useStore((s) => s.setResizing)
   const controls = useThree((s) => s.controls) as { enabled?: boolean } | null
+  const camera = useThree((s) => s.camera)
   const start = (axis: ResizeAxis, sign: 1 | -1) => (e: ThreeEvent<PointerEvent>) => {
     if (e.button !== 0) return
     e.stopPropagation()
     if (controls) controls.enabled = false
-    const r: ResizeState = { id: o.id, axis, sign, start: { w: o.w, d: o.d, x: o.x, z: o.z } }
+    // Measure the grab through the same plane the drag will use, so the size
+    // stays put until the finger actually moves — projecting the arrow's own
+    // surface point instead would put the grab a parallax error off.
+    const hit = new THREE.Vector3()
+    let grab: number
+    if (axis === 'y') {
+      grab = e.ray.intersectPlane(verticalPlaneAt(o, camera), hit) ? hit.y : elev + o.h
+    } else if (e.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -elev), hit)) {
+      const d = resizeDir(o, axis)
+      grab = (hit.x - o.x) * d.x + (hit.z - o.z) * d.z
+    } else {
+      grab = (sign * (axis === 'x' ? o.w : o.d)) / 2
+    }
+    const r: ResizeState = { id: o.id, axis, sign, start: { w: o.w, d: o.d, h: o.h, x: o.x, z: o.z }, grab }
     setResizing(r)
   }
   const yMid = arrowLevel(o)

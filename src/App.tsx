@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Scene, captureStill, walkInput, walkLook } from './components/Scene'
 import { ThumbnailFactory } from './components/Thumbnails'
 import { Toolbar } from './components/Toolbar'
@@ -12,6 +12,38 @@ import { useStore } from './store'
 import { viewAxis, screenRight } from './viewAxis'
 import { useWallStore } from './wall/wallStore'
 import { fp } from './placement'
+
+/**
+ * Arrow pad for nudging the selection, with a step toggle in the middle.
+ *
+ * The keyboard has had this all along (arrows step by the grid cell, Shift by
+ * 10 cm) but a phone has neither arrow keys nor a Shift, so on the device this
+ * app is actually used on there was no way to move an item by anything smaller
+ * than a drag. Steps follow the screen, the way the keyboard ones do: up pushes
+ * away from the camera whichever way it is orbited.
+ */
+function NudgePad({ step, fine, onToggle }: { step: number; fine: boolean; onToggle: () => void }) {
+  const go = (sx: number, sz: number) => () => {
+    const f = viewAxis
+    const r = screenRight()
+    useStore.getState().nudge((f.fx * sz + r.x * sx) * step, (f.fz * sz + r.z * sx) * step)
+  }
+  return (
+    <div className="nudge-pad" role="group" aria-label="Nudge the selection">
+      <button className="np-up" onClick={go(0, 1)} aria-label="Nudge away from the camera">↑</button>
+      <button className="np-left" onClick={go(-1, 0)} aria-label="Nudge left">←</button>
+      <button
+        className={`np-step${fine ? ' on' : ''}`}
+        onClick={onToggle}
+        title="Step per press — tap to switch between the grid cell and 10 cm"
+      >
+        {fine ? '10 cm' : `${step} m`}
+      </button>
+      <button className="np-right" onClick={go(1, 0)} aria-label="Nudge right">→</button>
+      <button className="np-down" onClick={go(0, -1)} aria-label="Nudge toward the camera">↓</button>
+    </div>
+  )
+}
 
 // On-screen joystick for touch devices: writes into a shared {x, y} target
 // read by the walk rig every frame. Used twice — left stick walks
@@ -106,6 +138,9 @@ export default function App() {
   const setViewMode = useStore((s) => s.setViewMode)
   const measuring = useStore((s) => s.measuring)
   const shots = useStore((s) => s.shots)
+  const building = useStore((s) => s.building)
+  // fine nudge is the touch stand-in for holding Shift with the arrow keys
+  const [fineNudge, setFineNudge] = useState(false)
   const addShot = useStore((s) => s.addShot)
   const clearShots = useStore((s) => s.clearShots)
 
@@ -295,11 +330,17 @@ export default function App() {
               {/* in the same stack as the buttons, so it can never land on top
                   of them when they wrap onto a second row on a phone */}
               {moveArmed && (
-                <div className="qa-hint">
-                  {selection.length > 1
-                    ? `Drag any of the ${selection.length} highlighted items — they move together`
-                    : 'Drag the highlighted item — or nudge it with ← ↑ → ↓ (Shift = 10 cm)'}
-                </div>
+                <>
+                  {/* A phone has no Shift and no arrow keys, so the fine nudge
+                      needs a control of its own — same steps the keyboard has
+                      (grid cell, or 10 cm with Shift held). */}
+                  <NudgePad step={fineNudge ? 0.1 : building.cell} fine={fineNudge} onToggle={() => setFineNudge(!fineNudge)} />
+                  <div className="qa-hint">
+                    {selection.length > 1
+                      ? `Drag any of the ${selection.length} highlighted items — they move together`
+                      : 'Drag the highlighted item, or nudge it with the arrows (← ↑ → ↓ on a keyboard, Shift = 10 cm)'}
+                  </div>
+                </>
               )}
               {multiArmed && selection.length < 2 && (
                 <div className="qa-hint">Tap more items to add them to the selection</div>
