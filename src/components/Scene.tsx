@@ -45,12 +45,15 @@ export function captureStill(after: (dataUrl: string) => void) {
 
 function CaptureBinder() {
   const gl = useThree((s) => s.gl)
+  const scene = useThree((s) => s.scene)
   useEffect(() => {
     canvasCapture.el = gl.domElement
+    // test hook: lets automated UI tests count what is actually in the scene
+    ;(window as unknown as Record<string, unknown>).__gymScene = scene
     return () => {
       canvasCapture.el = null
     }
-  }, [gl])
+  }, [gl, scene])
   return null
 }
 

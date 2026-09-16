@@ -35,9 +35,9 @@ export const CATALOG: ObjectDef[] = [
   { id: 'person', label: 'Person', category: 'person', w: 0.5, d: 0.4, h: 1.7, color: '#3b82f6', rule: 'floor' },
   { id: 'training', label: 'Training Area', category: 'zone', w: 8.0, d: 6.0, h: 0.1, color: '#fca5a5', rule: 'floor' },
   { id: 'hyrox', label: 'Hyrox Zone', category: 'zone', w: 20.0, d: 15.0, h: 0.1, color: '#33363b', rule: 'floor' },
-  // a complete Hyrox bay drawn to a 78 x 42 ft plan — a fixed module, so it is
-  // dropped in whole rather than stretched
-  { id: 'hyrox_bay', label: 'Hyrox Bay (78 × 42 ft, fixed)', category: 'zone', w: 23.77, d: 12.8, h: 0.1, color: '#33363b', rule: 'floor' },
+  // a complete Hyrox bay drawn to a 78 x 42 ft plan. Resizing keeps the plan's
+  // arrangement and changes how many machines each row holds.
+  { id: 'hyrox_bay', label: 'Hyrox Bay (78 × 42 ft)', category: 'zone', w: 23.77, d: 12.8, h: 0.1, color: '#33363b', rule: 'floor' },
   { id: 'icebath', label: 'Ice Bath', category: 'fixture', w: 3.0, d: 2.0, h: 1.0, color: '#38bdf8', rule: 'floor' },
   { id: 'sauna', label: 'Sauna', category: 'room', w: 3.0, d: 3.0, h: 2.4, color: '#d4a373', rule: 'floor' },
   // tennis simulator: dark booth with the impact screen filling one 5 m end
@@ -148,5 +148,9 @@ export const CATEGORY_ORDER: Category[] = [
   'site',
 ]
 
-/** Items that are a fixed module: no resize arrows, no size fields. */
-export const FIXED_SIZE_DEFS = new Set(['hyrox_bay'])
+/**
+ * Items that are a fixed module: no resize arrows, no size fields. Empty now
+ * that the Hyrox bay re-lays itself out at any size — kept because the rest of
+ * the app still asks, and a future drop-in module can go straight in here.
+ */
+export const FIXED_SIZE_DEFS = new Set<string>([])

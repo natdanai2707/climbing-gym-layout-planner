@@ -2902,28 +2902,64 @@ function EntranceRamp({ o, tint }: { o: Placed; tint: string | null }) {
 }
 
 /**
- * A complete Hyrox training bay, laid out to the supplied 78 x 42 ft plan and
- * fixed at that size — the whole point is that the bay is a known module you
- * drop in, not something to stretch. Local origin is the centre of the bay,
- * x runs the 78 ft length and z the 42 ft depth.
+ * A complete Hyrox training bay, laid out to the supplied 78 x 42 ft plan.
+ *
+ * The plan is the shape, not the size: the bands across the depth and the bays
+ * across the width keep their proportions at any footprint, and each row holds
+ * as many machines as its bay has room for at the plan's own centres — 4'6" for
+ * the rowers, 6'0" for the ski ergs, 4'0" for the bikes, 3'9" for the rack
+ * tiers. Stretch the bay and rows gain machines; shrink it and they lose them.
+ * The machines themselves never scale, because a rower is 1.9 m long whatever
+ * the room is. Local origin is the centre of the bay, x runs its length and z
+ * its depth.
  */
 const FT = 0.3048
+const HYROX_W = 78 * FT // 23.77 m — the plan's own size, which the counts scale from
+const HYROX_D = 42 * FT // 12.80 m
+
+// n machines on `pitch` centres, centred on cx
+const row = (n: number, pitch: number, cx = 0) =>
+  Array.from({ length: n }, (_, i) => cx + (i - (n - 1) / 2) * pitch)
+
+// The plan's count scaled by how much bigger the bay is, but never more than
+// the bay can actually hold at that pitch.
+const fitCount = (base: number, scale: number, bay: number, pitch: number, own: number) =>
+  Math.max(1, Math.min(Math.round(base * scale), Math.floor((bay - own) / pitch) + 1))
+
 function HyroxLayout({ o, tint }: { o: Placed; tint: string | null }) {
-  const W = 78 * FT // 23.77 m
-  const D = 42 * FT // 12.80 m
+  const W = Math.max(6, o.w)
+  const D = Math.max(4, o.d)
+  const sx = W / HYROX_W
+  const sz = D / HYROX_D
   const deck = tint ?? o.color
-  // the plan's bands: 12'5" side aisles either end, rows of 13'5" / 13'1" / 15'5"
-  const rowerZ = -D / 2 + 2.1
-  const laneZ = -D / 2 + 4.09 + 3.99 / 2 - 0.2
-  const bottomZ = D / 2 - 2.4
-  // c3: eight rowers at 4'6" centres
-  const rowers = Array.from({ length: 8 }, (_, i) => (i - 3.5) * 4.5 * FT)
-  // c1: four ski ergs at 6'0" centres, c2: four bikes at 4'0" centres
-  const skis = Array.from({ length: 4 }, (_, i) => -5.6 + (i - 1.5) * 6 * FT)
-  const bikes = Array.from({ length: 4 }, (_, i) => 2.6 + (i - 1.5) * 4 * FT)
-  // f1: a rack of three tiers at each end, 3'9" apart
-  const rackZ = Array.from({ length: 3 }, (_, i) => (i - 1) * 3.75 * FT)
-  const laneHalf = 8.1
+  // the plan's bands, as fractions of the depth: rowers along the back, the
+  // sled lanes across the middle, ski ergs and bikes along the front
+  const rowerZ = -D / 2 + 0.164 * D
+  const laneZ = -D / 2 + 0.46 * D
+  const bottomZ = -D / 2 + 0.8125 * D
+  // bays across the width, likewise as fractions
+  const rowerBayW = 0.522 * W
+  const skiBayW = 0.269 * W
+  const skiX = -0.2356 * W
+  const bikeBayW = 0.219 * W
+  const bikeX = 0.1094 * W
+  const laneHalf = 0.3407 * W
+  const laneD = Math.max(2.2, 0.297 * D)
+  const rackX = Math.max(1.2, W / 2 - 1.5)
+  const rackBayD = 0.359 * D
+
+  // c3: rowers at 4'6" centres · c1: ski ergs at 6'0" · c2: bikes at 4'0"
+  const rowers = row(fitCount(8, sx, rowerBayW, 4.5 * FT, 0.5), 4.5 * FT)
+  const skis = row(fitCount(4, sx, skiBayW, 6 * FT, 0.8), 6 * FT, skiX)
+  const bikes = row(fitCount(4, sx, bikeBayW, 4 * FT, 0.8), 4 * FT, bikeX)
+  // f1: rack tiers at 3'9" apart down each end — these run with the depth
+  const rackZ = row(fitCount(3, sz, rackBayD, 3.75 * FT, 0.7), 3.75 * FT)
+  const dashes = Math.max(3, Math.round(laneD / 0.42))
+  // keep a cluster on the deck however the bay is shaped
+  const onDeck = (x: number, z: number): [number, number] => [
+    Math.max(-W / 2 + 0.6, Math.min(W / 2 - 0.6, x)),
+    Math.max(-D / 2 + 0.6, Math.min(D / 2 - 0.6, z)),
+  ]
   return (
     <group>
       {/* rubber deck */}
@@ -2933,11 +2969,11 @@ function HyroxLayout({ o, tint }: { o: Placed; tint: string | null }) {
       </mesh>
       {/* pale bays under each equipment group, as drawn */}
       {[
-        [0, rowerZ, 12.4, 2.6],
-        [-5.6, bottomZ, 6.4, 2.2],
-        [2.6, bottomZ + 0.3, 5.2, 1.8],
-        [-W / 2 + 1.5, 0, 1.9, 4.6],
-        [W / 2 - 1.5, 0, 1.9, 4.6],
+        [0, rowerZ, rowerBayW, 0.203 * D],
+        [skiX, bottomZ, skiBayW, 0.172 * D],
+        [bikeX, bottomZ + 0.3, bikeBayW, 0.141 * D],
+        [-rackX, 0, 1.9, rackBayD],
+        [rackX, 0, 1.9, rackBayD],
       ].map(([x, z, bw, bd], i) => (
         <mesh key={i} position={[x, 0.085, z]} receiveShadow>
           <boxGeometry args={[bw, 0.01, bd]} />
@@ -2947,23 +2983,28 @@ function HyroxLayout({ o, tint }: { o: Placed; tint: string | null }) {
       {/* a1: the two sled lanes, turf, split by a solid line with a dashed
           centre across the middle */}
       <mesh position={[0, 0.09, laneZ]} receiveShadow>
-        <boxGeometry args={[laneHalf * 2, 0.02, 3.8]} />
+        <boxGeometry args={[laneHalf * 2, 0.02, laneD]} />
         <meshStandardMaterial color="#f4f2ec" roughness={0.95} />
       </mesh>
       <Box args={[laneHalf * 2, 0.012, 0.06]} pos={[0, 0.105, laneZ]} color="#d9b310" />
-      {Array.from({ length: 9 }, (_, i) => (
-        <Box key={i} args={[0.06, 0.012, 0.24]} pos={[0, 0.105, laneZ - 1.7 + i * 0.42]} color="#d9b310" />
+      {Array.from({ length: dashes }, (_, i) => (
+        <Box
+          key={i}
+          args={[0.06, 0.012, 0.24]}
+          pos={[0, 0.105, laneZ - laneD / 2 + 0.21 + (i * (laneD - 0.42)) / Math.max(1, dashes - 1)]}
+          color="#d9b310"
+        />
       ))}
       {([-1, 1] as const).map((s) => (
-        <Box key={s} args={[0.05, 0.012, 3.8]} pos={[s * laneHalf, 0.105, laneZ]} color="#d9b310" />
+        <Box key={s} args={[0.05, 0.012, laneD]} pos={[s * laneHalf, 0.105, laneZ]} color="#d9b310" />
       ))}
       {/* sleds sitting at the head of each lane */}
-      <Sled pos={[-laneHalf + 1.2, 0.09, laneZ - 0.95]} />
-      <Sled pos={[laneHalf - 1.2, 0.09, laneZ + 0.95]} />
+      <Sled pos={[-laneHalf + 1.2, 0.09, laneZ - laneD / 4]} />
+      <Sled pos={[laneHalf - 1.2, 0.09, laneZ + laneD / 4]} />
       {/* c3: rowers along the back */}
       {rowers.map((x, i) => (
         // rails point out into the bay with the fan end at the wall, so the
-        // eight machines stand side by side instead of nose to tail
+        // machines stand side by side instead of nose to tail
         <Rower key={i} pos={[x, 0.09, rowerZ]} ry={-Math.PI / 2} />
       ))}
       {/* c1: ski ergs, c2: cross-trainers standing in for the bikes */}
@@ -2976,15 +3017,15 @@ function HyroxLayout({ o, tint }: { o: Placed; tint: string | null }) {
       {/* f1: weight racks at both ends */}
       {([-1, 1] as const).map((s) =>
         rackZ.map((z, i) => (
-          <DumbbellRack key={`${s}${i}`} pos={[s * (W / 2 - 1.5), 0.09, z]} ry={(-s * Math.PI) / 2} />
+          <DumbbellRack key={`${s}${i}`} pos={[s * rackX, 0.09, z]} ry={(-s * Math.PI) / 2} />
         )),
       )}
       {/* f2: kettlebell clusters marked around the lanes */}
       {[
-        [-laneHalf - 1.4, laneZ + 1.4],
-        [laneHalf + 1.4, laneZ - 1.4],
-        [-2.2, bottomZ - 1.6],
-        [6.4, laneZ + 1.2],
+        onDeck(-laneHalf - 1.4, laneZ + 1.4),
+        onDeck(laneHalf + 1.4, laneZ - 1.4),
+        onDeck(-0.0926 * W, bottomZ - 1.6),
+        onDeck(0.269 * W, laneZ + 1.2),
       ].map(([x, z], i) => (
         <group key={i}>
           <Kettlebell pos={[x, 0.09, z]} />
@@ -2992,8 +3033,14 @@ function HyroxLayout({ o, tint }: { o: Placed; tint: string | null }) {
           <Kettlebell pos={[x + 0.16, 0.09, z - 0.26]} color="#6b7280" />
         </group>
       ))}
-      <Figure pose="walk" pos={[-laneHalf + 2.2, 0.09, laneZ - 0.95]} ry={-Math.PI / 2} shirt="#22c55e" idx={1} />
-      <Figure pose="stand" pos={[rowers[2] + 0.69, 0.09, rowerZ + 1.75]} ry={Math.PI} shirt="#3b82f6" idx={5} />
+      <Figure pose="walk" pos={[-laneHalf + 2.2, 0.09, laneZ - laneD / 4]} ry={-Math.PI / 2} shirt="#22c55e" idx={1} />
+      <Figure
+        pose="stand"
+        pos={[rowers[Math.min(2, rowers.length - 1)] + 0.69, 0.09, Math.min(laneZ - laneD / 2 - 0.5, rowerZ + 1.75)]}
+        ry={Math.PI}
+        shirt="#3b82f6"
+        idx={5}
+      />
     </group>
   )
 }
