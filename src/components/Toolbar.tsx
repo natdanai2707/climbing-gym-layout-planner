@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { exportLayout, useStore } from '../store'
 import { PublishDialog } from './PublishDialog'
 import { LAYOUT_PRESETS } from '../layouts'
@@ -86,6 +86,21 @@ export function Toolbar() {
   const importLayout = useStore((s) => s.importLayout)
   const fileRef = useRef<HTMLInputElement>(null)
   const [publishing, setPublishing] = useState(false)
+  const [full, setFull] = useState(false)
+
+  // The browser can leave full screen on its own (Esc, F11, gestures), so the
+  // button follows the document rather than a flag of ours.
+  useEffect(() => {
+    const sync = () => setFull(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', sync)
+    sync()
+    return () => document.removeEventListener('fullscreenchange', sync)
+  }, [])
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) void document.exitFullscreen()
+    else void document.documentElement.requestFullscreen().catch(() => undefined)
+  }
 
   const exportJson = () => {
     const blob = new Blob([JSON.stringify(exportLayout(), null, 2)], { type: 'application/json' })
@@ -260,6 +275,13 @@ export function Toolbar() {
           📸 Shot
         </button>
         <button onClick={resetView} title="Return to the default isometric view">Reset view</button>
+        <button
+          className={full ? 'on' : ''}
+          onClick={toggleFullscreen}
+          title="Fill the screen for presenting — Esc comes back"
+        >
+          {full ? '⛶ Exit full screen' : '⛶ Full screen'}
+        </button>
         <button className={showGrid ? 'on' : ''} onClick={toggleGrid} title="G">Grid</button>
         <button className={showLabels ? 'on' : ''} onClick={toggleLabels} title="L">Labels</button>
         <button

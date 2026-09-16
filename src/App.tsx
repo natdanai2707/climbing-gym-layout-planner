@@ -20,8 +20,16 @@ import { fp } from './placement'
  * 10 cm) but a phone has neither arrow keys nor a Shift, so on the device this
  * app is actually used on there was no way to move an item by anything smaller
  * than a drag. Steps follow the screen, the way the keyboard ones do: up pushes
- * away from the camera whichever way it is orbited.
+ * away from the camera whichever way it is orbited. Touch only — see TOUCH.
  */
+const TOUCH = (() => {
+  try {
+    return window.matchMedia('(pointer: coarse)').matches
+  } catch {
+    return false
+  }
+})()
+
 function NudgePad({ step, fine, onToggle }: { step: number; fine: boolean; onToggle: () => void }) {
   const go = (sx: number, sz: number) => () => {
     const f = viewAxis
@@ -329,21 +337,10 @@ export default function App() {
               </button>
               {/* in the same stack as the buttons, so it can never land on top
                   of them when they wrap onto a second row on a phone */}
-              {moveArmed && (
-                <>
-                  {/* A phone has no Shift and no arrow keys, so the fine nudge
-                      needs a control of its own — same steps the keyboard has
-                      (grid cell, or 10 cm with Shift held). */}
-                  <NudgePad step={fineNudge ? 0.1 : building.cell} fine={fineNudge} onToggle={() => setFineNudge(!fineNudge)} />
-                  <div className="qa-hint">
-                    {selection.length > 1
-                      ? `Drag any of the ${selection.length} highlighted items — they move together`
-                      : 'Drag the highlighted item, or nudge it with the arrows (← ↑ → ↓ on a keyboard, Shift = 10 cm)'}
-                  </div>
-                </>
-              )}
-              {multiArmed && selection.length < 2 && (
-                <div className="qa-hint">Tap more items to add them to the selection</div>
+              {/* The pad is the touch stand-in for the arrow keys, so a machine
+                  that has arrow keys does not need it taking up the view. */}
+              {moveArmed && TOUCH && (
+                <NudgePad step={fineNudge ? 0.1 : building.cell} fine={fineNudge} onToggle={() => setFineNudge(!fineNudge)} />
               )}
             </div>
           )}

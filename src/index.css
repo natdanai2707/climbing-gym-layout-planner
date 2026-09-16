@@ -950,23 +950,6 @@ button.wide {
   background: #fff;
 }
 
-/* hint that belongs to the quick-action stack: its own full-width row, so a
-   wrapped button row can never sit on top of it */
-.qa-hint {
-  order: -1;
-  flex-basis: 100%;
-  text-align: center;
-  background: rgba(43, 41, 38, 0.85);
-  color: #fff;
-  border-radius: 999px;
-  padding: 4px 12px;
-  font-size: 11px;
-  pointer-events: none;
-  align-self: center;
-  width: fit-content;
-  margin: 0 auto;
-}
-
 /* "Save to Layout" dialog — a layout goes back into the app from here, so it
    sits over everything and stays usable one-handed on a phone */
 .pub-backdrop {
