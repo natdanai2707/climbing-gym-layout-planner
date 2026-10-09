@@ -23,6 +23,14 @@ function labelY(o: Placed): number {
   }
 }
 
+/**
+ * When an item last took a pointerdown. r3f dispatches its events from the
+ * canvas's own native listener, so a window-level listener runs just after and
+ * can read this to tell a press on an item from a press on empty space — which
+ * is what the box-select needs to know before it starts dragging a box.
+ */
+export const lastItemHit = { t: 0 }
+
 export function PlacedObject({ o, warning, elev }: { o: Placed; warning: boolean; elev: number }) {
   const selected = useStore((s) => s.selectedId === o.id)
   // part of a multi-selection, but not the primary the inspector is editing
@@ -42,6 +50,7 @@ export function PlacedObject({ o, warning, elev }: { o: Placed; warning: boolean
 
   const onPointerDown = (e: ThreeEvent<PointerEvent>) => {
     if (e.button !== 0) return
+    lastItemHit.t = performance.now()
     const s = useStore.getState()
     if (s.viewMode === 'walk') return // walking: taps steer the view, never select
     if (s.measuring) return // measuring: taps drop tape points, never select

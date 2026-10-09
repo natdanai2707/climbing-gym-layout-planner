@@ -16,7 +16,7 @@ import type { Placed } from '../types'
 import { BuildingFloor } from './BuildingFloor'
 import { GridOverlay } from './GridOverlay'
 import { PlanBuildingOutline } from './PlanSymbols'
-import { PlacedObject } from './PlacedObject'
+import { PlacedObject, lastItemHit } from './PlacedObject'
 import { WarehouseShell, ROOF_PITCH } from './WarehouseShell'
 import { SegmentedShell } from './SegmentedShell'
 import { ArrowHandle } from './gizmo'
@@ -46,14 +46,22 @@ export function captureStill(after: (dataUrl: string) => void) {
 function CaptureBinder() {
   const gl = useThree((s) => s.gl)
   const scene = useThree((s) => s.scene)
+  const camera = useThree((s) => s.camera)
   useEffect(() => {
     canvasCapture.el = gl.domElement
-    // test hook: lets automated UI tests count what is actually in the scene
-    ;(window as unknown as Record<string, unknown>).__gymScene = scene
+    // test hooks: let automated UI tests see what is in the scene and where a
+    // world point lands on screen, instead of hunting for it pixel by pixel
+    const w = window as unknown as Record<string, unknown>
+    w.__gymScene = scene
+    w.__projectPoint = (x: number, y: number, z: number) => {
+      const r = gl.domElement.getBoundingClientRect()
+      const v = new THREE.Vector3(x, y, z).project(camera)
+      return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height]
+    }
     return () => {
       canvasCapture.el = null
     }
-  }, [gl, scene])
+  }, [gl, scene, camera])
   return null
 }
 
@@ -1002,6 +1010,147 @@ function Ghost() {
 }
 
 /**
+ * Drag a box over the scene to select everything inside it.
+ *
+ * Tapping items one at a time is fine for three of them and hopeless for
+ * thirty, and this app is used on a phone where there is no rubber-band
+ * convention to fall back on. So the box rides on the ⧉ Group mode that is
+ * already there: with Group armed, a drag that starts on empty floor draws a
+ * box instead of orbiting, and everything whose centre lands inside joins the
+ * selection. A keyboard can hold Shift instead of arming anything.
+ *
+ * Orbiting is off while Group is armed, which is the price of having one
+ * gesture mean two things; turning Group off gives the camera back.
+ */
+const MARQUEE_MIN = 8 // px of travel before a press counts as a box, not a tap
+
+function MarqueeSelect() {
+  const gl = useThree((s) => s.gl)
+  const camera = useThree((s) => s.camera)
+  const controls = useThree((s) => s.controls) as { enabled?: boolean } | null
+  const armed = useStore((s) => s.multiArmed)
+  const walking = useStore((s) => s.viewMode === 'walk')
+  const measuring = useStore((s) => s.measuring)
+
+  useEffect(() => {
+    if (walking || measuring) return
+    const el = gl.domElement
+    const host = el.parentElement
+    if (!host) return
+
+    let box: HTMLDivElement | null = null
+    let x0 = 0
+    let y0 = 0
+    let live = false
+
+    const rect = () => el.getBoundingClientRect()
+
+    const draw = (x: number, y: number) => {
+      if (!box) {
+        box = document.createElement('div')
+        box.className = 'marquee'
+        host.appendChild(box)
+      }
+      const r = rect()
+      box.style.left = `${Math.min(x0, x) - r.left}px`
+      box.style.top = `${Math.min(y0, y) - r.top}px`
+      box.style.width = `${Math.abs(x - x0)}px`
+      box.style.height = `${Math.abs(y - y0)}px`
+    }
+
+    const clear = () => {
+      box?.remove()
+      box = null
+      live = false
+      if (controls) controls.enabled = true
+    }
+
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0) return
+      const s = useStore.getState()
+      if (s.placingDef || s.pendingId || s.resizing || s.shellResizing) return
+      if (!(s.multiArmed || e.shiftKey)) return
+      // r3f dispatched its own events from the canvas a moment ago; if one of
+      // them landed on an item, that press belongs to the item
+      if (performance.now() - lastItemHit.t < 50) return
+      x0 = e.clientX
+      y0 = e.clientY
+      live = true
+      if (controls) controls.enabled = false
+      window.addEventListener('pointermove', onMove)
+      window.addEventListener('pointerup', onUp)
+      window.addEventListener('pointercancel', onUp)
+    }
+
+    const onMove = (e: PointerEvent) => {
+      if (!live) return
+      if (!box && Math.hypot(e.clientX - x0, e.clientY - y0) < MARQUEE_MIN) return
+      draw(e.clientX, e.clientY)
+    }
+
+    const onUp = (e: PointerEvent) => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+      const dragged = !!box
+      clear()
+      if (!dragged) return
+      const r = rect()
+      const left = Math.min(x0, e.clientX) - r.left
+      const right = Math.max(x0, e.clientX) - r.left
+      const top = Math.min(y0, e.clientY) - r.top
+      const bottom = Math.max(y0, e.clientY) - r.top
+      const inside = (sx: number, sy: number) => sx >= left && sx <= right && sy >= top && sy <= bottom
+
+      const s = useStore.getState()
+      const v = new THREE.Vector3()
+      const toScreen = (x: number, y: number, z: number): [number, number] => {
+        v.set(x, y, z).project(camera)
+        return [((v.x + 1) / 2) * r.width, ((1 - v.y) / 2) * r.height]
+      }
+      const hits: string[] = []
+      for (const o of s.objects) {
+        const elev = elevationFor(o, s.objects) + (o.rule === 'outdoor' ? GROUND_Y : 0)
+        const y = elev + Math.min(o.h, 3) / 2
+        // the middle of the item, or the whole of it boxed in
+        if (inside(...toScreen(o.x, y, o.z))) {
+          hits.push(o.id)
+          continue
+        }
+        const th = (o.rot * Math.PI) / 4
+        const c = Math.cos(th)
+        const sn = Math.sin(th)
+        let all = true
+        for (const [lx, lz] of [
+          [-o.w / 2, -o.d / 2],
+          [o.w / 2, -o.d / 2],
+          [o.w / 2, o.d / 2],
+          [-o.w / 2, o.d / 2],
+        ]) {
+          if (!inside(...toScreen(o.x + lx * c + lz * sn, y, o.z - lx * sn + lz * c))) {
+            all = false
+            break
+          }
+        }
+        if (all) hits.push(o.id)
+      }
+      if (hits.length) s.selectMany(hits)
+    }
+
+    el.addEventListener('pointerdown', onDown)
+    return () => {
+      el.removeEventListener('pointerdown', onDown)
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+      clear()
+    }
+  }, [gl, camera, controls, armed, walking, measuring])
+
+  return null
+}
+
+/**
  * Screen-space priority picking for the resize arrows. Taps within a radius of
  * an arrow ALWAYS grab that arrow — before the 3D raycast can hit whatever
  * object happens to be behind it — so adjusting size next to other items never
@@ -1022,14 +1171,6 @@ function ArrowPriorityPicker() {
     if (walking || measuring) return // arrows hidden while walking / measuring
     if (!selectedId && shellMode === 0) return
     const el = gl.domElement
-
-    // test hook: where a world point lands on the canvas (used by UI tests to
-    // aim at a resize arrow without guessing)
-    ;(window as unknown as Record<string, unknown>).__projectPoint = (x: number, y: number, z: number) => {
-      const r = el.getBoundingClientRect()
-      const v = new THREE.Vector3(x, y, z).project(camera)
-      return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height]
-    }
 
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return
@@ -1214,7 +1355,13 @@ function SceneContent() {
         position={[0, -0.01, 0]}
         rotation-x={-Math.PI / 2}
         onPointerDown={(e) => {
-          if (e.button === 0 && !useStore.getState().placingDef) select(null)
+          const s = useStore.getState()
+          if (e.button !== 0 || s.placingDef) return
+          // with Group armed (or Shift down) a press on empty ground is the
+          // start of a box select, which adds to the selection — clearing it
+          // here would throw away everything boxed a moment ago
+          if (s.multiArmed || e.shiftKey) return
+          select(null)
         }}
       >
         <planeGeometry args={[2000, 2000]} />
@@ -1257,6 +1404,7 @@ export function Scene() {
       <group key={`rig-${viewKey}-${walking ? 'walk' : 'orbit'}-${proj}`}>{walking ? <WalkRig /> : <CameraRig />}</group>
       <DragController />
       <ArrowPriorityPicker />
+      <MarqueeSelect />
       <MeasureController />
       <SceneContent />
     </Canvas>

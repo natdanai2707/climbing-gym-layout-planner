@@ -1086,3 +1086,13 @@ button.wide {
 .np-step { grid-area: 2 / 2; font-size: 11px !important; font-weight: 600; }
 .np-right { grid-area: 2 / 3; }
 .np-down { grid-area: 3 / 2; }
+
+/* box-select rubber band, drawn straight onto the canvas wrapper */
+.marquee {
+  position: absolute;
+  z-index: 5;
+  border: 1.5px dashed #2b2926;
+  background: rgba(43, 41, 38, 0.12);
+  border-radius: 3px;
+  pointer-events: none;
+}

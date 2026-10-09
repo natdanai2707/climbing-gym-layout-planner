@@ -84,6 +84,8 @@ export interface GymState {
   // whole set moves and deletes together.
   selection: string[]
   toggleSelect: (id: string) => void
+  // box-select: add everything the marquee caught to the current selection
+  selectMany: (ids: string[]) => void
   // On a touch screen there is no Shift to hold, so this arms the same thing:
   // while it is on, a tap adds to the group instead of replacing it.
   multiArmed: boolean
@@ -675,6 +677,18 @@ export const useStore = create<GymState>()(
         return
       }
       set({ selection: [...selection.filter((v) => v !== id), id], selectedId: id, pendingId: null, moveArmed: true })
+    },
+
+    selectMany: (ids) => {
+      if (!ids.length) return
+      const { selection } = get()
+      const merged = [...selection.filter((v) => !ids.includes(v)), ...ids]
+      set({
+        selection: merged,
+        selectedId: merged[merged.length - 1] ?? null,
+        pendingId: null,
+        moveArmed: true,
+      })
     },
 
     select: (id) => {

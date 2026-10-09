@@ -325,7 +325,7 @@ export default function App() {
               <button
                 className={multiArmed ? 'on' : ''}
                 onClick={() => setMultiArmed(!multiArmed)}
-                title="Tap more items to add them to the selection (same as Shift-click on a keyboard)"
+                title="Tap items to add them to the selection, or drag a box over the floor to take everything inside it (Shift-click / Shift-drag on a keyboard). Orbiting is off while this is on."
               >
                 ⧉ Group{selection.length > 1 ? `: ${selection.length}` : multiArmed ? ': ON' : ''}
               </button>
